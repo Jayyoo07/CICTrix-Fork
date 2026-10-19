@@ -6,20 +6,14 @@ import {
   Clock,
   Eye,
   EyeOff,
-  FileText,
-  Home,
   Loader2,
   Lock,
   LogOut,
-  RefreshCw,
-  Upload,
   User,
   X,
-  Plus,
   Trash2,
   AlertCircle,
   FileSpreadsheet,
-  Check,
   Info,
   Download,
   Target
@@ -41,8 +35,6 @@ import {
 import {
   getActivePerformanceCycle,
   getCompetenciesList,
-  getEmployeeIPCR,
-  saveOrSubmitEmployeeIPCR,
   getEmployeeRawDetails,
   getLatestEmployeeIPCR,
   getEmployeeEvaluations,
@@ -82,7 +74,6 @@ import {
   EMPTY_PHASE_GATE,
   fetchPhaseGate,
   isPhaseOpen,
-  sameGateState,
   type PhaseGate,
 } from '../../lib/api/employeePhaseGate';
 
@@ -189,11 +180,6 @@ const getWizardStartStep = (p: Employee): 1 | 2 | 3 => {
 
 // Figma shows ISO-style dates (e.g. "2026-02-20"). Keep it timezone-safe by
 // reading the date parts rather than constructing a Date in local time.
-const formatPortalDate = (value: string | null | undefined): string => {
-  if (!value) return '—';
-  const iso = String(value).slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : new Date(value).toISOString().slice(0, 10);
-};
 
 export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUsername, onLogout }) => {
   const navigate = useNavigate();
@@ -205,18 +191,15 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const location = useLocation();
 
   // IPCR performance self-evaluation states
-  const [activeCycle, setActiveCycle] = useState<any | null>(null);
-  const [competencies, setCompetencies] = useState<Array<{ competency_id: number; competency_standard: string }>>([]);
+  const [, setActiveCycle] = useState<any | null>(null);
+  const [, setCompetencies] = useState<Array<{ competency_id: number; competency_standard: string }>>([]);
   const [employeeRawDetails, setEmployeeRawDetails] = useState<any | null>(null);
   const [ipcrRows, setIpcrRows] = useState<IPCRRowDraft[]>([]);
-  const [ipcrEvaluation, setIpcrEvaluation] = useState<any | null>(null);
-  const [isEditingIPCR, setIsEditingIPCR] = useState(false);
-  const [ipcrLoading, setIpcrLoading] = useState(false);
-  const [ipcrSaving, setIpcrSaving] = useState(false);
+  const [, setIpcrEvaluation] = useState<any | null>(null);
+  const [, setIpcrLoading] = useState(false);
   const [ipcrError, setIpcrError] = useState<string | null>(null);
-  const [ipcrSuccess, setIpcrSuccess] = useState<string | null>(null);
   const [ipcrRatingPeriod, setIpcrRatingPeriod] = useState<string>('');
-  const [employeeEvaluations, setEmployeeEvaluations] = useState<any[]>([]);
+  const [, setEmployeeEvaluations] = useState<any[]>([]);
   const [probationarySchedule, setProbationarySchedule] = useState<any | null>(null);
   // System-scope PM phase windows (regular employees). Probationary uses probationarySchedule.
   const [systemSchedules, setSystemSchedules] = useState<PhaseGate>(EMPTY_PHASE_GATE);
@@ -397,12 +380,6 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     setDeferredRefresh(false);
   }, []);
 
-  const calculateRowAverage = (q: number | null, e: number | null, t: number | null): number => {
-    const ratings = [q, e, t].filter((r): r is number => typeof r === 'number' && r !== null);
-    if (ratings.length === 0) return 0;
-    const sum = ratings.reduce((acc, val) => acc + val, 0);
-    return Number((sum / ratings.length).toFixed(2));
-  };
 
   const latestEmployeeIpcrLoadId = useRef(0);
   // Shared by the full load and refreshPhaseSchedules so an older phase-window
@@ -930,135 +907,10 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     setTimeout(() => setSaveSuccess(null), 5000);
   };
 
-  const loadIPCRPeriod = async (period: string, cycleId: number | null) => {
-    if (!currentUser.supabaseId) return;
-    setIpcrLoading(true);
-    setIpcrError(null);
-    try {
-      let employeeNum = currentUser.employeeId;
-      if (employeeRawDetails && employeeRawDetails.employee_number) {
-        employeeNum = employeeRawDetails.employee_number;
-      }
-      
-      const ipcrRes = await getEmployeeIPCR(
-        employeeNum,
-        period,
-        currentUser.supabaseId,
-        cycleId
-      );
-      if (ipcrRes.success && ipcrRes.data) {
-        setIpcrRows(ipcrRes.data.rows);
-        setIpcrEvaluation(ipcrRes.data.evaluation);
-        setIpcrRatingPeriod(period);
-      }
-    } catch (err) {
-      console.error('Failed to load IPCR for period:', err);
-      setIpcrError('Failed to load IPCR for the selected period.');
-    } finally {
-      setIpcrLoading(false);
-    }
-  };
 
-  const updateRowField = (index: number, field: keyof IPCRRowDraft, value: any) => {
-    setIpcrRows((prev) => {
-      const next = [...prev];
-      const updatedRow = { ...next[index], [field]: value };
-      
-      if (field === 'q_rating' || field === 'e_rating' || field === 't_rating') {
-        updatedRow.ave_rating = calculateRowAverage(
-          field === 'q_rating' ? value : updatedRow.q_rating,
-          field === 'e_rating' ? value : updatedRow.e_rating,
-          field === 't_rating' ? value : updatedRow.t_rating
-        );
-      }
 
-      if (field === 'competency_id') {
-        const compId = Number(value);
-        const found = competencies.find(c => c.competency_id === compId);
-        updatedRow.mapped_competency_standard = found ? found.competency_standard : '';
-        updatedRow.competency_id = compId;
-      }
 
-      next[index] = updatedRow;
-      return next;
-    });
-  };
 
-  const addIPCRRow = () => {
-    const newRow: IPCRRowDraft = {
-      function_type: 'CORE',
-      target_text: '',
-      accomplishment_text: '',
-      q_rating: null,
-      e_rating: null,
-      t_rating: null,
-      ave_rating: 0,
-      competency_id: competencies[0]?.competency_id || 0,
-      mapped_competency_standard: competencies[0]?.competency_standard || '',
-      remarks: ''
-    };
-    setIpcrRows((prev) => [...prev, newRow]);
-  };
-
-  const deleteIPCRRow = (index: number) => {
-    setIpcrRows((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleSaveIPCR = async (status: 'Self Evaluation' | 'Supervisor Review') => {
-    if (!currentUser.supabaseId) return;
-    
-    if (!ipcrRatingPeriod.trim()) {
-      setIpcrError('You must enter a Rating Period before saving or submitting.');
-      return;
-    }
-    
-    if (status === 'Supervisor Review') {
-      if (ipcrRows.length === 0) {
-        setIpcrError('You must add at least one Major Final Output (MFO) before submitting.');
-        return;
-      }
-      for (let i = 0; i < ipcrRows.length; i++) {
-        const row = ipcrRows[i];
-        if (!row.target_text.trim()) {
-          setIpcrError(`Row #${i + 1} has empty success indicators/targets.`);
-          return;
-        }
-        if (!row.competency_id) {
-          setIpcrError(`Row #${i + 1} does not have a mapped competency.`);
-          return;
-        }
-      }
-    }
-
-    setIpcrSaving(true);
-    setIpcrError(null);
-    setIpcrSuccess(null);
-
-    const finalCycleId = (activeCycle && (ipcrRatingPeriod === activeCycle.title || ipcrRatingPeriod === activeCycle.period))
-      ? activeCycle.id
-      : null;
-
-    const result = await saveOrSubmitEmployeeIPCR({
-      employeeUuid: currentUser.supabaseId,
-      employeeNum: employeeRawDetails?.employee_number || currentUser.employeeId,
-      positionId: employeeRawDetails?.position_id || null,
-      position: employeeRawDetails?.position || currentUser.currentPosition || null,
-      plantillaNum: employeeRawDetails?.plantilla_num || null,
-      ratingPeriod: ipcrRatingPeriod || 'Annual 2026',
-      cycleId: finalCycleId,
-      status,
-      rows: ipcrRows
-    });
-
-    setIpcrSaving(false);
-    if (!result.success) {
-      setIpcrError(result.error || 'Failed to save IPCR. Please try again.');
-    } else {
-      setIpcrSuccess(status === 'Supervisor Review' ? 'IPCR submitted for review!' : 'IPCR draft saved successfully.');
-      setIsEditingIPCR(false);
-      await loadIPCRData();
-    }
-  };
 
   // Account & Security tab — username + password change forms
   const portalAccountAtMount = useMemo(

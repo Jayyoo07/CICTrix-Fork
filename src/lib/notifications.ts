@@ -240,7 +240,7 @@ const fetchRspNotifications = async (
     new Set(evaluationRows.map((row) => String(row?.applicant_id ?? '')).filter(Boolean)),
   );
 
-  let applicantNameById = new Map<string, string>();
+  const applicantNameById = new Map<string, string>();
   if (applicantIdsToResolve.length > 0) {
     const namesResult = await (supabase as any)
       .from('applicants')

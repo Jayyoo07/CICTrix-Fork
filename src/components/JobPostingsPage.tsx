@@ -4,11 +4,9 @@ import { formatSalary, listSalaryGrades, type SalaryGradeRow } from '../lib/api/
 import {
     AlertTriangle,
     Briefcase,
-    Calendar,
     ChevronLeft,
     ChevronRight,
     FileText,
-    MapPin,
     Plus,
     Search,
     Trash2

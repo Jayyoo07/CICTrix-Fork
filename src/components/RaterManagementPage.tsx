@@ -75,8 +75,7 @@ const saveRaterAccessState = (email: string, isActive: boolean) => {
     const next = current && typeof current === 'object' ? { ...current } : {};
     next[normalizedEmail] = isActive;
     localStorage.setItem(RATER_ACCESS_STATE_KEY, JSON.stringify(next));
-  } catch {
-  }
+  } catch { /* localStorage unavailable (private mode or quota); persisting here is best-effort. */ }
 };
 
 const toInitials = (name: string) => {
@@ -314,7 +313,7 @@ export const RaterManagementPage = () => {
             department: String(row?.department ?? 'Unassigned'),
             assignedPositions,
             lastLogin: formatLastLogin(row?.last_login ?? row?.updated_at),
-            status: Boolean(row?.is_active) ? 'Active' : 'Inactive',
+            status: row?.is_active ? 'Active' : 'Inactive',
             source,
           };
 

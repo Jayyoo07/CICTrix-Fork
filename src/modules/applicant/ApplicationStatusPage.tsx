@@ -318,12 +318,6 @@ const formatTime12h = (time: string | null | undefined): string => {
   }
 };
 
-const formatShortDate = (iso: string | null) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
 
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -466,7 +460,6 @@ export const ApplicationStatusPage = () => {
       })
       .subscribe();
     return () => { void (supabase as any).removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record?.id]);
 
   // Real-time: applicants status — UNFILTERED so it works without REPLICA IDENTITY FULL.
@@ -677,7 +670,7 @@ export const ApplicationStatusPage = () => {
           if (entry.id !== record.id) return entry;
           return {
             ...entry,
-            status: 'Under Review' as 'Under Review',
+            status: 'Under Review' as const,
             timeline: [
               ...(entry.timeline ?? []),
               { event: 'Document Re-uploaded: Status set to Under Review', date: new Date().toISOString(), actor: 'Applicant' }
@@ -716,21 +709,13 @@ export const ApplicationStatusPage = () => {
 
   // If the applicant status is at or beyond "Document Verified", all documents
   // are considered verified even if doc_validated rows haven't synced yet.
-  const statusImpliesVerified = (() => {
-    const s = (record?.status ?? '').toLowerCase();
-    return s.includes('document verified') || s.includes('shortlist') ||
-           s.includes('interview') || s.includes('hired') ||
-           s.includes('accept') || s.includes('recommend');
-  })();
 
-  const docsValidated = docValidatedRows.length > 0 || statusImpliesVerified;
 
   const badge = record ? getBadge(record.status) : null;
   const hasSchedule = !!(record?.exam_date || record?.interview_date);
   const fullName = record ? `${record.first_name} ${record.last_name}`.trim() : '';
   // 'Recommended for Hiring' means documents validated, not selected — it must
   // not count as hired. Only the terminal 'Hired'/'Accepted' statuses do.
-  const isHired = record ? (() => { const s = record.status.toLowerCase(); return s.includes('hired') || s.includes('accept'); })() : false;
   const programType =
     record?.application_type === 'promotion' ? 'Promotional Application' : 'Job Application';
 

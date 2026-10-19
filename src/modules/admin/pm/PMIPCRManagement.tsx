@@ -5,7 +5,6 @@ import {
   Bell,
   Building2,
   Calendar,
-  CalendarDays,
   Check,
   ChevronDown,
   ChevronRight,
@@ -23,10 +22,9 @@ import {
 import { Dialog } from '../../../components/Dialog';
 import { useDepartmentNames } from '../../../hooks/useDepartmentOptions';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
-import { IPCR_STAGES, type IpcrStage, stagePillStyle } from '../../../lib/api/ipcrStages';
-import { type IpcrPhase, sendNotification } from '../../../lib/api/ipcrSubmissions';
+import { type IpcrStage, stagePillStyle } from '../../../lib/api/ipcrStages';
+import { type IpcrPhase } from '../../../lib/api/ipcrSubmissions';
 import { getAllEmployees, type Employee } from '../../../lib/api/employees';
-import { upsertSchedule } from '../../../lib/api/phaseSchedules';
 import { getEmployeeIPCR, type IPCRRowDraft, bucketForScore } from '../../../lib/api/performanceEvaluations';
 import { computeOverallScore } from '../../../lib/api/ipcrWorkspace';
 import { resolveOfficeWeights } from '../../../lib/api/officeWeighting';
@@ -193,27 +191,6 @@ function deriveStatus(
   return new Date() > dueDate ? 'Overdue' : 'Not Started';
 }
 
-const statusPillStyle = (
-  s: 'Completed' | 'In Progress' | 'Not Started' | 'Overdue',
-): React.CSSProperties => {
-  const map = {
-    Completed: { bg: 'rgba(16,185,129,0.12)', fg: '#047857' },
-    'In Progress': { bg: 'rgba(59,130,246,0.12)', fg: '#1d4ed8' },
-    'Not Started': { bg: 'rgba(107,114,128,0.1)', fg: '#4b5563' },
-    Overdue: { bg: 'rgba(239,68,68,0.12)', fg: '#b91c1c' },
-  };
-  const { bg, fg } = map[s];
-  return {
-    display: 'inline-block',
-    padding: '2px 10px',
-    borderRadius: '999px',
-    fontSize: '12px',
-    fontWeight: 600,
-    background: bg,
-    color: fg,
-    whiteSpace: 'nowrap',
-  };
-};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,37 +215,11 @@ interface OfficeGroup {
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 
-const StatCard = ({
-  icon: Icon,
-  label,
-  value,
-  accent = false,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  accent?: boolean;
-}) => (
-  <div
-    className={`rounded-xl border p-4 flex items-start gap-3 ${
-      accent ? 'border-[#363EE8]/20 bg-[#363EE8]/5' : 'border-slate-200 bg-white'
-    }`}
-  >
-    <div className={`p-2 rounded-lg ${accent ? 'bg-[#363EE8]/10' : 'bg-slate-50'}`}>
-      <Icon size={16} className={accent ? 'text-[#363EE8]' : 'text-slate-500'} />
-    </div>
-    <div>
-      <p className="text-2xl font-bold text-slate-800">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-    </div>
-  </div>
-);
 
 // ── IPCR Detail Page ─────────────────────────────────────────────────────────
 
 const IPCRDetailPage = ({
   employee,
-  onStageUpdate,
 }: {
   employee: EnrichedEmployee;
   onStageUpdate: (id: string, stage: IpcrStage) => void;
@@ -771,7 +722,6 @@ const IPCRDetailPage = ({
 
 const ScheduleCycleModal = ({
   type,
-  employees,
   onClose,
   onScheduled,
 }: {
@@ -1164,21 +1114,7 @@ const ProbationaryPanel = ({
     });
   }, [employees, search, officeFilter]);
 
-  const dueCount = useMemo(
-    () =>
-      employees.filter(
-        (e) => e.employeeStatus === 'Overdue' || e.employeeStatus === 'Not Started',
-      ).length,
-    [employees],
-  );
 
-  const nextDue = useMemo(() => {
-    const dates = employees
-      .map((e) => e.computedDueDate)
-      .filter(Boolean)
-      .sort((a, b) => a!.getTime() - b!.getTime());
-    return dates[0] ?? null;
-  }, [employees]);
 
   return (
     <div className="space-y-4">
@@ -1691,17 +1627,7 @@ const RegularPanel = ({
     ? officeGroups.find((g) => g.officeName === drillOffice) ?? null
     : null;
 
-  const dueCount = useMemo(
-    () => employees.filter((e) => e.employeeStatus !== 'Completed').length,
-    [employees],
-  );
 
-  const nextDue = useMemo(() => {
-    const dates = employees
-      .map((e) => e.computedDueDate)
-      .sort((a, b) => a.getTime() - b.getTime());
-    return dates[0] ?? null;
-  }, [employees]);
 
   return (
     <div className="space-y-4">

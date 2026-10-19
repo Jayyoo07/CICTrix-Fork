@@ -28,7 +28,6 @@ import {
   STATUS_BANNER,
   officialMfo,
   officialIndicator,
-  officialAccomplishment,
 } from './types';
 import type { DemoAccount, Schedule, TargetRow, AccomplishmentRow, TargetCategory } from './types';
 

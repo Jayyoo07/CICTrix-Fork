@@ -23,7 +23,6 @@ import type { FunctionType } from './ipcrTargets';
 import {
   RANKING_WEIGHTS,
   actionForGate,
-  compareRank,
   isDownwardMove,
   isDownwardTitleMove,
   positionLevelRatio,
@@ -33,11 +32,9 @@ import {
   type EligibilityRecord,
   type EligibilityTypePoints,
   type EligibilityScore,
-  evaluateQualifications,
   experienceScore,
   normalizeWeights,
   poolExclusionReason,
-  trainingBeyondMinimumRatio,
   type ExperiencePart,
   type RankingWeights,
 } from './successionCriteria';
@@ -1348,51 +1345,8 @@ export async function listPositionTitlesForDepartment(departmentName: string): P
 //   4. Merge manual    — manually-added candidates are included too
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Coarse education level ranking, used only to compare against a requirement. */
-function educationRank(label: string | null | undefined): number {
-  const s = String(label ?? '').toLowerCase();
-  if (!s.trim()) return -1; // no record
-  if (s.includes('ph.d') || s.includes('phd') || s.includes('doctorate') || s.includes('doctor of philosophy')) return 6;
-  if (s.includes('doctor of medicine') || s.includes('dental medicine') || s.includes('juris doctor') || s.includes('bachelor of laws') || s.includes('ll.b') || s.includes('ll.m')) return 5;
-  if (s.includes('master') || s.includes('m.a') || s.includes('m.s') || s.includes('mba')) return 4;
-  if (s.includes('bachelor') || s.includes('college graduate') || s.includes('degree')) return 3;
-  if (s.includes('vocational') || s.includes('technical') || s.includes('two-year') || s.includes('associate')) return 2;
-  if (s.includes('college level') || s.includes('undergraduate')) return 1;
-  return 0; // high school / other recorded
-}
 
-/** Education fit as a 0–1 ratio. No requirement = full when a record exists. */
-function educationRatio(empEdu: string | null, requiredEdu: string | null): number {
-  const empRank = educationRank(empEdu);
-  if (empRank < 0) return 0; // no record → cannot credit (don't infer)
-  const reqRank = educationRank(requiredEdu);
-  if (reqRank < 0) return 1; // no stated requirement → a recorded attainment meets it
-  if (empRank >= reqRank) return 1;
-  if (empRank === reqRank - 1) return 0.6;
-  return 0.3;
-}
 
-/**
- * Eligibility tier level for Professional vs Sub-Professional gate comparison.
- * Returns 2 for Professional, 1 for Sub-Professional, 0 for nothing on record.
- */
-function eligibilityLevel(label: string | null | undefined): number {
-  const s = String(label ?? '').trim().toLowerCase();
-  if (!s) return 0;
-  // "sub-professional" must be checked first (contains "professional" as substring)
-  if (s.includes('sub-professional') || s.includes('sub professional')) return 1;
-  // Professional-level markers: CSC Professional, plus board/licensure eligibilities
-  // that RA 1080 confers Professional standing to (PRC licence, Bar, board exams).
-  if (
-    s.includes('professional') ||
-    s.includes('ra 1080') || s.includes('ra1080') ||
-    s.includes('board') || s.includes('bar') || s.includes('prc') || s.includes('licens')
-  ) {
-    return 2;
-  }
-  // Has some eligibility on file but not on the CSC professional scale — sub-pro level.
-  return 1;
-}
 
 /** Required eligibility level from the position's requiredEligibility text. */
 function requiredEligibilityLevel(req: string | null | undefined): number {
@@ -1471,13 +1425,6 @@ function tierFromTotal(total: number): SuccessionTier {
   return 'Developmental';
 }
 
-/** Significant keywords from a competency name (drops generic/level words). */
-function competencyKeywords(name: string): string[] {
-  return String(name ?? '')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length > 3 && !TITLE_STOPWORDS.has(w));
-}
 
 /**
  * Stage-2 coverage: for each required competency, find a completed training that
@@ -1776,17 +1723,7 @@ function yearsFromHireDate(dateHired: string | null): number {
 // IPCR adjectival rank (for minimum-IPCR gate comparison)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const IPCR_RANK: Record<string, number> = {
-  Poor: 1,
-  Unsatisfactory: 2,
-  Satisfactory: 3,
-  'Very Satisfactory': 4,
-  Outstanding: 5,
-};
 
-function ipcrRank(adjectival: string | null): number {
-  return IPCR_RANK[String(adjectival ?? '').trim()] ?? 0;
-}
 
 /**
  * Auto-discover, score, and rank successors for a critical position.
@@ -1880,7 +1817,6 @@ export async function listAutoSuccessors(
     }
     const requiredEducation: string | null = posRow.required_education ?? null;
     const requiredEligibility: string | null = posRow.required_eligibility ?? null;
-    const minIpcrRating: string | null = posRow.min_ipcr_rating ?? null;
     const requiredYearsExperience: number | null =
       posRow.min_years_experience != null ? Number(posRow.min_years_experience) : null;
     const requiredTrainingHours: number | null = posRow.required_training_hours != null ? Number(posRow.required_training_hours) : null;

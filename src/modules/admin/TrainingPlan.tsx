@@ -1,6 +1,5 @@
 import {
   ArrowUpRight,
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,

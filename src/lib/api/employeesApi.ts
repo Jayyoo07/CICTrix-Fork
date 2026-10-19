@@ -1,5 +1,4 @@
 import { supabase } from '../supabase';
-import type { Database } from '../../types/database.types';
 
 // Ideally this comes from the generated types. 
 // We manually bridge it here according to the schema since we can't regenerate types yet.
@@ -214,18 +213,6 @@ export async function hireApplicant(applicantId: string): Promise<EmployeeRow> {
   if (legacyMap[departmentName]) {
     departmentName = legacyMap[departmentName];
   }
-
-  let deptId: string | null = null;
-  try {
-    const { data: dept } = await (supabase as any)
-      .from('departments')
-      .select('id')
-      .eq('name', departmentName)
-      .maybeSingle();
-    if (dept?.id) {
-      deptId = dept.id;
-    }
-  } catch { /* ignore */ }
 
   // 4. Construct email & resolve email uniqueness constraint
   let email = (applicant as any).email;

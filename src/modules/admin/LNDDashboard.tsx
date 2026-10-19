@@ -5,20 +5,12 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   ClipboardCheck,
   ClipboardList,
-  Eye,
   FileText,
-  Info,
   LayoutDashboard,
-  Plus,
-  Search,
-  Send,
   Settings,
-  ShieldCheck,
   Target,
-  Upload,
   Users,
   X,
 } from 'lucide-react';
@@ -35,7 +27,6 @@ import {
 import { AdminHeader } from '../../components/AdminHeader';
 import { Sidebar } from '../../components/Sidebar';
 import { RailNav, type RailNavItem } from '../../components/RailNav';
-import { supabase } from '../../lib/supabase';
 
 import { LndIdpFormSettings } from './LndIdpFormSettings';
 import { SeminarEnrollment } from './SeminarEnrollment';
@@ -909,7 +900,6 @@ const LndDashboardContent = () => {
  * away from the people whose portal this is.
  */
 export const LNDDashboard = ({
-  isDashboardView = true,
   viewOnly = false,
 }: { isDashboardView?: boolean; viewOnly?: boolean }) => {
   const [activeModule, setActiveModule] = useState<MenuId>('dashboard');

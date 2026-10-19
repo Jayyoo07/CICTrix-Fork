@@ -8,7 +8,6 @@ import {
   Pencil,
   Plus,
   Rows3,
-  Sparkles,
   Tag,
   Target,
   User,

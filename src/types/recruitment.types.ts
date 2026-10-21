@@ -30,6 +30,15 @@ export interface PlantillaSlot {
   filledByApplicantId?: string;
   filledAt?: string;
   /**
+   * Held for one selected applicant until they sign (migration 20261021200100).
+   * A reserved plantilla is still open: it isn't filled until credentials are
+   * generated, and a revoke reopens it for selection.
+   */
+  reservedByApplicantId?: string;
+  reservedAt?: string;
+  /** YYYY-MM-DD: the date the reserved applicant must report by. */
+  signingDeadline?: string;
+  /**
    * This plantilla's own division, summary and duties, for postings that
    * hold several plantillas of one title. Undefined means the posting's apply.
    */

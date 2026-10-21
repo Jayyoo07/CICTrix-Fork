@@ -7,6 +7,8 @@ import {
   isTerminal,
   nextStatuses,
   normalizeStatus,
+  regretLetter,
+  signingForfeitWarning,
   type ApplicantWorkflowStatus,
 } from './applicantStatus';
 
@@ -111,6 +113,29 @@ describe('workflow transitions', () => {
       expect(canTransition(s, 'Disqualified'), `${s} -> Disqualified`).toBe(true);
       expect(canTransition(s, 'Not Selected'), `${s} -> Not Selected`).toBe(true);
     }
+  });
+
+  it('reserves before hiring, and a revoke goes back to Qualified', () => {
+    expect(canTransition('Qualified', 'For Contract Signing')).toBe(true);
+    expect(canTransition('For Contract Signing', 'Selected')).toBe(true);
+    expect(canTransition('For Contract Signing', 'Qualified')).toBe(true);
+    expect(isTerminal('For Contract Signing')).toBe(false);
+    expect(funnelBucket('For Contract Signing')).toBe('qualified');
+    expect(normalizeStatus('for contract signing')).toBe('For Contract Signing');
+  });
+
+  it('ends every signing notice with the forfeit warning', () => {
+    expect(signingForfeitWarning('Oct 28, 2026')).toBe(
+      'Due to failure of securing it by Oct 28, 2026 may result to lose your place in the recruitment process or give up your status as selected candidate.',
+    );
+  });
+
+  it('fills the regret letter with the applicant and job title', () => {
+    const letter = regretLetter('Ana Reyes', 'Nurse I');
+    expect(letter[0]).toBe('Dear Ana Reyes,');
+    expect(letter[1]).toContain('the Nurse I role');
+    expect(letter.join(' ')).toContain('City Government of Iloilo');
+    expect(letter.join(' ')).not.toMatch(/\[[^\]]+\]/);
   });
 
   it('allows nothing after a terminal status', () => {

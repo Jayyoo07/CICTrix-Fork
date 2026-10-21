@@ -142,8 +142,10 @@ export const previouslySelectedKeys = (postingId: string): string[] => {
 // ── Already-applied registry ────────────────────────────────────────────────
 // The public portal has no applicant account, so the only authoritative
 // "already applied" signal is the database at submit time (see the wizard).
-// This local registry lets Step 1 grey out items this browser has already
-// submitted, so an applicant can't accidentally file the same item twice.
+// This local registry only remembers what this browser submitted. It never
+// blocks an item: browsers are shared (family PCs, kiosks, the RSP office), so
+// treating it as "this person applied" stopped the next applicant on the same
+// device. The database check by email is what rejects a real duplicate.
 
 type AppliedMap = Record<string, { referenceNo: string; at: string }>;
 
@@ -166,7 +168,6 @@ export const markApplied = (key: string, referenceNo: string): void => {
   }
 };
 
-export const appliedKeys = (): Set<string> => new Set(Object.keys(readApplied()));
 
 // ── Posting → choices ───────────────────────────────────────────────────────
 
@@ -189,7 +190,6 @@ export const buildPlantillaChoices = (
   job: Pick<JobPosting, 'id' | 'jobCode' | 'status' | 'salaryGrade' | 'monthlySalary' | 'applicationDeadline'> & {
     plantillaSlots?: PlantillaSlot[];
   },
-  applied: Set<string> = appliedKeys(),
 ): PlantillaChoice[] => {
   const closing = isClosingSoon(job.applicationDeadline);
   const slots = job.plantillaSlots ?? [];
@@ -206,7 +206,7 @@ export const buildPlantillaChoices = (
         itemNumber: job.jobCode ?? '',
         salaryGrade: job.salaryGrade,
         monthlySalary: job.monthlySalary,
-        status: applied.has(key) ? 'applied' : !postingOpen ? 'closed' : closing ? 'closing' : 'open',
+        status: !postingOpen ? 'closed' : closing ? 'closing' : 'open',
       },
     ];
   }
@@ -225,7 +225,7 @@ export const buildPlantillaChoices = (
         itemNumber: slot.itemNumber,
         salaryGrade: slot.salaryGrade ?? job.salaryGrade,
         monthlySalary: slot.monthlySalary ?? job.monthlySalary,
-        status: (base === 'open' || base === 'closing') && applied.has(slot.id) ? 'applied' : base,
+        status: base,
       };
     });
 };

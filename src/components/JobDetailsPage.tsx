@@ -50,7 +50,6 @@ interface LandingJobData {
 const DISABLED_REASON: Record<string, string> = {
   filled: 'This item has been filled. Choose another item.',
   closed: 'This item is closed. Choose another item.',
-  applied: "You've already applied for this item. Choose another item.",
 };
 
 /** Shown on every public job details page, above Continue to Application. */

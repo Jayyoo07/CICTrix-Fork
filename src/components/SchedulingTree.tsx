@@ -23,6 +23,8 @@ const STATUS_BADGE: Record<ApplicantWorkflowStatus, string> = {
   'Interview/Exam Scheduled': 'badge-warning',
   'For Evaluation': 'badge-warning',
   Qualified: 'badge-success',
+  // Reserved, waiting for the applicant to sign.
+  'For Contract Signing': 'badge-warning',
   Selected: 'badge-success',
   Disqualified: 'badge-error',
   'Not Selected': 'badge-error',

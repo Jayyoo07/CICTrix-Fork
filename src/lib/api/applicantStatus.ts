@@ -21,10 +21,17 @@
  *         -> Interview/Exam Scheduled
  *           -> For Evaluation
  *             -> Qualified             (passed the complete process)
- *               -> Selected
+ *               -> For Contract Signing  (plantilla reserved; report by a date)
+ *                 -> Selected            (credentials generated: hired)
  *
  * Ending anywhere: Disqualified (failed, or failed to attend) or Not Selected
  * (someone else was appointed).
+ *
+ * For Contract Signing is a reservation, not a hire: RSP picked this applicant
+ * and gave them a date to report for contract signing. If they don't, RSP
+ * revokes it and the application returns to the status it had (migration
+ * 20261021200100). Filling the plantilla moves everyone else on it to Not
+ * Selected and archives them.
  *
  * Withdrawn - Hired Elsewhere is the third ending, and the only one no button
  * writes. The database sets it on a person's other open applications the moment
@@ -40,6 +47,7 @@ export const APPLICANT_STATUSES = [
   'Interview/Exam Scheduled',
   'For Evaluation',
   'Qualified',
+  'For Contract Signing',
   'Selected',
   'Disqualified',
   'Not Selected',
@@ -74,6 +82,8 @@ export const APPLICANT_MESSAGES: Record<ApplicantWorkflowStatus, string> = {
   'Interview/Exam Scheduled': 'Your interview/examination has been scheduled. Please see the details below.',
   'For Evaluation': 'Your interview/examination results are being evaluated.',
   Qualified: 'You have successfully completed the selection process and are qualified for this position.',
+  'For Contract Signing':
+    'Congratulations! You have been selected for this position. Please report to the office for contract signing and verification by the date below.',
   Selected: 'Congratulations. You have been selected for this position.',
   Disqualified: 'We regret to inform you that your application has been disqualified.',
   'Not Selected': 'We regret to inform you that you were not selected for this position.',
@@ -139,6 +149,7 @@ const LEGACY_MAP: Record<string, ApplicantWorkflowStatus> = {
   'for evaluation': 'For Evaluation',
   scheduled: 'Interview/Exam Scheduled',
   qualified: 'Qualified',
+  'for contract signing': 'For Contract Signing',
   selected: 'Selected',
   rejected: 'Not Selected',
   'not selected': 'Not Selected',
@@ -185,7 +196,10 @@ const TRANSITIONS: Record<ApplicantWorkflowStatus, ApplicantWorkflowStatus[]> = 
   Shortlisted: ['Interview/Exam Scheduled'],
   'Interview/Exam Scheduled': ['For Evaluation'],
   'For Evaluation': ['Qualified'],
-  Qualified: ['Selected'],
+  // Qualified -> Selected stays for the older direct-hire paths.
+  Qualified: ['For Contract Signing', 'Selected'],
+  // Back to Qualified is the revoke ("did not report").
+  'For Contract Signing': ['Selected', 'Qualified'],
   Selected: [],
   Disqualified: [],
   'Not Selected': [],
@@ -236,6 +250,8 @@ export function funnelBucket(status: ApplicantWorkflowStatus): FunnelBucket {
     case 'For Evaluation':
       return 'assessment';
     case 'Qualified':
+    // Reserved, not hired yet: it can still be revoked.
+    case 'For Contract Signing':
       return 'qualified';
     case 'Selected':
       return 'selected';
@@ -248,3 +264,28 @@ export function funnelBucket(status: ApplicantWorkflowStatus): FunnelBucket {
       return 'withdrawn';
   }
 }
+
+/**
+ * The sentence every contract-signing notice ends with, worded as the RSP
+ * office gave it.
+ */
+export const signingForfeitWarning = (deadline: string): string =>
+  `Due to failure of securing it by ${deadline} may result to lose your place in the recruitment process or give up your status as selected candidate.`;
+
+/** The organisation and office named in letters to applicants. */
+export const HIRING_ORGANIZATION = 'City Government of Iloilo';
+export const HIRING_OFFICE_SIGNATURE = 'Recruitment, Selection and Placement Office, CHRMO';
+
+/**
+ * The regret letter shown on the tracker when the plantilla an applicant
+ * applied for is filled by someone else. The data holds no per-applicant
+ * strength or missing requirement, so the letter names neither.
+ */
+export const regretLetter = (applicantName: string, jobTitle: string): string[] => [
+  `Dear ${applicantName || 'Applicant'},`,
+  `Thank you so much for taking the time to meet with us to discuss the ${jobTitle || 'position'} role. It was a pleasure learning more about your background and career goals.`,
+  'After careful consideration, we have chosen to move forward with another candidate for this position.',
+  `We truly enjoyed our conversation and will keep your profile in our talent pool should another suitable position open up in the future. Thank you again for your time and interest in the ${HIRING_ORGANIZATION}.`,
+  'Warm regards,',
+  HIRING_OFFICE_SIGNATURE,
+];

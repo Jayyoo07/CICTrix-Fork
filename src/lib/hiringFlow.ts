@@ -1,0 +1,403 @@
+import { supabase } from './supabase';
+import { hireApplicant } from './api/employeesApi';
+import { getApplicants, saveApplicants, saveNewlyHired } from './recruitmentData';
+import { assignApplicantToSlot, fetchSlotsByJobPosting } from './plantillaSlots';
+import { plantillaLabel, normalizeApplicantEmail } from './plantillaRules';
+import { createPassword, upsertEmployeePortalAccount } from './employeePortalData';
+import { sendEmail } from './email';
+import { isTerminal, normalizeStatus } from './api/applicantStatus';
+import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
+
+/**
+ * The For Hiring → contract signing → credentials flow
+ * (docs/plans/2026-10-21-hire-reservation-and-credentials.md).
+ *
+ * Selecting reserves a plantilla (plantillaSlots.reserveSlotForApplicant).
+ * This module reads who is reserved or archived, and turns a reserved
+ * applicant into an employee once they have signed.
+ */
+
+const client = supabase as any;
+
+export const RESERVED_STATUS = 'For Contract Signing';
+
+const fullNameOf = (row: any): string =>
+  [row?.first_name, row?.middle_name, row?.last_name].filter(Boolean).join(' ').trim()
+  || String(row?.full_name ?? '').trim()
+  || String(row?.email ?? '').split('@')[0]
+  || '—';
+
+const slotIndex = async (): Promise<Map<string, PlantillaSlot>> => {
+  const index = new Map<string, PlantillaSlot>();
+  (await fetchSlotsByJobPosting()).forEach((slots) => slots.forEach((slot) => index.set(slot.id, slot)));
+  return index;
+};
+
+// ─── Other applications of the same person ─────────────────────────────────
+
+export interface OtherApplication {
+  id: string;
+  position: string;
+  office: string;
+  plantilla: string;
+  status: string;
+}
+
+/**
+ * The person's other applications that are still open, for the "also applied
+ * to other positions" notice. Identity is the normalised email, as everywhere
+ * else in recruitment.
+ */
+export const fetchOtherOpenApplications = async (
+  email: string,
+  excludeApplicantId: string,
+): Promise<OtherApplication[]> => {
+  const normalized = normalizeApplicantEmail(email);
+  if (!normalized) return [];
+  try {
+    const [{ data, error }, slots] = await Promise.all([
+      client
+        .from('applicants')
+        .select('id, position, office, department, status, plantilla_slot_id, deleted_at')
+        .ilike('email', normalized),
+      slotIndex(),
+    ]);
+    if (error) throw error;
+    return (data ?? [])
+      .filter((row: any) => String(row.id) !== excludeApplicantId && !row.deleted_at)
+      .filter((row: any) => {
+        const status = normalizeStatus(row.status);
+        return status ? !isTerminal(status) : true;
+      })
+      .map((row: any) => {
+        const slot = row.plantilla_slot_id ? slots.get(String(row.plantilla_slot_id)) : undefined;
+        return {
+          id: String(row.id),
+          position: String(row.position ?? '—'),
+          office: String(row.office || row.department || '—'),
+          plantilla: slot ? plantillaLabel(slot) : '',
+          status: String(row.status ?? ''),
+        };
+      });
+  } catch (err) {
+    console.warn('[hiringFlow] other applications lookup failed:', err);
+    return [];
+  }
+};
+
+// ─── Reserved: waiting for contract signing ────────────────────────────────
+
+export interface ReservedApplicant {
+  id: string;
+  fullName: string;
+  email: string;
+  referenceNo: string;
+  position: string;
+  department: string;
+  slotId: string | null;
+  plantilla: string;
+  /** Recorded on the Newly Hired row so reports name the exact item. */
+  slotItemNumber?: string;
+  slotNumber?: number;
+  signingDeadline: string | null;
+  interviewScore: number | null;
+}
+
+export const fetchReservedApplicants = async (): Promise<ReservedApplicant[]> => {
+  try {
+    const [{ data, error }, slots] = await Promise.all([
+      client
+        .from('applicants')
+        .select('id, first_name, middle_name, last_name, full_name, email, reference_no, position, office, department, plantilla_slot_id, signing_deadline, total_score, deleted_at')
+        .eq('status', RESERVED_STATUS),
+      slotIndex(),
+    ]);
+    if (error) throw error;
+    // A plantilla knows who it is held for even when the application row
+    // predates plantilla_slot_id.
+    const slotByHolder = new Map<string, PlantillaSlot>();
+    slots.forEach((slot) => { if (slot.reservedByApplicantId) slotByHolder.set(slot.reservedByApplicantId, slot); });
+
+    return (data ?? [])
+      .filter((row: any) => !row.deleted_at)
+      .map((row: any) => {
+        const id = String(row.id);
+        const slot = slotByHolder.get(id) ?? (row.plantilla_slot_id ? slots.get(String(row.plantilla_slot_id)) : undefined);
+        return {
+          id,
+          fullName: fullNameOf(row),
+          email: String(row.email ?? ''),
+          referenceNo: String(row.reference_no ?? ''),
+          position: String(row.position ?? ''),
+          department: String(row.office || row.department || 'No Department'),
+          slotId: slot?.id ?? null,
+          plantilla: slot ? plantillaLabel(slot) : '',
+          slotItemNumber: slot?.itemNumber,
+          slotNumber: slot?.slotNumber,
+          signingDeadline: row.signing_deadline ? String(row.signing_deadline) : slot?.signingDeadline ?? null,
+          interviewScore: row.total_score == null ? null : Number(row.total_score),
+        };
+      });
+  } catch (err) {
+    console.warn('[hiringFlow] reserved applicants lookup failed:', err);
+    return [];
+  }
+};
+
+// ─── Archived: the plantilla went to someone else ──────────────────────────
+
+export interface ArchivedApplicant {
+  id: string;
+  fullName: string;
+  email: string;
+  referenceNo: string;
+  position: string;
+  department: string;
+  plantilla: string;
+  archivedAt: string;
+}
+
+export const fetchArchivedApplicants = async (): Promise<ArchivedApplicant[]> => {
+  try {
+    const [{ data, error }, slots] = await Promise.all([
+      client
+        .from('applicants')
+        .select('id, first_name, middle_name, last_name, full_name, email, reference_no, position, office, department, plantilla_slot_id, archived_at, deleted_at')
+        .not('archived_at', 'is', null)
+        .order('archived_at', { ascending: false }),
+      slotIndex(),
+    ]);
+    if (error) throw error;
+    return (data ?? [])
+      .filter((row: any) => !row.deleted_at)
+      .map((row: any) => {
+        const slot = row.plantilla_slot_id ? slots.get(String(row.plantilla_slot_id)) : undefined;
+        return {
+          id: String(row.id),
+          fullName: fullNameOf(row),
+          email: String(row.email ?? ''),
+          referenceNo: String(row.reference_no ?? ''),
+          position: String(row.position ?? ''),
+          department: String(row.office || row.department || '—'),
+          plantilla: slot ? plantillaLabel(slot) : '',
+          archivedAt: String(row.archived_at),
+        };
+      });
+  } catch (err) {
+    console.warn('[hiringFlow] archived applicants lookup failed:', err);
+    return [];
+  }
+};
+
+// ─── Generate: hire, fill, issue credentials ───────────────────────────────
+
+export interface CredentialResult {
+  fullName: string;
+  employeeId: string;
+  tempPassword: string;
+  email: string;
+  emailSent: boolean;
+  position: string;
+  department: string;
+  plantilla: string;
+}
+
+export interface GenerateOutcome {
+  credentials: CredentialResult[];
+  /** "<name>: <reason>" for each applicant that could not be fully processed. */
+  failures: string[];
+}
+
+/**
+ * Hire each signed applicant: employee record, plantilla filled (which
+ * archives everyone else on it in the database), portal account, Newly Hired
+ * row and the credentials email.
+ */
+export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Promise<GenerateOutcome> => {
+  const credentials: CredentialResult[] = [];
+  const failures: string[] = [];
+  const newlyHiredRecords: NewlyHired[] = [];
+  const hiredAt = new Date().toISOString();
+
+  for (const row of rows) {
+    let employeeId = '';
+    try {
+      const employeeRow = await hireApplicant(row.id);
+      employeeId = employeeRow?.employee_id || '';
+    } catch (err: any) {
+      console.error(`[hiringFlow] hire failed for ${row.id}:`, err);
+      failures.push(`${row.fullName}: ${String(err?.message ?? err)}`);
+      continue;
+    }
+
+    // Filling the plantilla closes it and archives the other applicants on it.
+    // Reported but not fatal: the employee record already exists.
+    if (row.slotId) {
+      const placement = await assignApplicantToSlot(row.slotId, row.id);
+      if (!placement.ok) failures.push(`${row.fullName}: hired, but the plantilla was not marked filled (${placement.error ?? 'unknown error'})`);
+    } else {
+      failures.push(`${row.fullName}: hired, but the application is not linked to a plantilla, so none was filled`);
+    }
+
+    const tempPassword = createPassword();
+    upsertEmployeePortalAccount({
+      id: `portal-${employeeId}`,
+      username: employeeId,
+      password: tempPassword,
+      mustChangePassword: true,
+      employee: {
+        employeeId,
+        fullName: row.fullName,
+        email: row.email,
+        position: row.position,
+        department: row.department,
+        status: 'Active',
+        hireDate: hiredAt.split('T')[0],
+      } as any,
+    });
+
+    saveApplicants(getApplicants().map((a) => (a.id === row.id ? { ...a, status: 'Hired' as any } : a)));
+
+    // The hire itself carries DATE HIRED for the Office Directory and the
+    // Newly Hired page; created_at on the application is when they applied.
+    const [firstName = '', ...restName] = row.fullName.trim().split(/\s+/);
+    newlyHiredRecords.push({
+      id: `nh-${employeeId}`,
+      applicantId: row.id,
+      rankingRank: 0,
+      rankingScore: row.interviewScore ?? 0,
+      employeeInfo: {
+        firstName,
+        lastName: restName.join(' '),
+        email: row.email,
+        phone: '',
+        emergencyContact: { name: '', relationship: '', phone: '' },
+        governmentIds: {},
+      },
+      position: row.position,
+      department: row.department,
+      plantillaItemNumber: row.slotItemNumber,
+      plantillaSlotNumber: row.slotNumber,
+      employmentType: 'Permanent',
+      dateHired: hiredAt,
+      expectedStartDate: hiredAt,
+      status: 'Pending Onboarding',
+      onboardingProgress: 0,
+      onboardingChecklist: [],
+      documents: [],
+      notes: [],
+      timeline: [],
+      employeeId,
+    } as NewlyHired);
+
+    let emailSent = false;
+    const recipient = row.email.trim();
+    if (recipient) {
+      try {
+        await sendEmail({
+          to: recipient,
+          subject: 'Your ABYAN HRIS account is ready',
+          body:
+            `Hello ${row.fullName},\n\n` +
+            `Your employee account has been created in the ABYAN HRIS.\n\n` +
+            `Position  : ${row.position || '—'}\n` +
+            `Department: ${row.department || '—'}\n\n` +
+            `Employee ID       : ${employeeId}\n` +
+            `Temporary password: ${tempPassword}\n\n` +
+            `Please log in to the Employee Portal and change your password before accessing any module.\n` +
+            `\nIf you did not expect this email, please contact HR immediately.\n`,
+          employeeId,
+          template: 'employee_credentials',
+        });
+        emailSent = true;
+      } catch { /* RSP can print the credentials instead */ }
+    }
+
+    credentials.push({
+      fullName: row.fullName,
+      employeeId,
+      tempPassword,
+      email: recipient,
+      emailSent,
+      position: row.position,
+      department: row.department,
+      plantilla: row.plantilla,
+    });
+  }
+
+  if (newlyHiredRecords.length > 0) {
+    try {
+      await saveNewlyHired(newlyHiredRecords);
+    } catch {
+      /* credentials are already issued; the directory falls back to the
+         portal account's creation date if this write didn't land */
+    }
+  }
+
+  window.dispatchEvent(new Event('cictrix:applicants-updated'));
+  return { credentials, failures };
+};
+
+// ─── Printout: cut-out cards (option A, docs/mockups/2026-10-21-hire-reservation-flow.html) ───
+
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+
+/** The print window is its own document, so the §14.1 tokens are restated here. */
+const PRINT_STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+  :root {
+    --color-primary-900: #040E6B; --neutral-800: #28343D; --neutral-600: #515F69;
+    --neutral-300: #CBD5E1; --neutral-200: #E2E8F0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', system-ui, sans-serif; color: var(--neutral-800); padding: 24px; font-size: 12px; }
+  .head { display: flex; align-items: center; gap: 12px; border-bottom: 2px solid var(--color-primary-900); padding-bottom: 10px; margin-bottom: 16px; }
+  .head img { width: 36px; height: 36px; border-radius: 8px; }
+  .head .org { flex: 1; }
+  .head .org b { display: block; color: var(--color-primary-900); font-size: 16px; }
+  .head .meta { text-align: right; color: var(--neutral-600); }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .card { border: 1.5px dashed var(--neutral-300); border-radius: 12px; overflow: hidden; break-inside: avoid; }
+  .card-name { background: var(--color-primary-900); color: #FFFFFF; padding: 8px 12px; font-weight: 600; font-size: 14px; }
+  .card-body { padding: 10px 12px; }
+  .role { color: var(--neutral-600); margin-bottom: 10px; line-height: 1.4; }
+  .creds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cred { border: 1px solid var(--neutral-200); border-radius: 8px; padding: 6px 8px; }
+  .cred-label { font-size: 9px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--neutral-600); }
+  .cred-value { font-family: 'Courier New', monospace; font-weight: 700; font-size: 14px; letter-spacing: .06em; color: var(--color-primary-900); }
+  .note { margin-top: 8px; border-top: 1px dashed var(--neutral-300); padding-top: 6px; color: var(--neutral-600); font-size: 10px; }
+  @media print { body { padding: 12px; } }
+`;
+
+export const printCredentialCards = (results: CredentialResult[]): void => {
+  const win = window.open('', '_blank', 'width=820,height=700');
+  if (!win) return;
+
+  const issued = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+  const cards = results.map((c) => `
+    <div class="card">
+      <div class="card-name">${escapeHtml(c.fullName)}</div>
+      <div class="card-body">
+        <div class="role">${escapeHtml(c.position || '—')} · ${escapeHtml(c.department || '—')}${c.plantilla ? `<br>${escapeHtml(c.plantilla)}` : ''}</div>
+        <div class="creds">
+          <div class="cred"><div class="cred-label">Employee ID</div><div class="cred-value">${escapeHtml(c.employeeId)}</div></div>
+          <div class="cred"><div class="cred-label">Temporary password</div><div class="cred-value">${escapeHtml(c.tempPassword)}</div></div>
+        </div>
+        <div class="note">✂ Cut along the border. Change your password when you first log in to the Employee Portal. Keep this slip confidential.</div>
+      </div>
+    </div>`).join('');
+
+  win.document.head.innerHTML = `<title>Employee Credentials</title><style>${PRINT_STYLES}</style>`;
+  win.document.body.innerHTML = `
+    <div class="head">
+      <img src="${window.location.origin}/favicon-blue-512.png" alt="ABYAN">
+      <div class="org"><b>ABYAN HRIS</b>City Government of Iloilo · CHRMO</div>
+      <div class="meta">Employee Credentials<br>Issued ${issued}</div>
+    </div>
+    <div class="grid">${cards}</div>`;
+
+  win.focus();
+  // Give the logo and font a moment to load before the print dialog opens.
+  win.setTimeout(() => win.print(), 300);
+};

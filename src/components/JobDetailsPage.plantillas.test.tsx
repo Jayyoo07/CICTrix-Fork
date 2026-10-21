@@ -3,8 +3,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobPosting } from '../types/recruitment.types';
 
-// A posting with three admin-named plantillas: one open, one filled, one the
-// applicant already applied to. Old ABYAN-style internal keys are present on
+// A posting with three admin-named plantillas: one open, one filled, one this
+// browser already applied to. Old ABYAN-style internal keys are present on
 // purpose — they must never reach the screen.
 const job = {
   id: 'job-legal-1',
@@ -102,12 +102,13 @@ describe('Job Details — the one plantilla a vacancy stands for', () => {
     expect(document.body.textContent).not.toMatch(/PLT-/);
   });
 
-  it('says an already-applied plantilla is no longer open, with no way to continue', async () => {
+  it('lets the next person on this browser apply to a plantilla someone here already applied to', async () => {
+    // Any number of people may apply. The browser flag is not a person; the
+    // database rejects a real duplicate by email at submit.
     await renderPage('slot-c');
 
-    expect(screen.getByRole('heading', { name: 'This plantilla is no longer open' })).toBeInTheDocument();
-    expect(screen.getByText(/already applied/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Continue to Application/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'This plantilla is no longer open' })).not.toBeInTheDocument();
+    for (const button of screen.getAllByRole('button', { name: /Continue to Application/ })) expect(button).toBeEnabled();
   });
 
   it('says a filled plantilla is no longer open', async () => {

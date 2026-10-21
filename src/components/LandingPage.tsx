@@ -119,8 +119,8 @@ export const LandingPage = () => {
         const today = localIsoDate(new Date());
         const rows = getAuthoritativeJobPostings()
           .filter((job) => isOpenToday(job, today))
-          // A posting whose every plantilla is closed or filled has nothing left to apply to.
-          .filter((job) => (job.plantillaSlots ?? []).some((slot) => slot.status === 'open'))
+          // A filled plantilla keeps its row (struck through, "Filled") until the
+          // posting closes, so applicants see it was taken rather than vanished.
           // One row per plantilla, even when several share a position title.
           .flatMap((job) => [...(job.plantillaSlots ?? [])]
             .filter((slot) => slot.status !== 'closed')

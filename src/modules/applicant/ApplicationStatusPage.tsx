@@ -10,7 +10,8 @@ import {
   parseDisqualificationReason,
   type MissedActivityType,
 } from '../../lib/applicationActivity';
-import { APPLICANT_MESSAGES, normalizeStatus } from '../../lib/api/applicantStatus';
+import { APPLICANT_MESSAGES, normalizeStatus, regretLetter, signingForfeitWarning } from '../../lib/api/applicantStatus';
+import { formatDisplayDate } from '../../lib/scheduleSelection';
 import { fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../../lib/plantillaSlots';
 import { plantillaLabel } from '../../lib/plantillaRules';
 import type { ApplicationSlotStatus, PlantillaSlot } from '../../types/recruitment.types';
@@ -56,6 +57,11 @@ interface ApplicationRecord {
   missed_activity_type: string | null;
   missed_activity_date: string | null;
   missed_activity_time: string | null;
+  // Migration 20261021200100: the contract-signing notice, and the flag set
+  // when the plantilla went to someone else.
+  signing_deadline?: string | null;
+  signing_instructions?: string | null;
+  archived_at?: string | null;
 }
 
 interface AttachmentRow {
@@ -255,6 +261,14 @@ const resolvePhase = (rawStatus: string, hasSchedule: boolean): ApplicantPhase =
         headline: 'Qualified',
         detail: APPLICANT_MESSAGES[status],
         tone: 'in-review', showSchedule: false, showCongrats: false,
+      };
+
+    // Selected and reserved, but the post is theirs only once they sign.
+    case 'For Contract Signing':
+      return {
+        headline: 'Selected — Report for Contract Signing',
+        detail: APPLICANT_MESSAGES[status],
+        tone: 'approved', showSchedule: false, showCongrats: false,
       };
 
     case 'Selected':
@@ -1142,6 +1156,35 @@ export const ApplicationStatusPage = () => {
                           You have been selected for the position of <span className="font-semibold">{record.position}</span>.
                           The RSP Office will contact you with further instructions regarding your appointment.
                         </p>
+                      </div>
+                    )}
+
+                    {normalizeStatus(record.status) === 'For Contract Signing' && (
+                      <div className="abyan-ds mt-3 rounded-xl border border-[var(--success-300)] bg-white px-4 py-3">
+                        <p className="text-sm font-semibold text-[var(--success-700)]">Congratulations, {record.first_name}!</p>
+                        <p className="mt-1 text-sm text-[var(--neutral-800)]">
+                          You have been selected for the position of <span className="font-semibold">{record.position}</span>.
+                        </p>
+                        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Report on or before</p>
+                        <p className="text-base font-semibold text-[var(--color-primary-900)]">{formatDisplayDate(record.signing_deadline)}</p>
+                        {record.signing_instructions && (
+                          <>
+                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Instructions</p>
+                            <p className="mt-0.5 whitespace-pre-line text-sm text-[var(--neutral-800)]">{record.signing_instructions}</p>
+                          </>
+                        )}
+                        <p className="mt-3 rounded-lg bg-[var(--warning-100)] px-3 py-2 text-sm text-[var(--warning-700)]">
+                          {signingForfeitWarning(formatDisplayDate(record.signing_deadline))}
+                        </p>
+                      </div>
+                    )}
+
+                    {record.archived_at && normalizeStatus(record.status) === 'Not Selected' && (
+                      <div className="abyan-ds mt-3 space-y-2 rounded-xl border border-[var(--neutral-200)] bg-white px-4 py-4 text-sm text-[var(--neutral-800)]">
+                        {regretLetter(`${record.first_name} ${record.last_name}`.trim(), record.position).map((line, i, all) => (
+                          // The last two lines are the signature block: no gap between them.
+                          <p key={i} className={i === all.length - 1 ? '!mt-0' : undefined}>{line}</p>
+                        ))}
                       </div>
                     )}
 

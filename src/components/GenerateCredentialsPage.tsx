@@ -6,13 +6,13 @@ import { Sidebar } from './Sidebar';
 import { revokeSlotReservation } from '../lib/plantillaSlots';
 import {
   fetchReservedApplicants,
-  formatDisplayDate,
   generateEmployeeCredentials,
   printCredentialCards,
   type CredentialResult,
   type ReservedApplicant,
 } from '../lib/hiringFlow';
 import {
+  formatDisplayDate,
   groupByDepartmentAndPosition,
   groupCheckState,
   isPastDate,

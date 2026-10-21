@@ -10,6 +10,8 @@ UPDATE public.applicants
    SET status = COALESCE(status_before_selection, 'Qualified')
  WHERE status = 'For Contract Signing';
 
+DROP TRIGGER IF EXISTS trg_reject_application_to_closed_slot ON public.applicants;
+DROP FUNCTION IF EXISTS public.reject_application_to_closed_slot();
 DROP TRIGGER IF EXISTS trg_archive_others_on_slot_fill ON public.plantilla_slots;
 DROP TRIGGER IF EXISTS trg_clear_reservation_on_fill ON public.plantilla_slots;
 DROP FUNCTION IF EXISTS public.archive_others_on_slot_fill();

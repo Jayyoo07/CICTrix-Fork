@@ -111,3 +111,12 @@ export function localIsoDate(now: Date = new Date()): string {
 
 /** True when a YYYY-MM-DD date is before `today`. ISO dates compare as strings. */
 export const isPastDate = (date: string, today: string): boolean => date < today;
+
+/** §9.5 date format: "Oct 28, 2026". Takes YYYY-MM-DD or an ISO timestamp. */
+export const formatDisplayDate = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+};

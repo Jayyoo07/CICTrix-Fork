@@ -6,6 +6,7 @@ import { plantillaLabel, normalizeApplicantEmail } from './plantillaRules';
 import { createPassword, upsertEmployeePortalAccount } from './employeePortalData';
 import { sendEmail } from './email';
 import { isTerminal, normalizeStatus } from './api/applicantStatus';
+import { formatDisplayDate } from './scheduleSelection';
 import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
 
 /**
@@ -28,15 +29,6 @@ export const DEFAULT_SIGNING_INSTRUCTIONS =
   'Please report to the Office of the City Human Resource Management Officer (CHRMO), Iloilo City Hall, '
   + 'Monday to Friday, 8:00 AM–5:00 PM, for contract signing and verification of your documents. '
   + 'Bring a valid government-issued ID and the original copies of the documents you submitted.';
-
-/** §9.5 date format: "Oct 28, 2026". Takes YYYY-MM-DD or an ISO timestamp. */
-export const formatDisplayDate = (value: string | null | undefined): string => {
-  if (!value) return '—';
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-};
 
 const fullNameOf = (row: any): string =>
   [row?.first_name, row?.middle_name, row?.last_name].filter(Boolean).join(' ').trim()

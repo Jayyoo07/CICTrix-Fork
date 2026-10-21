@@ -21,10 +21,9 @@ import {
   SIGNING_WINDOW_DAYS,
   fetchHiringContext,
   fetchOtherOpenApplications,
-  formatDisplayDate,
   type OtherApplication,
 } from '../lib/hiringFlow';
-import { localIsoDate } from '../lib/scheduleSelection';
+import { formatDisplayDate, localIsoDate } from '../lib/scheduleSelection';
 import { supabase } from '../lib/supabase';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { buildEvaluationSnapshotMap, subscribeToEvaluationChanges, type EvaluationSnapshot } from '../lib/evaluationScores';

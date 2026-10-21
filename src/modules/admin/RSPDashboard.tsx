@@ -25,6 +25,7 @@ import {
   Trash2,
   User,
   UserCheck,
+  UserMinus,
   UserPlus,
   Users,
   X,
@@ -33,6 +34,8 @@ import { QualifiedApplicantsSection } from '../../components/QualifiedApplicants
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { getAdminEmail } from '../../lib/adminSession';
 import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/applicantStatus';
+import { fetchArchivedApplicants, type ArchivedApplicant } from '../../lib/hiringFlow';
+import { NotSelectedArchive } from '../../components/NotSelectedArchive';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
 import { RspDashboardOverview } from './RspDashboardOverview';
 import { EligibilityPointsPanel } from '../../components/EligibilityPointsPanel';
@@ -867,7 +870,21 @@ export const RSPDashboard = () => {
   const [qualifiedSearch, setQualifiedSearch] = useState('');
   const [qualifiedPosition, setQualifiedPosition] = useState('all');
   const [qualifiedOffice, setQualifiedOffice] = useState('all');
-  const [reportsView, setReportsView] = useState<'overview' | 'ranking' | 'assessment' | 'documents' | 'closed' | 'temp'>('overview');
+  const [reportsView, setReportsView] = useState<'overview' | 'ranking' | 'assessment' | 'documents' | 'closed' | 'temp' | 'notSelected'>('overview');
+  // Applicants archived when the plantilla they applied for was filled.
+  const [notSelectedRows, setNotSelectedRows] = useState<ArchivedApplicant[]>([]);
+  const [notSelectedLoading, setNotSelectedLoading] = useState(false);
+  useEffect(() => {
+    if (section !== 'reports') return;
+    let cancelled = false;
+    setNotSelectedLoading(true);
+    void fetchArchivedApplicants().then((rows) => {
+      if (cancelled) return;
+      setNotSelectedRows(rows);
+      setNotSelectedLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [section]);
   const [activeRankingPosition, setActiveRankingPosition] = useState<string | null>(null);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showHireApplicantsModal, setShowHireApplicantsModal] = useState(false);
@@ -4350,7 +4367,27 @@ export const RSPDashboard = () => {
                       <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-purple-600 transition-colors" />
                     </button>
 
+                    {/* ── Row 5: Not Selected Applicants (archived when a plantilla is filled) ── */}
+                    <button
+                      type="button"
+                      onClick={() => setReportsView('notSelected')}
+                      className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-[var(--color-primary-200)] hover:shadow-md"
+                    >
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-50)]">
+                        <UserMinus size={20} className="text-[var(--color-primary)]" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-900">Not Selected Applicants</p>
+                        <p className="text-xs text-slate-500">Applicants archived when their plantilla was filled</p>
+                      </div>
+                      <span className="badge badge-tint">{notSelectedRows.length}</span>
+                      <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-[var(--color-primary)] transition-colors" />
+                    </button>
+
                   </div>
+
+                ) : reportsView === 'notSelected' ? (
+                  <NotSelectedArchive rows={notSelectedRows} loading={notSelectedLoading} />
 
                 ) : reportsView === 'closed' ? (
                   <section className="space-y-4">

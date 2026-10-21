@@ -217,6 +217,34 @@ CREATE TRIGGER trg_archive_others_on_slot_fill
   AFTER UPDATE OF status, filled_by_applicant_id ON public.plantilla_slots
   FOR EACH ROW EXECUTE FUNCTION public.archive_others_on_slot_fill();
 
+-- A filled or closed plantilla takes no new applications. The portal already
+-- disables Apply; this stops a stale page or a direct insert. A reserved
+-- plantilla is still open and keeps taking applications.
+CREATE OR REPLACE FUNCTION public.reject_application_to_closed_slot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  slot_status text;
+BEGIN
+  IF NEW.plantilla_slot_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  SELECT status INTO slot_status FROM plantilla_slots WHERE id = NEW.plantilla_slot_id;
+  IF slot_status IN ('filled', 'closed') THEN
+    RAISE EXCEPTION 'This plantilla has been %; it is no longer accepting applications.', slot_status
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_reject_application_to_closed_slot ON public.applicants;
+CREATE TRIGGER trg_reject_application_to_closed_slot
+  BEFORE INSERT ON public.applicants
+  FOR EACH ROW EXECUTE FUNCTION public.reject_application_to_closed_slot();
+
 -- ── 6. Tracker view: the signing notice and the archive flag ─────────────────
 -- Same definition as 20261021200000 with four columns appended (CREATE OR
 -- REPLACE only allows appending).

@@ -1,7 +1,7 @@
 ---
 title: Unlimited applicants, one hire per plantilla, reserve-then-hire flow
 date: 2026-10-21
-status: In Progress
+status: Done
 summary: Remove the per-browser block that stops a second person applying to a plantilla. RSP selects one applicant per plantilla (reserved, with a contract-signing deadline), can revoke, and generates credentials in a new tab, which fills the plantilla and archives the rest with a regret letter.
 spec: docs/mockups/2026-10-21-hire-reservation-flow.html (steps 1–2; step 3 layout B with cross-department selection; printout option A). Chosen 2026-10-21.
 ---

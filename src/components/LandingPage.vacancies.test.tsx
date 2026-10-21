@@ -21,7 +21,7 @@ const jobs = [
   posting('b', 'Social Welfare Officer IV (Division Chief)', 'Office of the City Social Welfare and Development Officer',
     [['Plantilla 113', 'open'], ['Plantilla 114', 'open'], ['Plantilla 115', 'filled'], ['Plantilla 116', 'closed']]),
   posting('a', 'Engineer II (Drainage / Flood Control)', 'Office of the City Engineer', [['Plantilla 65', 'open']]),
-  // Every plantilla filled: nothing to apply to, so it is not listed.
+  // Its one plantilla is filled: still listed, struck, until the posting closes.
   posting('c', 'Carpenter II', 'Office of the City Engineer', [['Plantilla 86', 'filled']]),
 ];
 
@@ -56,15 +56,19 @@ describe('Landing — vacancies table plantilla numbers', () => {
     expect(screen.queryByText('116')).not.toBeInTheDocument();
   });
 
-  it('sorts by department by default and hides fully filled postings', async () => {
+  it('sorts by department by default and keeps a fully filled posting as a Filled row', async () => {
     await renderPage();
     const titles = screen.getAllByRole('row').slice(1).map((r) => r.querySelector('td p')?.textContent);
 
     expect(titles).toEqual([
+      'Carpenter II',
       'Engineer II (Drainage / Flood Control)',
       'Social Welfare Officer IV (Division Chief)',
       'Social Welfare Officer IV (Division Chief)',
       'Social Welfare Officer IV (Division Chief)',
     ]);
+    const carpenter = screen.getByText('Carpenter II').closest('tr') as HTMLElement;
+    expect(within(carpenter).getByText('86').tagName).toBe('S');
+    expect(within(carpenter).getByRole('button', { name: 'Filled' })).toBeDisabled();
   });
 });

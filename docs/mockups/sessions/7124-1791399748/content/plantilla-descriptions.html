@@ -1,0 +1,105 @@
+<h2>Job Details: where should each plantilla's own job description go?</h2>
+<p class="subtitle">Social Welfare Officer IV (Division Chief), merged into one posting with 3 plantillas. Each plantilla heads a different division, so each has its own description. Applicant view, "Choose your plantilla items" card.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a-inline" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Choose your plantilla items (3) · 1 selected</div>
+        <div class="mockup-body">
+          <div style="border:2px solid #363EE8;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between"><b>☑ Plantilla 113</b><span>SG 24</span></div>
+            <div class="label" style="margin-top:4px">Child &amp; Youth Welfare Division</div>
+            <p style="font-size:12px;margin:4px 0 0">Heads the Child and Youth Welfare Division. Plans and supervises programs on child protection, CICL, and youth development…</p>
+            <div style="font-size:12px;color:#363EE8">Read more</div>
+          </div>
+          <div style="border:1px solid #ccc;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between"><b>☐ Plantilla 114</b><span>SG 24</span></div>
+            <div class="label" style="margin-top:4px">Family &amp; Community Welfare Division</div>
+            <p style="font-size:12px;margin:4px 0 0">Heads the Family and Community Welfare Division. Oversees 4Ps coordination, family counseling, and community-based services…</p>
+            <div style="font-size:12px;color:#363EE8">Read more</div>
+          </div>
+          <div style="border:1px solid #ddd;border-radius:10px;padding:10px;opacity:.55">
+            <div style="display:flex;justify-content:space-between"><b>🔒 Plantilla 115</b><span>Filled</span></div>
+            <div class="label" style="margin-top:4px">Disaster Relief &amp; Crisis Division</div>
+            <p style="font-size:12px;margin:4px 0 0">Heads the Disaster Relief and Crisis Intervention Division…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A · Inline, 2-line preview</h3><p>Division plus a clamped description on every item, with "Read more" to expand. You can compare items at a glance, but the card gets tall with many plantillas.</p></div>
+  </div>
+
+  <div class="card" data-choice="b-expand" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Choose your plantilla items (3) · 1 selected</div>
+        <div class="mockup-body">
+          <div style="border:2px solid #363EE8;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between"><b>☑ Plantilla 113</b><span>SG 24</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px"><span>Child &amp; Youth Welfare Division</span><span style="color:#363EE8">Hide duties ▴</span></div>
+            <ul style="font-size:12px;margin:6px 0 0;padding-left:18px">
+              <li>Plans and supervises child protection and youth programs</li>
+              <li>Manages CICL and residential care referrals</li>
+              <li>Represents the CSWDO in the LCPC</li>
+            </ul>
+          </div>
+          <div style="border:1px solid #ccc;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between"><b>☐ Plantilla 114</b><span>SG 24</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px"><span>Family &amp; Community Welfare Division</span><span style="color:#363EE8">View duties ▾</span></div>
+          </div>
+          <div style="border:1px solid #ddd;border-radius:10px;padding:10px;opacity:.55">
+            <div style="display:flex;justify-content:space-between"><b>🔒 Plantilla 115</b><span>Filled</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px"><span>Disaster Relief &amp; Crisis Division</span><span>View duties ▾</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B · Collapsed, "View duties" toggle</h3><p>Items stay compact and show the division only. Duties open per item, and ticking an item opens its duties. It scales to many plantillas, but you can't compare two descriptions without opening both.</p></div>
+  </div>
+
+  <div class="card" data-choice="c-master-detail" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="split">
+        <div class="mockup">
+          <div class="mockup-header">Left column: Job description</div>
+          <div class="mockup-body">
+            <div class="label">Viewing Plantilla 114</div>
+            <b style="font-size:13px">Family &amp; Community Welfare Division</b>
+            <p style="font-size:12px;margin:6px 0">Heads the Family and Community Welfare Division. Oversees 4Ps coordination, family counseling, solo parent and community-based services; supervises social workers assigned to the division…</p>
+            <div class="placeholder" style="height:40px">Qualifications (shared)</div>
+          </div>
+        </div>
+        <div class="mockup">
+          <div class="mockup-header">Right: Choose items (3)</div>
+          <div class="mockup-body">
+            <div style="border:2px solid #363EE8;border-radius:10px;padding:8px;margin-bottom:6px;font-size:12px"><b>☑ Plantilla 113</b><br>Child &amp; Youth Welfare</div>
+            <div style="border:1px dashed #363EE8;background:#EEF2FF;border-radius:10px;padding:8px;margin-bottom:6px;font-size:12px"><b>☐ Plantilla 114</b> ◀ viewing<br>Family &amp; Community</div>
+            <div style="border:1px solid #ddd;border-radius:10px;padding:8px;opacity:.55;font-size:12px"><b>🔒 Plantilla 115</b> Filled<br>Disaster Relief</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C · Master–detail</h3><p>Focusing or hovering an item swaps the left-hand Job Description to that plantilla's text. The chooser stays compact and the description gets full width. It's the least obvious option on mobile, where the columns stack.</p></div>
+  </div>
+
+</div>
+
+<div class="section">
+  <h3>Vacancies table (same for all options)</h3>
+  <div class="mockup">
+    <div class="mockup-header">Job Vacancies · table view</div>
+    <div class="mockup-body" style="font-size:12px">
+      <div style="display:grid;grid-template-columns:2fr 2fr 1.3fr 1fr 1fr;gap:8px;font-weight:600;border-bottom:1px solid #ccc;padding-bottom:6px">
+        <span>Position Title</span><span>Department</span><span>Plantillas</span><span>Deadline</span><span>Action</span>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 2fr 1.3fr 1fr 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #eee">
+        <span>Social Welfare Officer IV (Division Chief)</span><span>Office of the City SWD Officer</span><span><b>3 plantillas</b> · 2 open</span><span>Nov 05, 2026</span><span>View</span>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 2fr 1.3fr 1fr 1fr;gap:8px;padding:8px 0">
+        <span>Carpenter II</span><span>Office of the City GSO</span><span>Plantilla 140</span><span>Nov 10, 2026</span><span>View</span>
+      </div>
+    </div>
+  </div>
+</div>

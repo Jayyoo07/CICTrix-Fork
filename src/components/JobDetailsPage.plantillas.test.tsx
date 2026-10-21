@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobPosting } from '../types/recruitment.types';
 
@@ -44,26 +44,24 @@ vi.mock('../lib/plantillaSlots', () => ({
   fetchSlotApplicantCounts: () => Promise.resolve(new Map([['slot-b', 15]])),
 }));
 
-/** Stand-in for Step 2: shows which plantillas Step 1 handed over. */
-const ApplyProbe = () => {
-  const { state } = useLocation() as { state: { landingJob: { selectedChoices: { key: string }[] } } };
-  return <p data-testid="apply-keys">{state.landingJob.selectedChoices.map((c) => c.key).join(',')}</p>;
-};
-
-const renderPage = async () => {
+/** `plantillaSlotId` is what a landing vacancy row hands over for its plantilla. */
+const renderPage = async (plantillaSlotId?: string) => {
   const { JobDetailsPage } = await import('./JobDetailsPage');
+  const state = plantillaSlotId
+    ? { landingJob: { id: 'job-legal-1', title: job.title, department: job.department, itemNumber: job.jobCode, postingDate: '', closingDate: '', originalJob: job, plantillaSlotId } }
+    : null;
   render(
-    <MemoryRouter initialEntries={['/job-details/job-legal-1']}>
+    <MemoryRouter initialEntries={[{ pathname: '/job-details/job-legal-1', state }]}>
       <Routes>
         <Route path="/job-details/:jobId" element={<JobDetailsPage />} />
-        <Route path="/apply" element={<ApplyProbe />} />
       </Routes>
     </MemoryRouter>,
   );
-  return screen.findByRole('heading', { name: 'Apply for this position' });
+  await screen.findByText(/Please review your application carefully before submission/);
+  return document.querySelector('.af-hero-sub') as HTMLElement;
 };
 
-describe('Job Details — applicant Step 1', () => {
+describe('Job Details — the one plantilla a vacancy stands for', () => {
   beforeEach(() => {
     // jsdom has no matchMedia; the page uses it for its desktop/mobile layout.
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -77,45 +75,55 @@ describe('Job Details — applicant Step 1', () => {
     localStorage.setItem('cictrix_applied_plantilla', JSON.stringify({ 'slot-c': { referenceNo: 'ABYAN-748-102', at: '' } }));
   });
 
-  it('has no plantilla picker', async () => {
-    await renderPage();
+  it('shows the submission instruction and a Continue button, with no plantilla card to choose from', async () => {
+    const hero = await renderPage('slot-b');
 
+    expect(hero).toHaveTextContent('Plantilla 100');
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'Please review your application carefully before submission. Ensure that all required fields are completed and all supporting documents are accurate, complete, valid, and readable. The completeness and quality of your submission may be considered during the evaluation of your application.',
+    );
     expect(screen.queryByText(/Choose your plantilla items/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Plantilla 20')).not.toBeInTheDocument();
+    for (const button of screen.getAllByRole('button', { name: /Continue to Application/ })) expect(button).toBeEnabled();
+  });
+
+  it('falls back to the first open plantilla when no row named one', async () => {
+    const hero = await renderPage();
+
+    expect(hero).toHaveTextContent('Plantilla 100');
   });
 
   it('never shows a plantilla item number or any ABYAN-style code', async () => {
-    await renderPage();
+    await renderPage('slot-b');
 
     expect(screen.queryByText(/Plantilla Item No/i)).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/ABYAN-\d/);
     expect(document.body.textContent).not.toMatch(/PLT-/);
   });
 
-  it("continues with the posting's open plantilla, skipping filled and applied ones", async () => {
-    const heading = await renderPage();
-    const card = heading.closest('section') as HTMLElement;
+  it('says an already-applied plantilla is no longer open, with no way to continue', async () => {
+    await renderPage('slot-c');
 
-    fireEvent.click(within(card).getByRole('button', { name: /Continue to Application/ }));
-    expect(await screen.findByTestId('apply-keys')).toHaveTextContent(/^slot-b$/);
+    expect(screen.getByRole('heading', { name: 'This plantilla is no longer open' })).toBeInTheDocument();
+    expect(screen.getByText(/already applied/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Continue to Application/ })).not.toBeInTheDocument();
   });
 
-  it('shows the submission instructions under the required documents', async () => {
-    await renderPage();
+  it('says a filled plantilla is no longer open', async () => {
+    await renderPage('slot-a');
 
-    const docs = screen.getByRole('heading', { name: 'Required documents' }).closest('section') as HTMLElement;
-    expect(within(docs).getByText(/complete, accurate, clear, and readable/)).toBeInTheDocument();
-    expect(within(docs).queryByText(/Address your application letter/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'This plantilla is no longer open' })).toBeInTheDocument();
+    expect(screen.getByText(/has been filled/i)).toBeInTheDocument();
   });
 
-  it('shows each merged plantilla with its own summary and duties', async () => {
-    await renderPage();
+  it('shows only this plantilla\'s own summary and duties', async () => {
+    await renderPage('slot-b');
 
-    expect(screen.getAllByText('Plantilla 20 · Records Division').length).toBe(2);
-    expect(screen.getByText('Keeps the legal records.')).toBeInTheDocument();
     expect(screen.getByText('Drafts routine contracts.')).toBeInTheDocument();
-    expect(screen.getByText('Files case folders')).toBeInTheDocument();
     expect(screen.getByText('Prepares contract drafts')).toBeInTheDocument();
+    expect(screen.queryByText('Keeps the legal records.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Files case folders')).not.toBeInTheDocument();
     // Per-plantilla text replaces the posting-wide summary, not added to it.
     expect(screen.queryByText('Posting-wide summary')).not.toBeInTheDocument();
   });

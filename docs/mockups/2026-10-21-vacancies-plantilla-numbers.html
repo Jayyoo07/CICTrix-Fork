@@ -1,0 +1,57 @@
+<h2>Job Vacancies table: plantilla numbers in the Plantilla column, organized how?</h2>
+<p class="subtitle">The "1 open slot" text becomes the actual plantilla numbers. Open ones are solid; filled ones are greyed and struck. The other columns are unchanged.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a-flat-sorted" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Job Vacancies · flat, sorted by department then title</div>
+        <div class="mockup-body" style="font-size:12px">
+          <div style="display:grid;grid-template-columns:2.4fr 2fr 2fr 1.2fr;gap:6px;font-weight:600;border-bottom:1px solid #ccc;padding-bottom:4px"><span>Position Title</span><span>Department / Office</span><span>Plantilla</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:2.4fr 2fr 2fr 1.2fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Social Welfare Officer IV (Division Chief)</span><span>City SWDO</span><span><b>113</b> · <b>114</b> · <s style="color:#aaa">115</s></span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:2.4fr 2fr 2fr 1.2fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Social Welfare Officer I (District Worker)</span><span>City SWDO</span><span><b>103</b> · <b>104</b></span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:2.4fr 2fr 2fr 1.2fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Engineer II (Drainage / Flood Control)</span><span>City Engineer</span><span><b>65</b></span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:2.4fr 2fr 2fr 1.2fr;gap:6px;padding:6px 0"><span>Carpenter II</span><span>City GSO</span><span><b>140</b></span><span>Apply</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A · Flat table, department sort</h3><p>Smallest change: same table, the Plantilla column shows numbers, and rows are sorted by department. Department still repeats on every row.</p></div>
+  </div>
+
+  <div class="card" data-choice="b-grouped-headers" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Job Vacancies · grouped by department (recommended)</div>
+        <div class="mockup-body" style="font-size:12px">
+          <div style="display:grid;grid-template-columns:2.6fr 2fr 1.4fr 1fr;gap:6px;font-weight:600;border-bottom:1px solid #ccc;padding-bottom:4px"><span>Position Title</span><span>Plantilla</span><span>Monthly Salary</span><span>Apply</span></div>
+          <div style="background:#EEF2FF;padding:5px 6px;margin-top:4px;font-weight:600;color:#050D65">Office of the City Social Welfare and Development Officer <span style="font-weight:400;color:#666">· 4 open plantillas</span></div>
+          <div style="display:grid;grid-template-columns:2.6fr 2fr 1.4fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Social Welfare Officer IV (Division Chief)</span><span><b>113</b> · <b>114</b> · <s style="color:#aaa">115</s></span><span>₱81,796</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:2.6fr 2fr 1.4fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Social Welfare Officer I (District Worker)</span><span><b>103</b> · <b>104</b></span><span>₱31,705</span><span>Apply</span></div>
+          <div style="background:#EEF2FF;padding:5px 6px;margin-top:4px;font-weight:600;color:#050D65">Office of the City Engineer <span style="font-weight:400;color:#666">· 1 open plantilla</span></div>
+          <div style="display:grid;grid-template-columns:2.6fr 2fr 1.4fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><span>Engineer II (Drainage / Flood Control)</span><span><b>65</b></span><span>₱45,694</span><span>Apply</span></div>
+          <div style="background:#EEF2FF;padding:5px 6px;margin-top:4px;font-weight:600;color:#050D65">Office of the City General Services Officer <span style="font-weight:400;color:#666">· 1 open plantilla</span></div>
+          <div style="display:grid;grid-template-columns:2.6fr 2fr 1.4fr 1fr;gap:6px;padding:6px 0"><span>Carpenter II</span><span><b>140</b></span><span>₱22,423</span><span>Apply</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B · Department header rows</h3><p>Each office gets a header row with its open-plantilla count, and the Department column goes away. Easier to scan 5 offices. Existing department filter still works.</p></div>
+  </div>
+
+  <div class="card" data-choice="c-one-row-per-plantilla" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Job Vacancies · one row per plantilla</div>
+        <div class="mockup-body" style="font-size:12px">
+          <div style="display:grid;grid-template-columns:1fr 2.6fr 2fr 1fr;gap:6px;font-weight:600;border-bottom:1px solid #ccc;padding-bottom:4px"><span>Plantilla</span><span>Position Title</span><span>Department</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:1fr 2.6fr 2fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><b>113</b><span>Social Welfare Officer IV (Division Chief)</span><span>City SWDO</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:1fr 2.6fr 2fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><b>114</b><span>Social Welfare Officer IV (Division Chief)</span><span>City SWDO</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:1fr 2.6fr 2fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #eee"><b>103</b><span>Social Welfare Officer I (District Worker)</span><span>City SWDO</span><span>Apply</span></div>
+          <div style="display:grid;grid-template-columns:1fr 2.6fr 2fr 1fr;gap:6px;padding:6px 0"><b>104</b><span>Social Welfare Officer I (District Worker)</span><span>City SWDO</span><span>Apply</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C · One row per plantilla</h3><p>Plantilla number leads each row. Most explicit, but titles repeat, which undoes the "make it one" look from yesterday.</p></div>
+  </div>
+
+</div>

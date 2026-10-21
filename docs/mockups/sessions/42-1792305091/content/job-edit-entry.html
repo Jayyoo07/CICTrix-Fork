@@ -1,0 +1,98 @@
+<h2>Where should RSP edit a posted vacancy?</h2>
+<p class="subtitle">The Create/Edit Position modal and its save path still exist. Only the way into it was removed on Oct 7. Each option below opens that same modal, prefilled.</p>
+
+<div class="cards">
+  <div class="card" data-choice="entry-a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:16px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.4fr .8fr 1.6fr;gap:8px;padding:8px 12px;background:#F1F5F9;color:#040E6B;font-weight:600">
+          <span>Position</span><span>Status</span><span style="text-align:center">Actions</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1.4fr .8fr 1.6fr;gap:8px;padding:10px 12px;align-items:center;border-top:1px solid #E2E8F0">
+          <span style="color:#040E6B;font-weight:600">Engineer V<br><span style="font-weight:500;color:#515F69">6 plantillas</span></span>
+          <span style="background:#DCFCE7;color:#0F7A40;border-radius:999px;padding:2px 8px;width:max-content">Open</span>
+          <span style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+            <b style="border:1.5px solid #363EE8;color:#363EE8;border-radius:999px;padding:3px 9px">Details</b>
+            <b style="border:1.5px solid #363EE8;color:#363EE8;border-radius:999px;padding:3px 9px;box-shadow:0 0 0 3px #C8D1FF">✎ Edit</b>
+            <b style="background:#363EE8;color:#fff;border-radius:999px;padding:3px 9px">Applicants</b>
+            <b style="border:1px solid #F0B478;color:#E8821A;border-radius:8px;padding:3px 6px">🔒</b>
+            <b style="border:1px solid #EF9A9A;color:#E05252;border-radius:8px;padding:3px 6px">🗑</b>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A. Edit button back on the row</h3><p>One click from the list, as it was before Oct 7. The row gets wider again, which is the density problem that removal solved.</p></div>
+  </div>
+
+  <div class="card" data-choice="entry-b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:16px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="background:linear-gradient(180deg,#363EE8,#040E6B);color:#fff;border-radius:12px 12px 0 0;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+        <div><div style="opacity:.85">← Back · Job posts</div><div style="font-size:16px;font-weight:700">Engineer V</div><div style="opacity:.9">Office of the City Engineer · 6 plantillas · 14 applicants</div></div>
+        <b style="background:#fff;color:#363EE8;border-radius:999px;padding:6px 12px;box-shadow:0 0 0 3px rgba(255,255,255,.4)">✎ Edit Posting</b>
+      </div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-top:0;border-radius:0 0 12px 12px;padding:12px 14px;color:#515F69">
+        <div style="color:#040E6B;font-weight:600;margin-bottom:6px">Posting summary</div>
+        Salary grade SG 24 · Application closes Nov 05, 2026<br>Education: Bachelor's degree in Civil Engineering · Eligibility: RA 1080
+      </div>
+    </div>
+    <div class="card-body"><h3>B. Edit Posting on the Details page</h3><p>The job list stays as compact as it is today. RSP opens Details to check the posting, then edits from there. That's one extra click, but RSP sees what they're changing first.</p></div>
+  </div>
+
+  <div class="card" data-choice="entry-c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:16px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:visible;position:relative">
+        <div style="display:grid;grid-template-columns:1.4fr .8fr 1.6fr;gap:8px;padding:8px 12px;background:#F1F5F9;color:#040E6B;font-weight:600;border-radius:12px 12px 0 0">
+          <span>Position</span><span>Status</span><span style="text-align:center">Actions</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1.4fr .8fr 1.6fr;gap:8px;padding:10px 12px;align-items:center;border-top:1px solid #E2E8F0">
+          <span style="color:#040E6B;font-weight:600">Engineer V<br><span style="font-weight:500;color:#515F69">6 plantillas</span></span>
+          <span style="background:#DCFCE7;color:#0F7A40;border-radius:999px;padding:2px 8px;width:max-content">Open</span>
+          <span style="display:flex;gap:4px;justify-content:center">
+            <b style="border:1.5px solid #363EE8;color:#363EE8;border-radius:999px;padding:3px 9px">Details</b>
+            <b style="background:#363EE8;color:#fff;border-radius:999px;padding:3px 9px">Applicants</b>
+            <b style="border:1px solid #C8D1FF;color:#363EE8;border-radius:8px;padding:3px 8px;box-shadow:0 0 0 3px #C8D1FF">⋯</b>
+          </span>
+        </div>
+        <div style="position:absolute;right:14px;top:74px;background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 12px rgba(16,30,41,.10);padding:4px;width:150px;z-index:2">
+          <div style="padding:6px 8px;border-radius:6px;background:#EEF0FF;color:#363EE8">✎ Edit posting</div>
+          <div style="padding:6px 8px;color:#28343D">🔒 Close applications</div>
+          <div style="padding:6px 8px;color:#B42323">🗑 Delete</div>
+        </div>
+        <div style="height:70px"></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C. "More" menu on the row</h3><p>Edit, Close and Delete move into one ⋯ menu, so the row ends up narrower than it is today. Edit is two clicks away, and Close and Delete become less visible.</p></div>
+  </div>
+</div>
+
+<h2 style="margin-top:40px">What can change once people have applied?</h2>
+<p class="subtitle">Engineer V has 14 applicants. If the requirements change after people apply, they may have applied against a different standard.</p>
+
+<div class="cards">
+  <div class="card" data-choice="rules-x" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:16px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px">
+        <div style="display:flex;gap:8px;padding:10px;border-radius:8px;background:#FCE8C8;color:#A8590A;border-left:4px solid #E8821A;margin-bottom:12px">⚠ <span><b>14 people have applied.</b> Changes apply to their applications too. Requirements they were screened against may no longer match.</span></div>
+        <div style="color:#040E6B;font-weight:600">Education *</div>
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:8px;margin:4px 0 10px">Bachelor's degree in Civil Engineering</div>
+        <div style="color:#040E6B;font-weight:600">Application Deadline</div>
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:8px;margin-top:4px">Nov 05, 2026</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>X. Everything editable, with a warning</h3><p>RSP can fix anything, including a typo in the qualifications, and the warning names the risk. Nothing stops a mid-recruitment change to the standards.</p></div>
+  </div>
+
+  <div class="card" data-choice="rules-y" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:16px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px">
+        <div style="display:flex;gap:8px;padding:10px;border-radius:8px;background:#E0E5FF;color:#191FA8;border-left:4px solid #363EE8;margin-bottom:12px">ⓘ <span>Qualification standards and plantilla item numbers are locked because people have applied. To change them, close this posting and post a new one.</span></div>
+        <div style="color:#040E6B;font-weight:600">Education 🔒</div>
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:8px;margin:4px 0 10px;background:#F1F5F9;color:#94A3B8">Bachelor's degree in Civil Engineering</div>
+        <div style="color:#040E6B;font-weight:600">Application Deadline</div>
+        <div style="border:1.5px solid #363EE8;border-radius:8px;padding:8px;margin-top:4px;box-shadow:0 0 0 3px rgba(54,62,232,.15)">Nov 05, 2026</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Y. Lock standards once anyone applies</h3><p>Title, deadline, place of assignment and plantilla status stay editable. Eligibility, Education, Training, Experience, Competency and item numbers lock when the first application arrives. A posting with no applicants stays fully editable.</p></div>
+  </div>
+</div>
+<p class="subtitle" style="margin-top:12px">Pick one placement (A, B or C) and one rule (X or Y).</p>

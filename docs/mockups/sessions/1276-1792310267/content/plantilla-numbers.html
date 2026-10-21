@@ -1,0 +1,64 @@
+<h2>How should RSP enter plantilla numbers like 21 and 13?</h2>
+<p class="subtitle">Engineer V, Office of the City Engineer, hiring for Plantilla 21 and Plantilla 13. The name is already editable today, but "Add Another Plantilla" pre-fills the next number in sequence, so it reads as fixed 1, 2, 3.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:14px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="color:#040E6B;font-weight:600;margin-bottom:6px">Plantilla Slots * <span style="color:#515F69;font-weight:500">(2)</span></div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="border:1px solid #E2E8F0;border-right:0;border-radius:8px 0 0 8px;padding:7px 8px;background:#F1F5F9;color:#515F69">Plantilla No.</span>
+          <span style="border:1.5px solid #363EE8;border-radius:0 8px 8px 0;padding:6px 10px;width:60px;color:#040E6B;font-weight:600;box-shadow:0 0 0 3px rgba(54,62,232,.15);margin-left:-6px">21</span>
+          <span style="margin-left:auto;border:1px solid #CBD5E1;border-radius:8px;padding:6px 8px">Open ▾</span>
+        </div>
+        <div style="margin-top:6px;color:#515F69">SG 24 · ₱90,078 · shows as <b style="color:#040E6B">Plantilla 21</b></div>
+      </div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="border:1px solid #E2E8F0;border-right:0;border-radius:8px 0 0 8px;padding:7px 8px;background:#F1F5F9;color:#515F69">Plantilla No.</span>
+          <span style="border:1px solid #CBD5E1;border-radius:0 8px 8px 0;padding:6px 10px;width:60px;color:#040E6B;font-weight:600;margin-left:-6px">13</span>
+          <span style="margin-left:auto;border:1px solid #CBD5E1;border-radius:8px;padding:6px 8px">Open ▾</span>
+        </div>
+      </div>
+      <div style="border:1px dashed #363EE8;color:#363EE8;border-radius:8px;padding:6px 10px;width:max-content;font-weight:600">+ Add Another Plantilla</div>
+    </div>
+    <div class="card-body"><h3>A. Number field with a fixed "Plantilla" prefix</h3><p>RSP types only the number (21, 13). New rows start empty, so nothing is guessed. The name always reads "Plantilla 21" for applicants, and digits only means no free-text slips.</p></div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:14px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="color:#040E6B;font-weight:600;margin-bottom:6px">Plantilla Slots * <span style="color:#515F69;font-weight:500">(2)</span></div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="flex:1;border:1px solid #CBD5E1;border-radius:8px;padding:6px 10px;color:#040E6B;font-weight:600">Plantilla 21</span>
+          <span style="border:1px solid #CBD5E1;border-radius:8px;padding:6px 8px">Open ▾</span>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="flex:1;border:1.5px solid #363EE8;border-radius:8px;padding:6px 10px;color:#94A3B8;box-shadow:0 0 0 3px rgba(54,62,232,.15)">e.g., Plantilla 13</span>
+          <span style="border:1px solid #CBD5E1;border-radius:8px;padding:6px 8px">Open ▾</span>
+        </div>
+        <div style="margin-top:6px;color:#515F69">New row starts empty and focused</div>
+      </div>
+      <div style="border:1px dashed #363EE8;color:#363EE8;border-radius:8px;padding:6px 10px;width:max-content;font-weight:600">+ Add Another Plantilla</div>
+    </div>
+    <div class="card-body"><h3>B. Keep the free-text name, stop auto-numbering</h3><p>This is the smallest change: the same field as today, but new rows start empty and focused instead of "Plantilla 3". RSP can still type any name, such as "Plantilla 21-A".</p></div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F1F5F9;padding:14px;font-family:Poppins,system-ui,sans-serif;font-size:12px">
+      <div style="color:#040E6B;font-weight:600;margin-bottom:6px">Plantilla numbers *</div>
+      <div style="background:#fff;border:1.5px solid #363EE8;border-radius:8px;padding:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;box-shadow:0 0 0 3px rgba(54,62,232,.15)">
+        <span style="background:#EEF0FF;color:#191FA8;border-radius:999px;padding:3px 10px;font-weight:600">21 ×</span>
+        <span style="background:#EEF0FF;color:#191FA8;border-radius:999px;padding:3px 10px;font-weight:600">13 ×</span>
+        <span style="color:#94A3B8">type a number, press Enter…</span>
+      </div>
+      <div style="color:#515F69;margin:6px 0 8px">Each number becomes a plantilla row below.</div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between"><b style="color:#040E6B">Plantilla 21</b><span style="color:#515F69">SG 24 ▾ · Open</span></div>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between"><b style="color:#040E6B">Plantilla 13</b><span style="color:#515F69">SG 24 ▾ · Open</span></div>
+    </div>
+    <div class="card-body"><h3>C. Type all the numbers at once</h3><p>RSP types 21, 13 and so on in one box, and each number becomes a row. This is fastest for postings with many plantillas, but it adds a new control to the form.</p></div>
+  </div>
+</div>
+<p class="subtitle" style="margin-top:12px">In every option, applicants see "Plantilla 21" and "Plantilla 13", the numbers must be unique within the posting, and they can be changed later through Edit Posting.</p>

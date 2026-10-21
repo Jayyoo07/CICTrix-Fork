@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
+  Info,
   ListChecks,
   Lock,
   Pencil,
@@ -42,9 +43,21 @@ interface LandingJobData {
   postingDate: string;
   closingDate: string;
   type: string;
+  /** The plantilla this vacancy row stands for; the landing table lists one per row. */
+  plantillaSlotId?: string;
 }
 
-const formatPeso = (value: number) =>
+const DISABLED_REASON: Record<string, string> = {
+  filled: 'This item has been filled. Choose another item.',
+  closed: 'This item is closed. Choose another item.',
+  applied: "You've already applied for this item. Choose another item.",
+};
+
+/** Shown on every public job details page, above Continue to Application. */
+const SUBMISSION_INSTRUCTION =
+  'Please review your application carefully before submission. Ensure that all required fields are completed and all supporting documents are accurate, complete, valid, and readable. The completeness and quality of your submission may be considered during the evaluation of your application.';
+
+const formatPeso =(value: number) =>
   `Php ${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** One line of the summary list. An unstated value reads as muted italic text, never a made-up value. */
@@ -146,7 +159,7 @@ export const JobDetailsPage = () => {
     return () => { cancelled = true; };
   }, [job?.id, job?.plantillaSlots, isAdminView]);
 
-  // ── Step 1: the plantilla the applicant applies for ───────────────────────
+  // ── Step 1 state: which plantilla items the applicant is applying for ─────
   const choices: PlantillaChoice[] = useMemo(() => {
     if (job) return buildPlantillaChoices(job);
     // Arrived from a vacancy card whose posting row isn't loaded (or no longer
@@ -162,6 +175,10 @@ export const JobDetailsPage = () => {
     return [];
   }, [job, landingJob, loaded]);
   const selectable = useMemo(() => choices.filter(isSelectable), [choices]);
+  // Each vacancy is one plantilla, so there is nothing to choose: the row the
+  // applicant clicked names it, else the posting's first open one.
+  const target: PlantillaChoice | null =
+    choices.find((choice) => choice.key === landingJob?.plantillaSlotId) ?? selectable[0] ?? choices[0] ?? null;
   const [summaryOpen, setSummaryOpen] = useState(isDesktop);
 
   const postingKey = job?.id ?? (landingJob ? String(landingJob.id) : '');
@@ -223,21 +240,24 @@ export const JobDetailsPage = () => {
   const openSlots = slots.filter((slot) => slot.status === 'open');
   // Plantillas merged from separate postings keep their own summary and
   // duties; when any has them, those sections list each plantilla in turn.
-  const orderedSlots = [...slots].sort((a, b) => a.slotNumber - b.slotNumber);
+  // Applicants see only their plantilla's text; RSP sees every plantilla's.
+  const orderedSlots = [...slots]
+    .sort((a, b) => a.slotNumber - b.slotNumber)
+    .filter((slot) => isAdminView || !target?.slotId || slot.id === target.key);
   const slotsWithSummary = orderedSlots.filter((slot) => slot.summary);
   const slotsWithDuties = orderedSlots.filter((slot) => (slot.responsibilities ?? []).length > 0);
   const slotHeading = (slot: (typeof slots)[number]) =>
     slot.division ? `${plantillaLabel(slot)} · ${slot.division}` : plantillaLabel(slot);
-  // Each posting has one assigned plantilla, so the applicant doesn't choose.
-  const selectedChoices: PlantillaChoice[] = selectable.slice(0, 1);
+  const selectedChoices = target && isSelectable(target) ? [target] : [];
   const canContinue = selectedChoices.length > 0;
+  const shownChoices = isAdminView ? choices : target ? [target] : [];
 
   // Salary grade can live on the posting or on each plantilla item. Show the
   // posting's, else the items' ("SG 10", or a range when they differ).
   const monthlySalaryText = (() => {
     const grades = job?.salaryGrade != null
       ? [job.salaryGrade]
-      : Array.from(new Set(choices.map((c) => c.salaryGrade).filter((g): g is number => g != null)));
+      : Array.from(new Set(shownChoices.map((c) => c.salaryGrade).filter((g): g is number => g != null)));
     const amounts: number[] = [];
     for (const g of grades) {
       const range = stepRangeFor(g, salarySchedule);
@@ -249,7 +269,7 @@ export const JobDetailsPage = () => {
 
   const salaryGradeText = (() => {
     if (job?.salaryGrade != null) return `SG ${job.salaryGrade}`;
-    const grades = Array.from(new Set(choices.map((c) => c.salaryGrade).filter((g): g is number => g != null))).sort((a, b) => a - b);
+    const grades = Array.from(new Set(shownChoices.map((c) => c.salaryGrade).filter((g): g is number => g != null))).sort((a, b) => a - b);
     if (grades.length === 0) return 'Not specified';
     return grades.length === 1 ? `SG ${grades[0]}` : `SG ${grades[0]}–${grades[grades.length - 1]}`;
   })();
@@ -385,10 +405,8 @@ export const JobDetailsPage = () => {
           ))}
         </ol>
         <p className="af-body-s" style={{ marginTop: 8 }}>
-          Please ensure that all submitted documents are complete, accurate, clear, and readable. Review your
-          application and attachments carefully before submitting to ensure that all required information is
-          provided and all documents meet the specified requirements. Incomplete, inaccurate, or illegible
-          submissions may affect the evaluation of your application.
+          Address your application letter to the head of office and attach the required documents listed above.
+          Applications received after {deadlineText} may not be considered.
         </p>
       </section>
     </details>
@@ -429,42 +447,42 @@ export const JobDetailsPage = () => {
     </div>
   );
 
-  // ── Right column: the apply card (public) or the slot breakdown (RSP) ──────
-  const applyCard = (
-    <section className="af-card" aria-labelledby="jd-apply">
-      <div className="af-card-head">
-        <span className="af-chip" aria-hidden="true"><Briefcase size={20} strokeWidth={1.75} /></span>
-        <div className="af-card-head-text">
-          <h2 className="af-title-s" id="jd-apply">Apply for this position</h2>
-          <p className="af-caption">Applications close {deadlineText}.</p>
-        </div>
+  // ── Right column: the applicant's plantilla (public) or the slot breakdown (RSP) ──
+  // No chooser: each vacancy is one plantilla, named here with the way forward.
+  // No card: the submission instruction, then the way forward (the hero names the plantilla).
+  const chooser = (
+    <div className="af-stack" style={{ gap: 16 }}>
+      <div className="af-alert af-alert-info" role="note">
+        <Info size={20} strokeWidth={1.75} aria-hidden="true" />
+        <p className="af-alert-body">{SUBMISSION_INSTRUCTION}</p>
       </div>
 
-      {!loaded && choices.length === 0 ? (
-        <div className="af-skel" aria-busy="true" aria-label="Loading position" style={{ height: 36 }} />
-      ) : selectable.length === 0 ? (
-        <div className="af-empty">
-          <Lock size={28} strokeWidth={1.75} aria-hidden="true" />
-          <p className="af-title-s">This position is no longer open</p>
-          <p className="af-body-m">It has been filled or closed. Browse the current vacancies instead.</p>
-          <button type="button" className="btn btn-md btn-secondary" onClick={() => navigate('/job-portal')}>
-            Back to Vacancies
-          </button>
+      {!loaded && !target ? (
+        <div className="af-skel" aria-busy="true" aria-label="Loading plantilla" style={{ height: 44 }} />
+      ) : !target || !isSelectable(target) ? (
+        <div className="af-alert af-alert-warning" role="status">
+          <Lock size={20} strokeWidth={1.75} aria-hidden="true" />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h2 className="af-alert-title">This plantilla is no longer open</h2>
+            <p className="af-alert-body">
+              {target ? DISABLED_REASON[target.status]?.replace(' Choose another item.', '') : 'It has been filled or closed.'}
+            </p>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => navigate('/job-portal')} style={{ marginTop: 12 }}>
+              Back to Vacancies
+            </button>
+          </div>
         </div>
-      ) : null}
-
-      {selectable.length > 0 && (
+      ) : (
         <button
           type="button"
           className="btn btn-md btn-primary btn-block af-desktop-only"
           onClick={handleContinue}
-          disabled={!canContinue}
         >
           Continue to Application
           <ArrowRight size={18} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
-    </section>
+    </div>
   );
 
   const adminSlots = (
@@ -519,9 +537,11 @@ export const JobDetailsPage = () => {
               <h1>{title}</h1>
               <p className="af-hero-sub">
                 <Briefcase size={18} strokeWidth={1.75} aria-hidden="true" />
-                {isMultiSlot
-                  ? `${slots.length} Plantillas · ${openSlots.length} open`
-                  : slots[0] ? plantillaLabel(slots[0]) : 'Plantilla 1'}
+                {!isAdminView && target
+                  ? choiceLabel(target)
+                  : isMultiSlot
+                    ? `${slots.length} Plantillas · ${openSlots.length} open`
+                    : slots[0] ? plantillaLabel(slots[0]) : 'Plantilla 1'}
                 {department ? ` · ${department}` : ''}
               </p>
             </div>
@@ -553,14 +573,14 @@ export const JobDetailsPage = () => {
           <div className="af-step1">
             {summaryCard}
             <div className="af-sticky-col" style={{ gridArea: 'chooser' }}>
-              {isAdminView ? adminSlots : applyCard}
+              {isAdminView ? adminSlots : chooser}
             </div>
             {moreCards}
           </div>
         </div>
       </main>
 
-      {!isAdminView && selectable.length > 0 && (
+      {!isAdminView && canContinue && (
         <div className="af-actionbar af-mobile-only">
           <button type="button" className="btn btn-md btn-primary" onClick={handleContinue} disabled={!canContinue}>
             Continue to Application

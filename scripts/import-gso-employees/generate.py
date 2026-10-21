@@ -126,10 +126,10 @@ DEGREE = {
 TRAINING_POOL = {
     "default": [
         ("Government Office Records Management and Filing", "Technical", "NAP"),
-        ("Values Restoration Program for Public Servants", "Behavioral", "CSC"),
+        ("Values Restoration Program for Public Servants", "Other", "CSC"),
         ("Basic Occupational Safety and Health (BOSH)", "Compliance", "DOLE"),
         ("Data Privacy Act Compliance for Government Offices", "Compliance", "NPC"),
-        ("Customer Service Excellence in the Public Sector", "Behavioral", "CSC"),
+        ("Customer Service Excellence in the Public Sector", "Other", "CSC"),
     ],
     "supply": [
         ("Government Property Management and Inventory", "Technical", "COA"),
@@ -140,15 +140,15 @@ TRAINING_POOL = {
     "admin_officer": [
         ("Procurement under RA 9184 and its Revised IRR", "Technical", "GPPB"),
         ("Records Management for Local Government Units", "Technical", "NAP"),
-        ("Human Resource Management in the Public Sector", "Managerial", "CSC"),
+        ("Human Resource Management in the Public Sector", "Leadership", "CSC"),
         ("Supervisory Development Course", "Leadership", "CSC"),
     ],
     "gso_head": [
         ("Leadership and Management Program for LGU Department Heads", "Leadership", "DILG-LGA"),
-        ("Strategic Planning and Budgeting for Local Governments", "Managerial", "DBM"),
+        ("Strategic Planning and Budgeting for Local Governments", "Leadership", "DBM"),
         ("Government Property Management and Inventory", "Technical", "COA"),
         ("Procurement under RA 9184 and its Revised IRR", "Technical", "GPPB"),
-        ("Public Financial Management for LGUs", "Managerial", "DILG-LGA"),
+        ("Public Financial Management for LGUs", "Leadership", "DILG-LGA"),
     ],
     "building_official": [
         ("National Building Code (PD 1096) Implementation", "Technical", "DPWH"),

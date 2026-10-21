@@ -22,7 +22,6 @@ import { plantillaLabel } from '../lib/plantillaRules';
 import { isCurriculumVitae } from '../lib/applicationDocuments';
 import {
   APPLY_STEPS,
-  ConfirmModal,
   PublicTopBar,
   StatusBadge,
   Stepper,
@@ -30,12 +29,8 @@ import {
 import {
   buildPlantillaChoices,
   choiceLabel,
-  draftKeysWithData,
   formatShortDate,
   isSelectable,
-  loadDrafts,
-  previouslySelectedKeys,
-  saveDrafts,
   type PlantillaChoice,
 } from '../modules/applicant/flow/applicationDrafts';
 
@@ -48,12 +43,6 @@ interface LandingJobData {
   closingDate: string;
   type: string;
 }
-
-const DISABLED_REASON: Record<string, string> = {
-  filled: 'This item has been filled. Choose another item.',
-  closed: 'This item is closed. Choose another item.',
-  applied: "You've already applied for this item. Choose another item.",
-};
 
 const formatPeso = (value: number) =>
   `Php ${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -157,7 +146,7 @@ export const JobDetailsPage = () => {
     return () => { cancelled = true; };
   }, [job?.id, job?.plantillaSlots, isAdminView]);
 
-  // ── Step 1 state: which plantilla items the applicant is applying for ─────
+  // ── Step 1: the plantilla the applicant applies for ───────────────────────
   const choices: PlantillaChoice[] = useMemo(() => {
     if (job) return buildPlantillaChoices(job);
     // Arrived from a vacancy card whose posting row isn't loaded (or no longer
@@ -173,21 +162,9 @@ export const JobDetailsPage = () => {
     return [];
   }, [job, landingJob, loaded]);
   const selectable = useMemo(() => choices.filter(isSelectable), [choices]);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [seededFor, setSeededFor] = useState<string | null>(null);
-  const [pendingDeselect, setPendingDeselect] = useState<PlantillaChoice | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(isDesktop);
 
-  // Restore the previous selection when coming back from Step 2; otherwise,
-  // with exactly one open item, preselect it (the step is still shown).
   const postingKey = job?.id ?? (landingJob ? String(landingJob.id) : '');
-  useEffect(() => {
-    if (!postingKey || choices.length === 0 || seededFor === postingKey) return;
-    const openKeys = new Set(selectable.map((choice) => choice.key));
-    const restored = previouslySelectedKeys(postingKey).filter((key) => openKeys.has(key));
-    setSelectedKeys(restored.length > 0 ? restored : selectable.length === 1 ? [selectable[0].key] : []);
-    setSeededFor(postingKey);
-  }, [postingKey, choices.length, selectable, seededFor]);
 
   // The summary is collapsible on mobile only; on desktop it is always open.
   useEffect(() => {
@@ -196,34 +173,6 @@ export const JobDetailsPage = () => {
     mql.addEventListener?.('change', sync);
     return () => mql.removeEventListener?.('change', sync);
   }, []);
-
-  const toggleChoice = (choice: PlantillaChoice) => {
-    if (!isSelectable(choice)) return;
-    if (selectedKeys.includes(choice.key)) {
-      // Unticking an item that already has answers throws them away — ask first.
-      if (postingKey && draftKeysWithData(postingKey).has(choice.key)) {
-        setPendingDeselect(choice);
-        return;
-      }
-      setSelectedKeys((prev) => prev.filter((key) => key !== choice.key));
-    } else {
-      setSelectedKeys((prev) => [...prev, choice.key]);
-    }
-  };
-
-  const confirmDeselect = () => {
-    if (!pendingDeselect) return;
-    const key = pendingDeselect.key;
-    // Drop the stored copy so re-selecting starts blank.
-    const state = loadDrafts();
-    delete state.drafts[key];
-    state.choices = state.choices.filter((choice) => choice.key !== key);
-    saveDrafts(state);
-    setSelectedKeys((prev) => prev.filter((k) => k !== key));
-    setPendingDeselect(null);
-  };
-
-  const selectAllOpen = () => setSelectedKeys(selectable.map((choice) => choice.key));
 
   if (!job && !landingJob) {
     return (
@@ -279,7 +228,8 @@ export const JobDetailsPage = () => {
   const slotsWithDuties = orderedSlots.filter((slot) => (slot.responsibilities ?? []).length > 0);
   const slotHeading = (slot: (typeof slots)[number]) =>
     slot.division ? `${plantillaLabel(slot)} · ${slot.division}` : plantillaLabel(slot);
-  const selectedChoices = choices.filter((choice) => selectedKeys.includes(choice.key));
+  // Each posting has one assigned plantilla, so the applicant doesn't choose.
+  const selectedChoices: PlantillaChoice[] = selectable.slice(0, 1);
   const canContinue = selectedChoices.length > 0;
 
   // Salary grade can live on the posting or on each plantilla item. Show the
@@ -435,8 +385,10 @@ export const JobDetailsPage = () => {
           ))}
         </ol>
         <p className="af-body-s" style={{ marginTop: 8 }}>
-          Address your application letter to the head of office and attach the required documents listed above.
-          Applications received after {deadlineText} may not be considered.
+          Please ensure that all submitted documents are complete, accurate, clear, and readable. Review your
+          application and attachments carefully before submitting to ensure that all required information is
+          provided and all documents meet the specified requirements. Incomplete, inaccurate, or illegible
+          submissions may affect the evaluation of your application.
         </p>
       </section>
     </details>
@@ -477,101 +429,29 @@ export const JobDetailsPage = () => {
     </div>
   );
 
-  // ── Right column: the chooser (public) or the slot breakdown (RSP) ─────────
-  const chooser = (
-    <section className="af-card" aria-labelledby="jd-choose">
-      <div className="af-chooser-head">
-        <div className="af-card-head" style={{ marginBottom: 0 }}>
-          <span className="af-chip" aria-hidden="true"><Building2 size={20} strokeWidth={1.75} /></span>
-          <h2 className="af-title-s" id="jd-choose">Choose your plantilla items ({choices.length})</h2>
+  // ── Right column: the apply card (public) or the slot breakdown (RSP) ──────
+  const applyCard = (
+    <section className="af-card" aria-labelledby="jd-apply">
+      <div className="af-card-head">
+        <span className="af-chip" aria-hidden="true"><Briefcase size={20} strokeWidth={1.75} /></span>
+        <div className="af-card-head-text">
+          <h2 className="af-title-s" id="jd-apply">Apply for this position</h2>
+          <p className="af-caption">Applications close {deadlineText}.</p>
         </div>
-        <span className="badge badge-info af-counter" aria-live="polite">
-          {selectedChoices.length} selected
-        </span>
       </div>
 
-      <p className="af-body-m" style={{ marginTop: 12 }}>
-        Select the plantilla items you want to apply for. You'll fill out a separate application for each one.
-      </p>
-      {selectable.length > 1 && (
-        <button
-          type="button"
-          className="af-textbtn"
-          onClick={selectAllOpen}
-          disabled={selectedChoices.length === selectable.length}
-          style={{ marginTop: 8 }}
-        >
-          Select all open items
-        </button>
-      )}
-
       {!loaded && choices.length === 0 ? (
-        <div className="af-stack" aria-busy="true" aria-label="Loading plantilla items" style={{ margin: '16px 0 20px', gap: 12 }}>
-          <div className="af-skel" style={{ height: 76 }} />
-          <div className="af-skel" style={{ height: 76 }} />
-        </div>
+        <div className="af-skel" aria-busy="true" aria-label="Loading position" style={{ height: 36 }} />
       ) : selectable.length === 0 ? (
         <div className="af-empty">
           <Lock size={28} strokeWidth={1.75} aria-hidden="true" />
-          <p className="af-title-s">No open plantilla items right now</p>
-          <p className="af-body-m">Every item on this posting has been filled or closed.</p>
+          <p className="af-title-s">This position is no longer open</p>
+          <p className="af-body-m">It has been filled or closed. Browse the current vacancies instead.</p>
           <button type="button" className="btn btn-md btn-secondary" onClick={() => navigate('/job-portal')}>
             Back to Vacancies
           </button>
         </div>
       ) : null}
-
-      <ul className="af-choices af-choices-scroll">
-        {choices.map((choice) => {
-          const selected = selectedKeys.includes(choice.key);
-          const meta = (
-            <div className="af-choice-body af-choice-line">
-              {/* A plantilla shows its name and salary grade only, never a code. */}
-              <span className="af-choice-name">
-                {choiceLabel(choice)}
-                {(() => {
-                  const range = stepRangeFor(choice.salaryGrade, salarySchedule);
-                  const text = range
-                    ? formatSalaryRange(range.min, range.max)
-                    : choice.monthlySalary != null
-                      ? formatPeso(choice.monthlySalary)
-                      : '';
-                  return text ? <span className="af-choice-meta">{text} monthly</span> : null;
-                })()}
-              </span>
-              {choice.salaryGrade != null && <span className="af-choice-sg">SG {choice.salaryGrade}</span>}
-              <StatusBadge status={choice.status} />
-            </div>
-          );
-
-          if (!isSelectable(choice)) {
-            const reason = DISABLED_REASON[choice.status] ?? '';
-            return (
-              <li key={choice.key}>
-                <div className="af-choice" aria-disabled="true" tabIndex={0} data-tooltip={reason} title={reason}>
-                  <Lock className="af-choice-lock" strokeWidth={1.75} aria-hidden="true" />
-                  {meta}
-                  <span className="af-sr-only">{reason}</span>
-                </div>
-              </li>
-            );
-          }
-
-          return (
-            <li key={choice.key}>
-              <label className="af-choice" data-selected={selected}>
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={() => toggleChoice(choice)}
-                  aria-label={`${choiceLabel(choice)}${choice.salaryGrade != null ? `, SG ${choice.salaryGrade}` : ''}, ${choice.status === 'closing' ? 'closing soon' : 'open'}`}
-                />
-                {meta}
-              </label>
-            </li>
-          );
-        })}
-      </ul>
 
       {selectable.length > 0 && (
         <button
@@ -673,7 +553,7 @@ export const JobDetailsPage = () => {
           <div className="af-step1">
             {summaryCard}
             <div className="af-sticky-col" style={{ gridArea: 'chooser' }}>
-              {isAdminView ? adminSlots : chooser}
+              {isAdminView ? adminSlots : applyCard}
             </div>
             {moreCards}
           </div>
@@ -688,18 +568,6 @@ export const JobDetailsPage = () => {
           </button>
         </div>
       )}
-
-      <ConfirmModal
-        open={Boolean(pendingDeselect)}
-        title={pendingDeselect ? `Discard your answers for Plantilla ${pendingDeselect.slotNumber}?` : ''}
-        confirmLabel="Discard Answers"
-        destructive
-        onConfirm={confirmDeselect}
-        onCancel={() => setPendingDeselect(null)}
-      >
-        You've started an application for {pendingDeselect ? choiceLabel(pendingDeselect) : ''}. Removing it deletes those
-        answers. If you select it again, you'll start with a blank form.
-      </ConfirmModal>
     </div>
   );
 };

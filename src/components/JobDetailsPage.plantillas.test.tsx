@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobPosting } from '../types/recruitment.types';
 
@@ -44,19 +44,26 @@ vi.mock('../lib/plantillaSlots', () => ({
   fetchSlotApplicantCounts: () => Promise.resolve(new Map([['slot-b', 15]])),
 }));
 
+/** Stand-in for Step 2: shows which plantillas Step 1 handed over. */
+const ApplyProbe = () => {
+  const { state } = useLocation() as { state: { landingJob: { selectedChoices: { key: string }[] } } };
+  return <p data-testid="apply-keys">{state.landingJob.selectedChoices.map((c) => c.key).join(',')}</p>;
+};
+
 const renderPage = async () => {
   const { JobDetailsPage } = await import('./JobDetailsPage');
   render(
     <MemoryRouter initialEntries={['/job-details/job-legal-1']}>
       <Routes>
         <Route path="/job-details/:jobId" element={<JobDetailsPage />} />
+        <Route path="/apply" element={<ApplyProbe />} />
       </Routes>
     </MemoryRouter>,
   );
-  return screen.findByRole('heading', { name: /Choose your plantilla items/ });
+  return screen.findByRole('heading', { name: 'Apply for this position' });
 };
 
-describe('Job Details — "Choose your plantilla items"', () => {
+describe('Job Details — applicant Step 1', () => {
   beforeEach(() => {
     // jsdom has no matchMedia; the page uses it for its desktop/mobile layout.
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -70,13 +77,11 @@ describe('Job Details — "Choose your plantilla items"', () => {
     localStorage.setItem('cictrix_applied_plantilla', JSON.stringify({ 'slot-c': { referenceNo: 'ABYAN-748-102', at: '' } }));
   });
 
-  it('shows each plantilla by its admin label and salary grade only', async () => {
-    const heading = await renderPage();
-    const chooser = heading.closest('section') as HTMLElement;
+  it('has no plantilla picker', async () => {
+    await renderPage();
 
-    expect(within(chooser).getByText('Plantilla 20')).toBeInTheDocument();
-    expect(within(chooser).getByText('Plantilla 100')).toBeInTheDocument();
-    expect(within(chooser).getAllByText('SG 10').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Choose your plantilla items/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
   it('never shows a plantilla item number or any ABYAN-style code', async () => {
@@ -87,29 +92,20 @@ describe('Job Details — "Choose your plantilla items"', () => {
     expect(document.body.textContent).not.toMatch(/PLT-/);
   });
 
-  it('lets the applicant select an open plantilla', async () => {
-    await renderPage();
-
-    const checkbox = screen.getByRole('checkbox', { name: /Plantilla 100/ });
-    expect(checkbox).toBeEnabled();
-  });
-
-  it('shows an already-applied plantilla as "Already applied" and not selectable', async () => {
+  it("continues with the posting's open plantilla, skipping filled and applied ones", async () => {
     const heading = await renderPage();
-    const chooser = heading.closest('section') as HTMLElement;
+    const card = heading.closest('section') as HTMLElement;
 
-    expect(within(chooser).getByText('Already applied')).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: /Plantilla 3/ })).not.toBeInTheDocument();
-    const applied = within(chooser).getByText('Plantilla 3').closest('[aria-disabled="true"]');
-    expect(applied).not.toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: /Continue to Application/ }));
+    expect(await screen.findByTestId('apply-keys')).toHaveTextContent(/^slot-b$/);
   });
 
-  it('shows a filled plantilla as disabled with a reason, not hidden', async () => {
+  it('shows the submission instructions under the required documents', async () => {
     await renderPage();
 
-    const filled = screen.getByText('Plantilla 20').closest('[aria-disabled="true"]');
-    expect(filled).not.toBeNull();
-    expect(filled).toHaveAttribute('data-tooltip', expect.stringMatching(/filled/i));
+    const docs = screen.getByRole('heading', { name: 'Required documents' }).closest('section') as HTMLElement;
+    expect(within(docs).getByText(/complete, accurate, clear, and readable/)).toBeInTheDocument();
+    expect(within(docs).queryByText(/Address your application letter/)).not.toBeInTheDocument();
   });
 
   it('shows each merged plantilla with its own summary and duties', async () => {

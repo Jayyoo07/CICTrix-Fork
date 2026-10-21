@@ -1,0 +1,26 @@
+item,title,division,sg,status,critical,function
+112,City General Services Officer,Executive & Administrative Division,26,FILLED,CRITICAL,Department Head
+120,Supply Officer IV (Division Chief),"Supply, Property & Asset Management Division",22,FILLED,CRITICAL,Division Chief — Supply & Property Management
+128,Administrative Officer V (Procurement Head),"Procurement, Inspection & BAC Support Division",18,FILLED,CRITICAL,Division Chief — Procurement & BAC Support
+134,Supervising Building Official,"Building, Grounds & Facilities Maintenance Division",22,FILLED,CRITICAL,Division Chief — Building & Grounds Maintenance
+147,Supervising Transportation Regulation Officer,"Motorpool, Fleet & Security Management Unit",18,FILLED,CRITICAL,Motorpool & City Fleet Manager
+115,Administrative Officer IV (HRMO II),Executive & Administrative Division,15,FILLED,NON-CRITICAL,Personnel & HR Records Section Head
+116,Admin Assistant III (Computer Operator II),Executive & Administrative Division,9,FILLED,NON-CRITICAL,GSO Inventory & HRIS Database Administrator
+117,Administrative Aide VI (Clerk III),Executive & Administrative Division,6,FILLED,NON-CRITICAL,Document Receiving & Dispatch Clerk
+118,Administrative Aide IV (Driver II),Executive & Administrative Division,4,FILLED,NON-CRITICAL,Executive & GSO Logistics Driver
+122,Supply Officer II (Warehouse Manager),"Supply, Property & Asset Management Division",15,FILLED,NON-CRITICAL,Central Warehouse & Inventory Manager
+124,Supply Officer I (Inventory Analyst),"Supply, Property & Asset Management Division",11,FILLED,NON-CRITICAL,Unserviceable Property Inspection Analyst
+126,Admin Assistant III (Senior Storekeeper),"Supply, Property & Asset Management Division",9,FILLED,NON-CRITICAL,Central Supplies Storekeeper
+127,Administrative Aide IV (Storekeeper I),"Supply, Property & Asset Management Division",4,FILLED,NON-CRITICAL,Warehouse Requisition & Issuance Helper
+130,Administrative Officer II (Inspection Lead),"Procurement, Inspection & BAC Support Division",11,FILLED,NON-CRITICAL,Technical Property & Delivery Inspector
+132,Admin Assistant III (Buyer II),"Procurement, Inspection & BAC Support Division",9,FILLED,NON-CRITICAL,City Market Canvasser & Price Analyst
+133,Administrative Aide IV (Clerk II),"Procurement, Inspection & BAC Support Division",4,FILLED,NON-CRITICAL,Procurement Voucher Tracking Clerk
+139,Plumber II,"Building, Grounds & Facilities Maintenance Division",8,FILLED,NON-CRITICAL,Water & Plumbing Systems Technician
+143,Administrative Aide III (Utility Foreman),"Building, Grounds & Facilities Maintenance Division",3,FILLED,NON-CRITICAL,Janitorial & Groundskeeping Head
+148,Mechanic III (Lead Automotive Mechanic),"Motorpool, Fleet & Security Management Unit",9,FILLED,NON-CRITICAL,City Fleet Maintenance & Engine Tech
+150,Heavy Equipment Operator II,"Motorpool, Fleet & Security Management Unit",8,FILLED,NON-CRITICAL,GSO Rescue Crane & Boom Truck Operator
+119,Administrative Aide I (Utility Worker I),Executive & Administrative Division,1,VACANT,NON-CRITICAL,Office Sanitation & Facility Helper
+125,Supply Officer I (Inventory Analyst),"Supply, Property & Asset Management Division",11,VACANT,NON-CRITICAL,Open Recruitment — Stock Card Analyst
+131,Administrative Officer II (BAC Secretariat),"Procurement, Inspection & BAC Support Division",11,VACANT,NON-CRITICAL,Open Recruitment — Bids & Awards Analyst
+140,Carpenter II,"Building, Grounds & Facilities Maintenance Division",8,VACANT,NON-CRITICAL,Open Recruitment — Facility Repair Carpenter
+149,Mechanic II (Heavy Equipment Mechanic),"Motorpool, Fleet & Security Management Unit",7,VACANT,NON-CRITICAL,Open Recruitment — Heavy Equipment Tech

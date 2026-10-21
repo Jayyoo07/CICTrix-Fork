@@ -5,6 +5,7 @@ const TABS = [
   { label: 'Qualified Applicants', path: '/admin/rsp/qualified' },
   { label: 'Applicant Score',      path: '/admin/rsp/applicant-score' },
   { label: 'For Hiring',           path: '/admin/rsp/for-hiring' },
+  { label: 'Generate Employee Credentials', path: '/admin/rsp/credentials' },
 ] as const;
 
 export const ApplicantsTabBar = () => {

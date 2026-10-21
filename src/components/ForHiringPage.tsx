@@ -3,33 +3,39 @@ import { AdminHeader } from './AdminHeader';
 import { ApplicantsTabBar } from './ApplicantsTabBar';
 import { Sidebar } from './Sidebar';
 import { useBackClosesView } from '../hooks/useHistoryBack';
-import { hireApplicant } from '../lib/api/employeesApi';
 import {
   ensureRecruitmentSeedData,
   getApplicants,
   getNewlyHiredFromSupabase,
   resolveDepartmentForPosition,
   saveApplicants,
-  saveNewlyHired,
 } from '../lib/recruitmentData';
-import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
-import { assignApplicantToSlot, fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../lib/plantillaSlots';
+import type { PlantillaSlot } from '../types/recruitment.types';
+import { reserveSlotForApplicant } from '../lib/plantillaSlots';
 import { plantillaLabel } from '../lib/plantillaRules';
-import { sendEmail } from '../lib/email';
-import { createPassword, getEmployeePortalAccounts, upsertEmployeePortalAccount } from '../lib/employeePortalData';
+import { getEmployeePortalAccounts } from '../lib/employeePortalData';
+import { signingForfeitWarning } from '../lib/api/applicantStatus';
+import {
+  DEFAULT_SIGNING_INSTRUCTIONS,
+  RESERVED_STATUS,
+  SIGNING_WINDOW_DAYS,
+  fetchHiringContext,
+  fetchOtherOpenApplications,
+  formatDisplayDate,
+  type OtherApplication,
+} from '../lib/hiringFlow';
+import { localIsoDate } from '../lib/scheduleSelection';
 import { supabase } from '../lib/supabase';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { buildEvaluationSnapshotMap, subscribeToEvaluationChanges, type EvaluationSnapshot } from '../lib/evaluationScores';
 import {
-  ArrowLeft,
+  AlertTriangle,
   Briefcase,
   Building2,
-  CheckCircle,
   ChevronRight,
-  Printer,
+  Lock,
   UserCheck,
   Users,
-  XCircle,
 } from 'lucide-react';
 
 interface HiringRow {
@@ -41,25 +47,33 @@ interface HiringRow {
   interviewScore: number | null;
   examScore: number | null;
   status: string;
+  /** The one plantilla this application is for; null for legacy unlinked rows. */
+  slot: PlantillaSlot | null;
+  selectionRevokedAt: string | null;
 }
 
-interface CredentialResult {
-  fullName: string;
-  employeeId: string;
-  tempPassword: string;
-  email: string;
-  emailSent: boolean;
-  position: string;
-  department: string;
-}
+const QUALIFY_STATUSES = ['qualified', 'recommended for hiring', 'accepted', 'for hiring', 'hired', 'for contract signing'];
 
-const QUALIFY_STATUSES = ['qualified', 'recommended for hiring', 'accepted', 'for hiring', 'hired'];
-
-// Disqualified/rejected applicants never surface here, regardless of scores.
+// Disqualified, rejected and archived (Not Selected) applicants never surface
+// here, regardless of scores.
 const isRejected = (status: string) => {
   const s = status.toLowerCase().trim();
-  return s.includes('not qualified') || s.includes('disqualif') || s.includes('reject');
+  return s.includes('not qualified') || s.includes('disqualif') || s.includes('reject') || s.includes('not selected');
 };
+
+const isReserved = (status: string) => status.toLowerCase().trim() === RESERVED_STATUS.toLowerCase();
+
+/** One folder per plantilla: each plantilla is its own vacancy with one hire. */
+const positionKeyOf = (row: Pick<HiringRow, 'position' | 'slot'>) =>
+  row.slot ? `${row.position || 'No Position'} · ${plantillaLabel(row.slot)}` : row.position || 'No Position';
+
+const addDays = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return localIsoDate(date);
+};
+
+type SelectStep = 'loading' | 'notice' | 'confirm';
 
 const isForHiring = (status: string) => {
   const s = status.toLowerCase().trim();
@@ -99,22 +113,21 @@ export const ForHiringPage = () => {
   const [rows, setRows]                         = useState<HiringRow[]>([]);
   const [loading, setLoading]                   = useState(true);
   const [selectedDept, setSelectedDept]         = useState<string | null>(null);
-  const [selected, setSelected]                 = useState<Set<string>>(new Set());
-  const [confirmTarget, setConfirmTarget]       = useState<HiringRow[] | null>(null);
-  useBackClosesView(selectedDept !== null, () => { setSelectedDept(null); setSelectedPosition(null); setSelected(new Set()); }, 'for-hiring-dept');
+  // One plantilla takes one hire, so exactly one applicant is selected at a time.
+  const [selectedId, setSelectedId]             = useState<string | null>(null);
+  useBackClosesView(selectedDept !== null, () => { setSelectedDept(null); setSelectedPosition(null); setSelectedId(null); }, 'for-hiring-dept');
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
-  useBackClosesView(selectedPosition !== null, () => { setSelectedPosition(null); setSelected(new Set()); }, 'for-hiring-position');
-  const [hiring, setHiring]                     = useState(false);
-  const [credentialsResult, setCredentialsResult] = useState<CredentialResult[]>([]);
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  /**
-   * A hire fills ONE plantilla item. An applicant who ticked several under the
-   * same application therefore has to be placed explicitly — these hold the
-   * still-open slots they are eligible for, and the admin's choice per person.
-   */
-  const [hireSlotOptions, setHireSlotOptions] = useState<Map<string, PlantillaSlot[]>>(new Map());
-  const [hireSlotChoice, setHireSlotChoice] = useState<Record<string, string>>({});
-  const [loadingSlotOptions, setLoadingSlotOptions] = useState(false);
+  useBackClosesView(selectedPosition !== null, () => { setSelectedPosition(null); setSelectedId(null); }, 'for-hiring-position');
+
+  // The select dialog: notice (other applications) → confirm (date, instructions).
+  const [selectTarget, setSelectTarget]         = useState<HiringRow | null>(null);
+  const [selectStep, setSelectStep]             = useState<SelectStep>('loading');
+  const [otherApps, setOtherApps]               = useState<OtherApplication[]>([]);
+  const [deadline, setDeadline]                 = useState('');
+  const [instructions, setInstructions]         = useState(DEFAULT_SIGNING_INSTRUCTIONS);
+  const [acknowledged, setAcknowledged]         = useState(false);
+  const [reserving, setReserving]               = useState(false);
+  const [selectError, setSelectError]           = useState<string | null>(null);
 
   // ── Data loading ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -319,6 +332,8 @@ export const ForHiringPage = () => {
             interviewScore,
             examScore,
             status,
+            slot: null,
+            selectionRevokedAt: null,
           };
           remoteMap.set(row.id, row);
 
@@ -375,11 +390,25 @@ export const ForHiringPage = () => {
             interviewScore,
             examScore,
             status:         a.status,
+            slot:           null,
+            selectionRevokedAt: null,
           });
         });
         remoteMap.forEach((row, id) => mergedMap.set(id, row));
 
-        const all = Array.from(mergedMap.values()).sort((a, b) =>
+        // Which plantilla each application is for, its reservation, and any
+        // revoked selection.
+        const context = await fetchHiringContext(Array.from(mergedMap.keys()));
+        mergedMap.forEach((row, id) => {
+          row.slot = context.slotByApplicant.get(id) ?? null;
+          row.selectionRevokedAt = context.revokedAt.get(id) ?? null;
+        });
+
+        const all = Array.from(mergedMap.values())
+          // A filled plantilla's hire happens on the Generate Employee
+          // Credentials tab; nobody else can be selected for it.
+          .filter(r => !r.slot || r.slot.status !== 'filled')
+          .sort((a, b) =>
           (a.department || 'zzz').localeCompare(b.department || 'zzz') ||
           (a.position   || 'zzz').localeCompare(b.position   || 'zzz')
         );
@@ -408,7 +437,7 @@ export const ForHiringPage = () => {
       const dept = r.department || 'No Department';
       if (!map.has(dept)) map.set(dept, { positions: new Set(), count: 0 });
       const entry = map.get(dept)!;
-      entry.positions.add(r.position || 'No Position');
+      entry.positions.add(positionKeyOf(r));
       entry.count++;
     });
     return Array.from(map.entries())
@@ -420,323 +449,87 @@ export const ForHiringPage = () => {
       .sort((a, b) => a.dept.localeCompare(b.dept));
   }, [rows]);
 
-  // ── Position folders inside the selected department ───────────────────────
+  // ── Position folders (one per plantilla) inside the selected department ───
   const positionList = useMemo(() => {
     if (!selectedDept) return [];
-    const counts = new Map<string, number>();
+    const byKey = new Map<string, { applicantCount: number; reservedFor: HiringRow | null }>();
     rows
       .filter(r => (r.department || 'No Department') === selectedDept)
       .forEach(r => {
-        const position = r.position || 'No Position';
-        counts.set(position, (counts.get(position) ?? 0) + 1);
+        const key = positionKeyOf(r);
+        const entry = byKey.get(key) ?? { applicantCount: 0, reservedFor: null };
+        entry.applicantCount++;
+        if (isReserved(r.status)) entry.reservedFor = r;
+        byKey.set(key, entry);
       });
-    return Array.from(counts.entries())
-      .map(([position, applicantCount]) => ({ position, applicantCount }))
+    return Array.from(byKey.entries())
+      .map(([position, entry]) => ({ position, ...entry }))
       .sort((a, b) => a.position.localeCompare(b.position));
   }, [rows, selectedDept]);
 
-  // ── Applicants for the selected position, sorted by interview score ───────
+  // ── Applicants for the selected plantilla, sorted by interview score ──────
   const deptApplicants = useMemo(() => {
     if (!selectedDept || !selectedPosition) return [];
     return rows
-      .filter(r => (r.department || 'No Department') === selectedDept && (r.position || 'No Position') === selectedPosition)
+      .filter(r => (r.department || 'No Department') === selectedDept && positionKeyOf(r) === selectedPosition)
       .sort((a, b) => (b.interviewScore ?? b.examScore ?? -1) - (a.interviewScore ?? a.examScore ?? -1));
   }, [rows, selectedDept, selectedPosition]);
 
-  // ── Selection helpers ─────────────────────────────────────────────────────
-  const toggleRow = (id: string) =>
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  /** Who holds this plantilla while they sign; nobody else can be selected. */
+  const reservedRow = deptApplicants.find(r => isReserved(r.status)) ?? null;
+  const selectedRow = deptApplicants.find(r => r.id === selectedId) ?? null;
 
-  const toggleAll = () => {
-    if (selected.size === deptApplicants.length && deptApplicants.length > 0) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(deptApplicants.map(r => r.id)));
-    }
+  // ── Select for Hiring: notice → confirm → reserve ─────────────────────────
+  const closeSelectDialog = () => {
+    setSelectTarget(null);
+    setOtherApps([]);
+    setSelectError(null);
+    setAcknowledged(false);
   };
 
-  const handleCreateClick = () => {
-    const targets = deptApplicants.filter(r => selected.has(r.id));
-    if (targets.length === 0) return;
-    setConfirmTarget(targets);
-    void loadSlotOptions(targets.map(r => r.id));
+  const handleSelectClick = async () => {
+    if (!selectedRow || reservedRow) return;
+    setSelectTarget(selectedRow);
+    setSelectStep('loading');
+    setSelectError(null);
+    setAcknowledged(false);
+    setDeadline(addDays(SIGNING_WINDOW_DAYS));
+    setInstructions(DEFAULT_SIGNING_INSTRUCTIONS);
+    const others = await fetchOtherOpenApplications(selectedRow.email, selectedRow.id);
+    setOtherApps(others);
+    setSelectStep(others.length > 0 ? 'notice' : 'confirm');
   };
 
-  /**
-   * The plantilla items each selected applicant can be placed into: the ones
-   * they actually applied to that are still open. A slot already filled by
-   * someone else drops out; slots on the same posting that nobody has taken
-   * stay available.
-   */
-  const loadSlotOptions = async (applicantIds: string[]) => {
-    setLoadingSlotOptions(true);
-    setHireSlotOptions(new Map());
-    setHireSlotChoice({});
-    try {
-      const [linksByApplicant, slotsByJob] = await Promise.all([
-        fetchApplicantSlotLinks(applicantIds),
-        fetchSlotsByJobPosting(),
-      ]);
+  const today = localIsoDate();
+  const canConfirm = Boolean(selectTarget?.slot) && deadline >= today && acknowledged && !reserving;
 
-      const slotById = new Map<string, PlantillaSlot>();
-      slotsByJob.forEach(slots => slots.forEach(slot => slotById.set(slot.id, slot)));
-
-      const options = new Map<string, PlantillaSlot[]>();
-      const preselected: Record<string, string> = {};
-
-      applicantIds.forEach(applicantId => {
-        const available = (linksByApplicant.get(applicantId) ?? [])
-          .map(link => slotById.get(link.slotId))
-          .filter((slot): slot is PlantillaSlot => Boolean(slot) && slot!.status === 'open')
-          .sort((a, b) => a.slotNumber - b.slotNumber);
-
-        if (available.length > 0) {
-          options.set(applicantId, available);
-          // Only one place to put them — no decision to make.
-          if (available.length === 1) preselected[applicantId] = available[0].id;
-        }
-      });
-
-      setHireSlotOptions(options);
-      setHireSlotChoice(preselected);
-    } finally {
-      setLoadingSlotOptions(false);
+  const handleConfirmSelect = async () => {
+    if (!selectTarget || !selectTarget.slot || !canConfirm) return;
+    setReserving(true);
+    setSelectError(null);
+    const result = await reserveSlotForApplicant(selectTarget.slot.id, selectTarget.id, deadline, instructions);
+    setReserving(false);
+    if (!result.ok) {
+      setSelectError(result.error ?? 'The selection could not be saved. Try again.');
+      return;
     }
-  };
-
-  /** Every applicant with a choice to make must have made it. */
-  const slotChoicesComplete = (confirmTarget ?? []).every(row => {
-    const options = hireSlotOptions.get(row.id);
-    return !options || options.length === 0 || Boolean(hireSlotChoice[row.id]);
-  });
-
-  // ── Hiring flow ───────────────────────────────────────────────────────────
-  const handleConfirmHire = async () => {
-    if (!confirmTarget) return;
-    setHiring(true);
-
-    const hiredIds: string[] = [];
-    const newCredentials: CredentialResult[] = [];
-    const newlyHiredRecords: NewlyHired[] = [];
-    const slotPlacementFailures: string[] = [];
-    const hiredAt = new Date().toISOString();
-
-    for (const row of confirmTarget) {
-      let employeeId = '';
-      try {
-        const employeeRow = await hireApplicant(row.id);
-        employeeId = employeeRow?.employee_id || '';
-      } catch (err) {
-        console.error(`Failed to hire applicant ${row.id}:`, err);
-        continue;
-      }
-
-      // Place the hire into the plantilla item they were selected for. This
-      // closes that one slot only — the rest of the posting keeps taking
-      // applications. Reported but not fatal: the employee record is already
-      // created by this point, so failing here must not abort the hire.
-      const chosenSlotId = hireSlotChoice[row.id];
-      const placedSlot = (hireSlotOptions.get(row.id) ?? []).find(slot => slot.id === chosenSlotId);
-      if (chosenSlotId) {
-        const placement = await assignApplicantToSlot(chosenSlotId, row.id);
-        if (!placement.ok) {
-          console.error(`Failed to place ${row.fullName} into plantilla slot ${chosenSlotId}:`, placement.error);
-          slotPlacementFailures.push(`${row.fullName}: ${placement.error ?? 'unknown error'}`);
-        }
-      }
-
-      const tempPassword = createPassword();
-
-      upsertEmployeePortalAccount({
-        id:       `portal-${employeeId}`,
-        username: employeeId,
-        password: tempPassword,
-        mustChangePassword: true,
-        employee: {
-          employeeId,
-          fullName:   row.fullName,
-          email:      row.email,
-          position:   row.position,
-          department: row.department,
-          status:     'Active',
-          hireDate:   new Date().toISOString().split('T')[0],
-        } as any,
-      });
-
-      saveApplicants(
-        getApplicants().map(a => a.id === row.id ? { ...a, status: 'Hired' as any } : a)
-      );
-      hiredIds.push(row.id);
-
-      // Record the hire itself. This is what carries the DATE HIRED — the
-      // applicant's created_at is when they applied, not when they were hired —
-      // so without this row the Office Directory has no basis for the "Newly
-      // Hired" badge, and the Newly Hired page has nothing to list.
-      const [firstName = '', ...restName] = row.fullName.trim().split(/\s+/);
-      newlyHiredRecords.push({
-        id: `nh-${employeeId}`,
-        applicantId: row.id,
-        rankingRank: 0,
-        rankingScore: row.interviewScore ?? row.examScore ?? 0,
-        employeeInfo: {
-          firstName,
-          lastName: restName.join(' '),
-          email: row.email,
-          phone: '',
-          emergencyContact: { name: '', relationship: '', phone: '' },
-          governmentIds: {},
-        },
-        position: row.position,
-        department: row.department,
-        plantillaItemNumber: placedSlot?.itemNumber,
-        plantillaSlotNumber: placedSlot?.slotNumber,
-        employmentType: 'Permanent',
-        dateHired: hiredAt,
-        expectedStartDate: hiredAt,
-        status: 'Pending Onboarding',
-        onboardingProgress: 0,
-        onboardingChecklist: [],
-        documents: [],
-        notes: [],
-        timeline: [],
-        employeeId,
-      } as NewlyHired);
-
-      let emailSent = false;
-      const recipient = row.email.trim();
-      if (recipient) {
-        try {
-          await sendEmail({
-            to:      recipient,
-            subject: 'Your ABYAN HRIS account is ready',
-            body:
-              `Hello ${row.fullName},\n\n` +
-              `Your employee account has been created in the ABYAN HRIS.\n\n` +
-              `Position  : ${row.position || '—'}\n` +
-              `Department: ${row.department || '—'}\n\n` +
-              `Employee ID       : ${employeeId}\n` +
-              `Temporary password: ${tempPassword}\n\n` +
-              `Please log in to the Employee Portal and change your password before accessing any module.\n` +
-              (true ? '' : `\nNote: Your employee record is being finalised. Please contact HR if you experience any access issues.\n`) +
-              `\nIf you did not expect this email, please contact HR immediately.\n`,
-            employeeId,
-            template: 'employee_credentials',
-          });
-          emailSent = true;
-        } catch { /* HR can print credentials instead */ }
-      }
-
-      newCredentials.push({ fullName: row.fullName, employeeId, tempPassword, email: recipient, emailSent, position: row.position, department: row.department });
-    }
-
-    // Persist the hires before dropping them from this list, so the Office
-    // Directory and Newly Hired page pick them up on their next load.
-    if (newlyHiredRecords.length > 0) {
-      try {
-        await saveNewlyHired(newlyHiredRecords);
-      } catch {
-        /* credentials are already issued; the directory falls back to the
-           portal account's creation date if this write didn't land */
-      }
-    }
-
+    saveApplicants(getApplicants().map(a => (a.id === selectTarget.id ? { ...a, status: RESERVED_STATUS as any } : a)));
+    setRows(prev => prev.map(r => (r.id === selectTarget.id ? { ...r, status: RESERVED_STATUS, selectionRevokedAt: null } : r)));
+    setSelectedId(null);
+    closeSelectDialog();
     window.dispatchEvent(new Event('cictrix:applicants-updated'));
-
-    setHiring(false);
-    setConfirmTarget(null);
-    setSelected(new Set());
-    setHireSlotOptions(new Map());
-    setHireSlotChoice({});
-    setRows(prev => prev.filter(r => !hiredIds.includes(r.id)));
-
-    if (slotPlacementFailures.length > 0) {
-      // The hires went through; only the plantilla placement did not. Saying
-      // so plainly beats a silent inconsistency between the two.
-      window.alert(
-        'Hired, but these applicants could not be placed into their plantilla item — set it from the job post:\n\n' +
-        slotPlacementFailures.join('\n'),
-      );
-    }
-
-    if (newCredentials.length > 0) {
-      setCredentialsResult(newCredentials);
-      setShowCredentialsModal(true);
-    }
-  };
-
-  // ── Print credentials ─────────────────────────────────────────────────────
-  const handlePrintCredentials = () => {
-    const win = window.open('', '_blank', 'width=820,height=700');
-    if (!win) return;
-
-    const dateStr = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const cards = credentialsResult.map(c => `
-      <div class="card">
-        <div class="card-header">
-          <span class="org">ABYAN HRIS &mdash; Iloilo City Government</span>
-          <span class="label">EMPLOYEE CREDENTIALS</span>
-        </div>
-        <div class="card-body">
-          <div class="name">${c.fullName}</div>
-          <div class="role">${c.position || '&mdash;'} &nbsp;&bull;&nbsp; ${c.department || '&mdash;'}</div>
-          <div class="cred-row">
-            <div class="cred-box">
-              <div class="cred-label">Employee ID</div>
-              <div class="cred-value">${c.employeeId}</div>
-            </div>
-            <div class="cred-box">
-              <div class="cred-label">Temporary Password</div>
-              <div class="cred-value">${c.tempPassword}</div>
-            </div>
-          </div>
-          <div class="note">Log in to the Employee Portal and change your password immediately upon first access. Keep this document confidential.</div>
-        </div>
-        <div class="card-footer">Issued ${dateStr}</div>
-      </div>`).join('');
-
-    win.document.head.innerHTML = `
-      <title>Employee Credentials</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; background: #fff; padding: 24px; color: #000; }
-        h1 { font-size: 13pt; text-align: center; margin-bottom: 4px; }
-        .page-sub { font-size: 9pt; text-align: center; color: #555; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-        .card { border: 2px solid #000; border-radius: 6px; overflow: hidden; break-inside: avoid; }
-        .card-header { background: #040E6B; color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
-        .org { font-size: 8pt; opacity: 0.85; }
-        .label { font-size: 8pt; font-weight: 700; letter-spacing: 0.05em; }
-        .card-body { padding: 14px; }
-        .name { font-size: 14pt; font-weight: 700; margin-bottom: 2px; }
-        .role { font-size: 9pt; color: #444; margin-bottom: 12px; }
-        .cred-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .cred-box { border: 1px solid #ccc; border-radius: 4px; padding: 8px 10px; }
-        .cred-label { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
-        .cred-value { font-family: 'Courier New', monospace; font-size: 13pt; font-weight: 700; letter-spacing: 0.08em; color: #040E6B; }
-        .note { font-size: 7.5pt; color: #777; border-top: 1px dashed #ccc; padding-top: 7px; line-height: 1.4; }
-        .card-footer { background: #f4f4f4; padding: 5px 14px; font-size: 8pt; color: #555; text-align: right; border-top: 1px solid #ddd; }
-        @media print { body { padding: 12px; } .grid { grid-template-columns: repeat(2, 1fr); } }
-      </style>`;
-
-    win.document.body.innerHTML = `
-      <h1>Employee Onboarding Credentials</h1>
-      <p class="page-sub">Office of the City Human Resource Management Officer &mdash; Iloilo City Government &mdash; ${dateStr}</p>
-      <div class="grid">${cards}</div>`;
-
-    win.focus();
-    win.print();
   };
 
   // ── Shell layout ──────────────────────────────────────────────────────────
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="rsp-ds min-h-screen bg-[#f8f9fa]">
+    <div className="rsp-ds min-h-screen bg-[var(--bg-page)]">
       <AdminHeader userName="RSP Admin" divisionLabel="RSP Division" />
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
           <div className="border-b border-slate-200 bg-white px-8 py-6">
             <h1 className="!mb-1 !text-2xl font-bold">For Hiring</h1>
-            <p className="!mb-0 text-base text-slate-500">Applicants ranked and ready for the final hiring decision</p>
+            <p className="!mb-0 text-base text-slate-500">Select one applicant per plantilla. Their credentials are generated after they sign.</p>
           </div>
           <ApplicantsTabBar />
           {children}
@@ -773,12 +566,12 @@ export const ForHiringPage = () => {
                 ) : departmentList.map(({ dept, positionCount, applicantCount }) => (
                   <tr
                     key={dept}
-                    onClick={() => { setSelectedDept(dept); setSelected(new Set()); }}
+                    onClick={() => { setSelectedDept(dept); setSelectedId(null); }}
                     className="border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-blue-50/40 group"
                   >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="shrink-0 rounded-xl bg-[#363EE8]/10 p-2 text-[#363EE8]">
+                        <div className="shrink-0 rounded-xl bg-[var(--color-primary-50)] p-2 text-[var(--color-primary)]">
                           <Building2 className="h-5 w-5" />
                         </div>
                         <span className="text-sm font-semibold text-slate-900">{dept}</span>
@@ -788,12 +581,12 @@ export const ForHiringPage = () => {
                       {positionCount} {positionCount === 1 ? 'position' : 'positions'}
                     </td>
                     <td className="px-5 py-4 text-center">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#363EE8]/10 px-2.5 py-0.5 text-xs font-semibold text-[#363EE8]">
+                      <span className="badge badge-tint">
                         <Users className="h-3 w-3" />
                         {applicantCount} {applicantCount === 1 ? 'applicant' : 'applicants'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-slate-400 group-hover:text-[#363EE8] transition-colors">
+                    <td className="px-5 py-4 text-slate-400 group-hover:text-[var(--color-primary)] transition-colors">
                       <ChevronRight className="h-4 w-4" />
                     </td>
                   </tr>
@@ -804,13 +597,10 @@ export const ForHiringPage = () => {
         )}
       </div>
 
-      {/* Dialogs are rendered even in dept list view so state is preserved */}
-      {renderConfirmDialog()}
-      {renderCredentialsModal()}
     </Shell>
   );
 
-  // ── VIEW 2 — Position folder table for the selected department ────────────
+  // ── VIEW 2 — Plantilla folders for the selected department ────────────────
   if (!selectedPosition) return (
     <Shell>
       <div className="p-6">
@@ -832,31 +622,41 @@ export const ForHiringPage = () => {
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Applicants</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Hiring</th>
                   <th className="w-10 px-5 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {positionList.map(({ position, applicantCount }) => (
+                {positionList.map(({ position, applicantCount, reservedFor }) => (
                   <tr
                     key={position}
-                    onClick={() => { setSelectedPosition(position); setSelected(new Set()); }}
+                    onClick={() => { setSelectedPosition(position); setSelectedId(null); }}
                     className="border-b border-slate-100 last:border-0 cursor-pointer transition-colors hover:bg-blue-50/40 group"
                   >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="shrink-0 rounded-xl bg-[#363EE8]/10 p-2 text-[#363EE8]">
+                        <div className="shrink-0 rounded-xl bg-[var(--color-primary-50)] p-2 text-[var(--color-primary)]">
                           <Briefcase className="h-5 w-5" />
                         </div>
                         <span className="text-sm font-semibold text-slate-900">{position}</span>
                       </div>
                     </td>
                     <td className="px-5 py-4 text-center">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#363EE8]/10 px-2.5 py-0.5 text-xs font-semibold text-[#363EE8]">
-                        <Users className="h-3 w-3" />
+                      <span className="badge badge-tint">
                         {applicantCount} {applicantCount === 1 ? 'applicant' : 'applicants'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-slate-400 group-hover:text-[#363EE8] transition-colors">
+                    <td className="px-5 py-4">
+                      {/* §10 application status: For Interview / pending = Warning, open = Info */}
+                      {reservedFor ? (
+                        <span className="badge badge-warning" title={`Reserved for ${reservedFor.fullName}`}>
+                          <span className="badge-dot" aria-hidden="true" />Reserved
+                        </span>
+                      ) : (
+                        <span className="badge badge-info"><span className="badge-dot" aria-hidden="true" />Open</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-slate-400 group-hover:text-[var(--color-primary)] transition-colors">
                       <ChevronRight className="h-4 w-4" />
                     </td>
                   </tr>
@@ -866,13 +666,10 @@ export const ForHiringPage = () => {
           </div>
         )}
       </div>
-
-      {renderConfirmDialog()}
-      {renderCredentialsModal()}
     </Shell>
   );
 
-  // ── VIEW 3 — Ranked applicant list for the selected position ──────────────
+  // ── VIEW 3 — Ranked applicants for one plantilla ──────────────────────────
   return (
     <Shell>
       <div className="p-6">
@@ -882,19 +679,35 @@ export const ForHiringPage = () => {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{selectedDept}</p>
             <h1 className="text-xl font-bold text-slate-900">{selectedPosition}</h1>
             <p className="text-sm text-slate-500">
-              {deptApplicants.length} qualified applicant{deptApplicants.length !== 1 ? 's' : ''} — ranked by interview score
+              {deptApplicants.length} qualified applicant{deptApplicants.length !== 1 ? 's' : ''}, ranked by interview score. One is hired.
             </p>
           </div>
           <button
             type="button"
-            disabled={selected.size === 0}
-            onClick={handleCreateClick}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#363EE8] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={!selectedRow || Boolean(reservedRow)}
+            onClick={() => { void handleSelectClick(); }}
+            className="btn btn-md btn-primary"
           >
-            <UserCheck className="h-4 w-4" />
-            Generate Employee Account{selected.size > 1 ? `s (${selected.size})` : ''}
+            <UserCheck className="h-4 w-4" aria-hidden="true" />
+            Select for Hiring
           </button>
         </div>
+
+        {/* §9.9 warning alert: only one applicant can hold the plantilla. */}
+        {reservedRow && (
+          <div role="status" className="mb-4 flex items-start gap-3 rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-4">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--warning-700)]" aria-hidden="true" />
+            <div className="text-sm text-[var(--neutral-800)]">
+              <p className="font-semibold text-[var(--color-primary-900)]">
+                Reserved for {reservedRow.fullName} until {formatDisplayDate(reservedRow.slot?.signingDeadline)}
+              </p>
+              <p>
+                Only one applicant can be selected for this plantilla. Generate their credentials once they sign, or mark them
+                "Did not report" on the Generate Employee Credentials tab to select someone else.
+              </p>
+            </div>
+          </div>
+        )}
 
         {deptApplicants.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-slate-400">
@@ -907,17 +720,9 @@ export const ForHiringPage = () => {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="w-12 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Rank</th>
-                  <th className="w-10 px-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selected.size === deptApplicants.length && deptApplicants.length > 0}
-                      onChange={toggleAll}
-                      className="h-4 w-4 accent-[#363EE8]"
-                      title="Select all"
-                    />
-                  </th>
+                  <th className="w-10 px-3 py-3"><span className="sr-only">Select</span></th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Applicant Name</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Interview Score</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Exam Score</th>
                 </tr>
@@ -931,10 +736,16 @@ export const ForHiringPage = () => {
                     rank === 2 ? 'bg-slate-300 text-slate-800'    :
                     rank === 3 ? 'bg-amber-500 text-amber-900'    :
                                  'bg-slate-100 text-slate-600';
+                  const reserved = isReserved(row.status);
+                  const blockedReason = !row.slot
+                    ? 'This application is not linked to a plantilla. Link it from the job post first.'
+                    : reservedRow
+                      ? `Plantilla reserved for ${reservedRow.fullName}.`
+                      : undefined;
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${selected.has(row.id) ? 'bg-blue-50/60' : ''}`}
+                      className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${selectedId === row.id ? 'bg-[var(--color-primary-50)]' : ''} ${reservedRow && !reserved ? 'opacity-60' : ''}`}
                     >
                       <td className="px-4 py-4 text-center">
                         <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalBg}`}>
@@ -943,24 +754,39 @@ export const ForHiringPage = () => {
                       </td>
                       <td className="px-3 py-4 text-center">
                         <input
-                          type="checkbox"
-                          checked={selected.has(row.id)}
-                          onChange={() => toggleRow(row.id)}
-                          className="h-4 w-4 accent-[#363EE8]"
+                          type="radio"
+                          name="for-hiring-select"
+                          aria-label={`Select ${row.fullName}`}
+                          checked={selectedId === row.id}
+                          disabled={Boolean(blockedReason)}
+                          title={blockedReason}
+                          onChange={() => setSelectedId(row.id)}
+                          className="h-4 w-4 accent-[var(--color-primary)] disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-5 py-4">
                         <p className="text-sm font-semibold text-slate-900">{row.fullName}</p>
                         <p className="text-xs text-slate-400">{row.email}</p>
+                        {row.selectionRevokedAt && !reserved && (
+                          <p className="mt-0.5 text-xs text-[var(--neutral-600)]">
+                            Selection revoked {formatDisplayDate(row.selectionRevokedAt)}: did not report
+                          </p>
+                        )}
                       </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{row.position || '—'}</td>
+                      <td className="px-5 py-4">
+                        {reserved ? (
+                          <span className="badge badge-warning"><span className="badge-dot" aria-hidden="true" />Awaiting signing</span>
+                        ) : (
+                          <span className="badge badge-success"><span className="badge-dot" aria-hidden="true" />Qualified</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4 text-center">
-                        <span className={`text-sm font-bold ${row.interviewScore != null ? 'text-[#040E6B]' : 'text-slate-300'}`}>
+                        <span className={`text-sm font-bold ${row.interviewScore != null ? 'text-[var(--color-primary-900)]' : 'text-slate-300'}`}>
                           {fmtScore(row.interviewScore)}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className={`text-sm font-bold ${row.examScore != null ? 'text-[#040E6B]' : 'text-slate-300'}`}>
+                        <span className={`text-sm font-bold ${row.examScore != null ? 'text-[var(--color-primary-900)]' : 'text-slate-300'}`}>
                           {fmtScore(row.examScore)}
                         </span>
                       </td>
@@ -973,191 +799,131 @@ export const ForHiringPage = () => {
         )}
       </div>
 
-      {renderConfirmDialog()}
-      {renderCredentialsModal()}
+      {renderSelectDialog()}
     </Shell>
   );
 
-  // ── Extracted dialog renderers (used in both views) ───────────────────────
-  function renderConfirmDialog() {
-    if (!confirmTarget) return null;
+  // ── Select for Hiring dialog: notice → confirm ────────────────────────────
+  function renderSelectDialog() {
+    if (!selectTarget) return null;
+    const plantilla = selectTarget.slot ? plantillaLabel(selectTarget.slot) : '';
+    const deadlineText = deadline ? formatDisplayDate(deadline) : '[date]';
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#363EE8]/10">
-            <UserCheck className="h-6 w-6 text-[#363EE8]" />
-          </div>
-          <h2 className="mb-2 text-lg font-bold text-slate-900">
-            {confirmTarget.length === 1
-              ? 'Are you sure you want to hire this applicant?'
-              : 'Are you sure you want to hire these applicants?'}
-          </h2>
-
-          <p className="mb-3 text-sm text-slate-600">
-            This will generate their employee account and move them into the Office Directory.
-          </p>
-
-          <ul className="mb-3 max-h-64 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-            {confirmTarget.map(r => {
-              const options = hireSlotOptions.get(r.id) ?? [];
-              return (
-                <li key={r.id} className="px-3 py-2.5">
-                  <p className="text-sm font-semibold text-slate-800">{r.fullName}</p>
-                  <p className="text-xs text-slate-500">{r.position || '—'} — {r.department || '—'}</p>
-
-                  {/* Which plantilla item this hire fills. Only a real question
-                      when they applied to more than one that is still open. */}
-                  {options.length > 1 && (
-                    <div className="mt-2">
-                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        Plantilla item to fill <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-                        value={hireSlotChoice[r.id] ?? ''}
-                        onChange={(event) =>
-                          setHireSlotChoice(prev => ({ ...prev, [r.id]: event.target.value }))
-                        }
-                      >
-                        <option value="">Select a plantilla…</option>
-                        {options.map(slot => (
-                          <option key={slot.id} value={slot.id}>
-                            {plantillaLabel(slot)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {options.length === 1 && (
-                    <p className="mt-1.5 text-xs text-slate-600">
-                      Fills <span className="font-semibold">Plantilla {options[0].slotNumber}</span>{' '}
-                      ({options[0].itemNumber})
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-          {loadingSlotOptions && (
-            <p className="mb-3 text-xs text-slate-500">Loading plantilla items…</p>
-          )}
-          {!loadingSlotOptions && !slotChoicesComplete && (
-            <p className="mb-3 text-xs font-medium text-rose-600">
-              Select which plantilla item each hire fills before continuing.
-            </p>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="select-dialog-title"
+      >
+        <div className="max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-3)]">
+          {selectStep === 'loading' && (
+            <p className="text-sm text-[var(--neutral-600)]" aria-busy="true">Checking the applicant's other applications…</p>
           )}
 
-          <div className="mt-5 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => { setConfirmTarget(null); setHireSlotOptions(new Map()); setHireSlotChoice({}); }}
-              disabled={hiring}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmHire}
-              disabled={hiring || loadingSlotOptions || !slotChoicesComplete}
-              className="rounded-xl bg-[#363EE8] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {hiring ? 'Hiring…' : 'Yes, hire'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function renderCredentialsModal() {
-    if (!showCredentialsModal) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-        <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-200">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-slate-900">Employee Records Created</h2>
-              <p className="text-sm text-slate-500">
-                {credentialsResult.length} employee account{credentialsResult.length > 1 ? 's' : ''} generated. Credentials sent to each employee's email where available.
+          {selectStep === 'notice' && (
+            <>
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--warning-100)] text-[var(--warning-500)]">
+                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <h2 id="select-dialog-title" className="mb-1 text-base font-semibold text-[var(--color-primary-900)]">
+                {selectTarget.fullName} applied to other positions
+              </h2>
+              <p className="mb-3 text-sm text-[var(--neutral-600)]">
+                They have {otherApps.length} other open application{otherApps.length === 1 ? '' : 's'}:
               </p>
-            </div>
-          </div>
-
-          <div className="overflow-auto flex-1 px-6 py-4">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Name</th>
-                  <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position / Dept.</th>
-                  <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Employee ID</th>
-                  <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Temporary Password</th>
-                  <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Email Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {credentialsResult.map((c, i) => (
-                  <tr key={i}>
-                    <td className="py-3 pr-4">
-                      <p className="font-semibold text-slate-900">{c.fullName}</p>
-                      <p className="text-xs text-slate-400">{c.email || '—'}</p>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <p className="text-sm text-slate-700">{c.position || '—'}</p>
-                      <p className="text-xs text-slate-400">{c.department || '—'}</p>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="font-mono font-semibold text-[#040E6B]">{c.employeeId}</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="font-mono text-slate-800">{c.tempPassword}</span>
-                    </td>
-                    <td className="py-3">
-                      {c.email ? (
-                        c.emailSent ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                            <CheckCircle className="h-3 w-3" /> Sent
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-                            <XCircle className="h-3 w-3" /> Not sent
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-xs text-slate-400">No email</span>
-                      )}
-                    </td>
-                  </tr>
+              <ul className="divide-y divide-[var(--neutral-200)] rounded-xl border border-[var(--neutral-200)] text-sm">
+                {otherApps.map(app => (
+                  <li key={app.id} className="px-3 py-2.5">
+                    <p className="font-semibold text-[var(--color-primary-900)]">{app.position}</p>
+                    <p className="text-xs text-[var(--neutral-600)]">{[app.office, app.plantilla].filter(Boolean).join(' · ')}</p>
+                    <span className="badge badge-neutral mt-1">{app.status || 'Submitted'}</span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-            <p className="mt-4 text-xs text-slate-400">
-              Employees must change their temporary password upon first login. Keep this document confidential.
-            </p>
-          </div>
+              </ul>
+              <p className="mt-3 text-sm text-[var(--neutral-800)]">
+                Continue selecting them for <b>{selectTarget.position}{plantilla ? ` · ${plantilla}` : ''}</b>? Their other
+                applications close once their credentials are generated.
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button type="button" className="btn btn-md btn-secondary" onClick={closeSelectDialog}>Cancel</button>
+                <button type="button" className="btn btn-md btn-primary" onClick={() => setSelectStep('confirm')}>Continue</button>
+              </div>
+            </>
+          )}
 
-          <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
-            <button
-              type="button"
-              onClick={handlePrintCredentials}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-            >
-              <Printer className="h-4 w-4" />
-              Print Credentials
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCredentialsModal(false)}
-              className="rounded-xl bg-[#363EE8] px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
-            >
-              Done
-            </button>
-          </div>
+          {selectStep === 'confirm' && (
+            <>
+              <h2 id="select-dialog-title" className="mb-1 text-base font-semibold text-[var(--color-primary-900)]">
+                Select {selectTarget.fullName} for {selectTarget.position}?
+              </h2>
+              <p className="mb-3 text-sm text-[var(--neutral-600)]">{plantilla || 'No plantilla linked'} · {selectTarget.department}</p>
+
+              <div className="rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-3 text-sm text-[var(--neutral-800)]">
+                <b>This updates the applicant's status and cannot be undone</b>, unless the applicant does not secure the
+                slot by the date below.
+              </div>
+
+              <label htmlFor="signing-deadline" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
+                Report to the office on or before <span className="text-[var(--error-500)]">*</span>
+              </label>
+              <input
+                id="signing-deadline"
+                type="date"
+                min={today}
+                value={deadline}
+                onChange={(event) => setDeadline(event.target.value)}
+                className="h-10 w-full rounded-lg border border-[var(--neutral-200)] px-3 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
+              />
+
+              <label htmlFor="signing-instructions" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
+                Instructions to the applicant
+              </label>
+              <textarea
+                id="signing-instructions"
+                rows={4}
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+                aria-describedby="signing-instructions-help"
+                className="w-full rounded-lg border border-[var(--neutral-200)] px-3 py-2 text-sm leading-relaxed focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
+              />
+              <p id="signing-instructions-help" className="mt-1 text-xs text-[var(--neutral-600)]">
+                Shown on their status tracker as a congratulatory notice, always followed by: "{signingForfeitWarning(deadlineText)}"
+              </p>
+
+              <label className="mt-4 flex items-start gap-2 text-sm text-[var(--neutral-800)]">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(event) => setAcknowledged(event.target.checked)}
+                  className="mt-0.5 h-[18px] w-[18px] accent-[var(--color-primary)]"
+                />
+                I understand this cannot be revoked unless the applicant does not secure the slot.
+              </label>
+
+              {!selectTarget.slot && (
+                <p className="mt-3 text-xs font-medium text-[var(--error-700)]">
+                  This application is not linked to a plantilla, so it cannot be reserved. Link it from the job post first.
+                </p>
+              )}
+              {selectError && (
+                <p role="alert" className="mt-3 text-sm font-medium text-[var(--error-700)]">{selectError}</p>
+              )}
+
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="btn btn-md btn-secondary"
+                  disabled={reserving}
+                  onClick={() => (otherApps.length > 0 ? setSelectStep('notice') : closeSelectDialog())}
+                >
+                  {otherApps.length > 0 ? 'Back' : 'Cancel'}
+                </button>
+                <button type="button" className="btn btn-md btn-primary" disabled={!canConfirm} onClick={() => { void handleConfirmSelect(); }}>
+                  {reserving ? 'Saving…' : 'Confirm Selection'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

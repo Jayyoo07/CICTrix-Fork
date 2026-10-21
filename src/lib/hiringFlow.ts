@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { hireApplicant } from './api/employeesApi';
 import { getApplicants, saveApplicants, saveNewlyHired } from './recruitmentData';
-import { assignApplicantToSlot, fetchSlotsByJobPosting } from './plantillaSlots';
+import { assignApplicantToSlot, fetchApplicantSlotLinks, fetchSlotsByJobPosting } from './plantillaSlots';
 import { plantillaLabel, normalizeApplicantEmail } from './plantillaRules';
 import { createPassword, upsertEmployeePortalAccount } from './employeePortalData';
 import { sendEmail } from './email';
@@ -20,6 +20,23 @@ import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
 const client = supabase as any;
 
 export const RESERVED_STATUS = 'For Contract Signing';
+
+/** Default time an applicant gets to report for contract signing. */
+export const SIGNING_WINDOW_DAYS = 7;
+
+export const DEFAULT_SIGNING_INSTRUCTIONS =
+  'Please report to the Office of the City Human Resource Management Officer (CHRMO), Iloilo City Hall, '
+  + 'Monday to Friday, 8:00 AM–5:00 PM, for contract signing and verification of your documents. '
+  + 'Bring a valid government-issued ID and the original copies of the documents you submitted.';
+
+/** §9.5 date format: "Oct 28, 2026". Takes YYYY-MM-DD or an ISO timestamp. */
+export const formatDisplayDate = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+};
 
 const fullNameOf = (row: any): string =>
   [row?.first_name, row?.middle_name, row?.last_name].filter(Boolean).join(' ').trim()
@@ -83,6 +100,40 @@ export const fetchOtherOpenApplications = async (
     console.warn('[hiringFlow] other applications lookup failed:', err);
     return [];
   }
+};
+
+// ─── For Hiring: which plantilla each application is for ───────────────────
+
+export interface HiringContext {
+  /** The plantilla each application is for, by applicant id. */
+  slotByApplicant: Map<string, PlantillaSlot>;
+  /** When RSP last revoked this applicant's selection ("did not report"). */
+  revokedAt: Map<string, string>;
+}
+
+export const fetchHiringContext = async (applicantIds: string[]): Promise<HiringContext> => {
+  const slotByApplicant = new Map<string, PlantillaSlot>();
+  const revokedAt = new Map<string, string>();
+  if (applicantIds.length === 0) return { slotByApplicant, revokedAt };
+  try {
+    const [slots, links, { data }] = await Promise.all([
+      slotIndex(),
+      fetchApplicantSlotLinks(applicantIds),
+      client.from('applicants').select('id, plantilla_slot_id, selection_revoked_at').in('id', applicantIds),
+    ]);
+    (data ?? []).forEach((row: any) => {
+      const id = String(row.id);
+      if (row.selection_revoked_at) revokedAt.set(id, String(row.selection_revoked_at));
+      const own = row.plantilla_slot_id ? slots.get(String(row.plantilla_slot_id)) : undefined;
+      // Older applications only have the link table.
+      const linked = (links.get(id) ?? []).map((link) => slots.get(link.slotId)).find(Boolean);
+      const slot = own ?? linked;
+      if (slot) slotByApplicant.set(id, slot);
+    });
+  } catch (err) {
+    console.warn('[hiringFlow] hiring context lookup failed:', err);
+  }
+  return { slotByApplicant, revokedAt };
 };
 
 // ─── Reserved: waiting for contract signing ────────────────────────────────
@@ -374,7 +425,7 @@ export const printCredentialCards = (results: CredentialResult[]): void => {
   const win = window.open('', '_blank', 'width=820,height=700');
   if (!win) return;
 
-  const issued = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+  const issued = formatDisplayDate(new Date().toISOString());
   const cards = results.map((c) => `
     <div class="card">
       <div class="card-name">${escapeHtml(c.fullName)}</div>

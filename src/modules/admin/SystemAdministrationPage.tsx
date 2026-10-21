@@ -1,5 +1,5 @@
 import { useBackClosesView } from '../../hooks/useHistoryBack';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getAdminEmail } from '../../lib/adminSession';
 import { AlertCircle, Archive, Building2, CalendarClock, Check, CheckCircle2, ChevronDown, ClipboardList, Copy, History, Lock, Search, ShieldCheck, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { getAllEmployees, type Employee } from '../../lib/api/employees';
@@ -49,6 +49,7 @@ import {
   type OfficeRole,
   type OfficeRoleAssignment,
   type PendingSubmission,
+  OFFICE_HEAD_POSITIONS,
   ROLE_LABELS,
   createAssignment,
   getPendingSubmissions,
@@ -538,9 +539,9 @@ const AccessRoleManagement = () => {
           Assign or remove office roles. Removing preserves history and can transfer the role plus reroute
           pending submissions to a successor.
         </p>
-        <button type="button" onClick={() => setShowAdd(true)} style={primaryBtn}>
+        <button type="button" onClick={() => setShowAdd(true)} style={{ ...primaryBtn, borderRadius: '999px' }}>
           <UserPlus size={15} />
-          Add Personnel
+          Appoint Department Head
         </button>
       </div>
 
@@ -662,215 +663,1018 @@ const AccessRoleManagement = () => {
   );
 };
 
-// ── Add Personnel modal ──────────────────────────────────────────────────────
-const AddPersonnelModal = ({
-  departments,
+// ── Appoint Department Head Modal & Helpers ─────────────────────────────────
+const getPersonInitials = (name: string): string => {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const getAvatarColor = (name: string): string => {
+  const colors = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2', '#4f46e5'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+export interface SearchableEmployeeComboboxProps {
+  employees: EmployeeOption[];
+  selectedEmployee: EmployeeOption | null;
+  selectedOfficeName?: string;
+  onSelect: (emp: EmployeeOption | null) => void;
+  disabled?: boolean;
+}
+
+export const SearchableEmployeeCombobox: React.FC<SearchableEmployeeComboboxProps> = ({
   employees,
-  assignments,
-  onOpenTransfer,
-  onClose,
-  onDone,
-}: {
+  selectedEmployee,
+  selectedOfficeName,
+  onSelect,
+  disabled,
+}) => {
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const cleanQuery = query.trim().toLowerCase();
+
+  const filtered = useMemo(() => {
+    if (!cleanQuery) return employees;
+    return employees.filter((e) => {
+      const name = e.full_name?.toLowerCase() || '';
+      const pos = e.position?.toLowerCase() || '';
+      const dept = e.department?.toLowerCase() || '';
+      return name.includes(cleanQuery) || pos.includes(cleanQuery) || dept.includes(cleanQuery);
+    });
+  }, [employees, cleanQuery]);
+
+  const { officeStaff, otherStaff } = useMemo(() => {
+    if (!selectedOfficeName) {
+      return { officeStaff: [], otherStaff: filtered };
+    }
+    const normOffice = selectedOfficeName.trim().toLowerCase();
+    const officeList: EmployeeOption[] = [];
+    const otherList: EmployeeOption[] = [];
+    for (const emp of filtered) {
+      if (emp.department && emp.department.trim().toLowerCase() === normOffice) {
+        officeList.push(emp);
+      } else {
+        otherList.push(emp);
+      }
+    }
+    return { officeStaff: officeList, otherStaff: otherList };
+  }, [filtered, selectedOfficeName]);
+
+  const flattened = useMemo(() => {
+    if (selectedOfficeName && officeStaff.length > 0) {
+      return [...officeStaff, ...otherStaff];
+    }
+    return filtered;
+  }, [selectedOfficeName, officeStaff, otherStaff, filtered]);
+
+  useEffect(() => {
+    const handleClickOutside = (ev: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(ev.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+        setIsOpen(true);
+        return;
+      }
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev < flattened.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : Math.max(0, flattened.length - 1)));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (flattened[highlightedIndex]) {
+        onSelect(flattened[highlightedIndex]);
+        setIsOpen(false);
+        setQuery('');
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+    }
+  };
+
+  if (selectedEmployee) {
+    return (
+      <div
+        data-testid="selected-employee-chip"
+        style={{
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          background: '#ffffff',
+        }}
+      >
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: getAvatarColor(selectedEmployee.full_name),
+            color: '#ffffff',
+            fontWeight: 700,
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {getPersonInitials(selectedEmployee.full_name)}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#040E6B' }}>
+            {selectedEmployee.full_name}
+          </div>
+          <div style={{ fontSize: '11px', color: '#515F69', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {[selectedEmployee.position, selectedEmployee.department].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            onSelect(null);
+            setQuery('');
+            setIsOpen(true);
+            setTimeout(() => inputRef.current?.focus(), 0);
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '4px 8px',
+            fontSize: '12px',
+            color: '#363ee8',
+            fontWeight: 600,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            borderRadius: '4px',
+          }}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          border: isOpen ? '1.5px solid #363EE8' : '1px solid #cbd5e1',
+          boxShadow: isOpen ? '0 0 0 3px rgba(54, 62, 232, 0.12)' : 'none',
+          borderRadius: '8px',
+          background: '#ffffff',
+          padding: '0 10px',
+          height: '40px',
+        }}
+      >
+        <Search size={16} style={{ color: '#64748b', marginRight: '8px', flexShrink: 0 }} />
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-autocomplete="list"
+          aria-controls="employee-combobox-list"
+          aria-label="Search employee"
+          placeholder="Search employee by name, position, or department…"
+          value={query}
+          disabled={disabled}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+            setHighlightedIndex(0);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          style={{
+            flex: 1,
+            border: 'none',
+            outline: 'none',
+            fontSize: '13px',
+            color: '#1e293b',
+            background: 'transparent',
+          }}
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setQuery('');
+              setHighlightedIndex(0);
+              inputRef.current?.focus();
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '2px',
+              color: '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div
+          id="employee-combobox-list"
+          role="listbox"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            right: 0,
+            maxHeight: '240px',
+            overflowY: 'auto',
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: '8px',
+            boxShadow: '0 8px 20px rgba(0, 0, 0, 0.12)',
+            zIndex: 50,
+          }}
+        >
+          {flattened.length === 0 ? (
+            <div style={{ padding: '12px 14px', fontSize: '13px', color: '#64748b', textAlign: 'center' }}>
+              No employees found matching &quot;{query}&quot;
+            </div>
+          ) : (
+            <>
+              {selectedOfficeName && officeStaff.length > 0 && (
+                <div>
+                  <div
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f1f5f9',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#475569',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    Staff in {selectedOfficeName} ({officeStaff.length})
+                  </div>
+                  {officeStaff.map((emp) => {
+                    const idx = flattened.indexOf(emp);
+                    const isHighlighted = idx === highlightedIndex;
+                    return (
+                      <div
+                        key={emp.id}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        onClick={() => {
+                          onSelect(emp);
+                          setIsOpen(false);
+                          setQuery('');
+                        }}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        style={{
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          background: isHighlighted ? '#eef2ff' : '#ffffff',
+                          borderBottom: '1px solid #f1f5f9',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '50%',
+                            background: getAvatarColor(emp.full_name),
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {getPersonInitials(emp.full_name)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#040E6B' }}>
+                            {emp.full_name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#515F69', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[emp.position, emp.department].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedOfficeName && officeStaff.length > 0 && otherStaff.length > 0 && (
+                <div>
+                  <div
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f1f5f9',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#475569',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      borderTop: '1px solid #e2e8f0',
+                    }}
+                  >
+                    Other Staff ({otherStaff.length})
+                  </div>
+                  {otherStaff.map((emp) => {
+                    const idx = flattened.indexOf(emp);
+                    const isHighlighted = idx === highlightedIndex;
+                    return (
+                      <div
+                        key={emp.id}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        onClick={() => {
+                          onSelect(emp);
+                          setIsOpen(false);
+                          setQuery('');
+                        }}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        style={{
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          background: isHighlighted ? '#eef2ff' : '#ffffff',
+                          borderBottom: '1px solid #f1f5f9',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '50%',
+                            background: getAvatarColor(emp.full_name),
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {getPersonInitials(emp.full_name)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#040E6B' }}>
+                            {emp.full_name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#515F69', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[emp.position, emp.department].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {(!selectedOfficeName || officeStaff.length === 0) && (
+                <div>
+                  {flattened.map((emp, idx) => {
+                    const isHighlighted = idx === highlightedIndex;
+                    return (
+                      <div
+                        key={emp.id}
+                        role="option"
+                        aria-selected={isHighlighted}
+                        onClick={() => {
+                          onSelect(emp);
+                          setIsOpen(false);
+                          setQuery('');
+                        }}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        style={{
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          background: isHighlighted ? '#eef2ff' : '#ffffff',
+                          borderBottom: '1px solid #f1f5f9',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '50%',
+                            background: getAvatarColor(emp.full_name),
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {getPersonInitials(emp.full_name)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#040E6B' }}>
+                            {emp.full_name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#515F69', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[emp.position, emp.department].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          <div
+            style={{
+              padding: '6px 12px',
+              background: '#fafafa',
+              borderTop: '1px solid #e2e8f0',
+              fontSize: '11px',
+              color: '#64748b',
+            }}
+          >
+            Use Arrow Up/Down to navigate, Enter to select, Esc to close
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Option B Stacked Confirmation Dialog ────────────────────────────────────
+export interface AppointmentConfirmDialogProps {
+  open: boolean;
+  employeeName: string;
+  officeName: string;
+  mappedTitle: string;
+  saving: boolean;
+  onBack: () => void;
+  onConfirm: () => void;
+}
+
+export const AppointmentConfirmDialog: React.FC<AppointmentConfirmDialogProps> = ({
+  open,
+  employeeName,
+  officeName,
+  mappedTitle,
+  saving,
+  onBack,
+  onConfirm,
+}) => {
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm Department Head Appointment"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(4, 14, 107, 0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 60,
+        padding: '16px',
+      }}
+      onClick={onBack}
+    >
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          padding: '24px',
+          maxWidth: '480px',
+          width: '100%',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: '#e0e7ff',
+              color: '#363ee8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Check size={20} strokeWidth={2.5} style={{ color: '#363ee8' }} />
+          </div>
+          <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#040E6B' }}>
+            Confirm Department Head Appointment
+          </h3>
+        </div>
+
+        <p data-testid="confirm-prompt" style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5, marginBottom: '16px' }}>
+          Appoint <strong>{employeeName}</strong> as the Department Head of <strong>{officeName}</strong>?
+        </p>
+
+        <div
+          style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            fontSize: '12px',
+            color: '#475569',
+            marginBottom: '18px',
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ marginBottom: '4px' }}>
+            • Official title updated to <strong>{mappedTitle}</strong>
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            • Promotion recorded in <code style={{ fontSize: '11px', background: '#e2e8f0', padding: '1px 4px', borderRadius: '3px' }}>position_history</code>
+          </div>
+          <div>
+            • Immediate portal access granted via current account switcher
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={saving}
+            style={{
+              padding: '8px 20px',
+              border: '1.5px solid #cbd5e1',
+              background: '#ffffff',
+              borderRadius: '999px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#475569',
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            style={{
+              padding: '8px 22px',
+              background: 'linear-gradient(180deg, #363EE8, #191FA8)',
+              border: 'none',
+              borderRadius: '999px',
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#ffffff',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 4px rgba(4, 14, 107, 0.15)',
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            {saving ? 'Confirming…' : 'Confirm Appointment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Appoint Department Head Modal ────────────────────────────────────────────
+export interface AppointDepartmentHeadModalProps {
   departments: Department[];
   employees: EmployeeOption[];
   assignments: OfficeRoleAssignment[];
   onOpenTransfer: (assignment: OfficeRoleAssignment) => void;
   onClose: () => void;
   onDone: (msg: string) => void;
-}) => {
-  const [employeeId, setEmployeeId] = useState('');
+}
+
+export const AppointDepartmentHeadModal = ({
+  departments,
+  employees,
+  assignments,
+  onOpenTransfer,
+  onClose,
+  onDone,
+}: AppointDepartmentHeadModalProps) => {
   const [officeId, setOfficeId] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeOption | null>(null);
   const [role] = useState<OfficeRole>('DeptHead');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
-  const [creds, setCreds] = useState<{ username: string; password: string } | null>(null);
-  const [successNotice, setSuccessNotice] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [appointedDetails, setAppointedDetails] = useState<{ employeeName: string; officeName: string } | null>(null);
 
+  const selectedOffice = departments.find((d) => d.id === officeId);
   const incumbent = officeId
     ? assignments.find((a) => a.office_id === officeId && a.status === 'Active' && a.role === 'DeptHead')
     : undefined;
 
-  const handleSubmit = async () => {
+  const mappedTitle = selectedOffice
+    ? (OFFICE_HEAD_POSITIONS[selectedOffice.name] || 'Department Head')
+    : 'Department Head';
+
+  const handleOpenConfirm = () => {
     setErr('');
-    if (!employeeId) return setErr('Select an employee.');
     if (!officeId) return setErr('Select an office.');
+    if (!selectedEmployee) return setErr('Select an employee.');
     if (incumbent) {
       return setErr(
         `This office currently has an active Department Head (${incumbent.employee_name}). To replace this head, use Remove / Transfer to ensure pending IPCR reviews are rerouted.`
       );
     }
-    const emp = employees.find((e) => e.id === employeeId);
-    const off = departments.find((d) => d.id === officeId);
-    if (!emp || !off) return setErr('Invalid selection.');
+    setShowConfirm(true);
+  };
 
+  const handleExecuteAppointment = async () => {
+    if (!selectedEmployee || !selectedOffice) return;
+    setErr('');
     setSaving(true);
     const result = await createAssignment({
-      employeeId: emp.id,
-      employeeName: emp.full_name,
-      officeId: off.id,
-      officeName: off.name,
+      employeeId: selectedEmployee.id,
+      employeeName: selectedEmployee.full_name,
+      officeId: selectedOffice.id,
+      officeName: selectedOffice.name,
       role,
       performedBy: getCurrentAdminEmail(),
     });
     setSaving(false);
 
-    if (!result.ok) return setErr('error' in result ? result.error : 'Failed to create assignment.');
-    setCreds({
-      username: result.assignment.account_username ?? '',
-      password: result.assignment.account_password ?? '',
+    if (!result.ok) {
+      setShowConfirm(false);
+      return setErr('error' in result ? result.error : 'Failed to create assignment.');
+    }
+
+    const successMsg = `Successfully appointed ${selectedEmployee.full_name} as Department Head of ${selectedOffice.name}. They can access their office dashboard immediately using their current account switcher.`;
+    setAppointedDetails({
+      employeeName: selectedEmployee.full_name,
+      officeName: selectedOffice.name,
     });
-    const successMsg = `Successfully appointed ${emp.full_name} as Department Head of ${off.name}. They can access their office dashboard immediately using their current account switcher.`;
-    setSuccessNotice(successMsg);
+    setShowConfirm(false);
+    setIsSuccess(true);
     onDone(successMsg);
   };
 
-  const copy = async () => {
-    if (!creds) return;
-    try {
-      await navigator.clipboard.writeText(`${creds.username} / ${creds.password}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
-
   return (
-    <Dialog open onClose={onClose} title={creds ? 'Office Account Created' : 'Add Personnel'}>
-      {!creds ? (
-        <div style={{ color: 'var(--text-primary)' }}>
-          <Field label="Employee">
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} style={input}>
-              <option value="">Select an employee…</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name}
-                  {e.department ? ` — ${e.department}` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Office">
-            <select value={officeId} onChange={(e) => setOfficeId(e.target.value)} style={input}>
-              <option value="">Select an office…</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                  {!d.is_active ? ' (inactive)' : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Role">
-            <div style={{ ...input, display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              Department Head
-            </div>
-          </Field>
-          <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '-4px' }}>
-            An Office Account username and temporary password will be generated automatically.
-          </p>
-
-          {incumbent && (
-            <div
-              style={{
-                margin: '12px 0',
-                padding: '12px 14px',
-                background: '#fffbeb',
-                border: '1px solid #fde68a',
-                borderRadius: '8px',
-                color: '#78350f',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', lineHeight: 1.4 }}>
-                <AlertCircle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: '1px' }} />
-                <span>
-                  This office currently has an active Department Head ({incumbent.employee_name}). To replace this head, use Remove / Transfer to ensure pending IPCR reviews are rerouted.
-                </span>
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        title={isSuccess ? undefined : 'Appoint Department Head'}
+        subtitle={
+          isSuccess
+            ? undefined
+            : 'Assign executive leadership and activate department dashboard privileges.'
+        }
+        headerIcon={
+          isSuccess ? (
+            <CheckCircle2 size={20} style={{ color: '#047857', flexShrink: 0 }} />
+          ) : (
+            <Building2 size={20} style={{ color: '#040E6B', flexShrink: 0 }} />
+          )
+        }
+      >
+        {!isSuccess ? (
+          <div style={{ color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* 1. Office Selection First */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label htmlFor="modal-office-select" style={{ fontSize: '13px', fontWeight: 600, color: '#28343D', margin: 0 }}>
+                  Office <span style={{ color: '#e05252' }}>*</span>
+                </label>
+                {selectedOffice && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: selectedOffice.is_active ? '#166534' : '#6b7280' }}>
+                      {selectedOffice.is_active ? 'Active Department' : 'Inactive Department'}
+                    </span>
+                    {incumbent ? (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          background: '#fee2e2',
+                          color: '#991b1b',
+                        }}
+                      >
+                        Occupied
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          background: '#dcfce7',
+                          color: '#166534',
+                        }}
+                      >
+                        Vacant
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => onOpenTransfer(incumbent)}
+              <select
+                id="modal-office-select"
+                aria-label="Office"
+                value={officeId}
+                onChange={(e) => {
+                  setOfficeId(e.target.value);
+                  setErr('');
+                }}
+                style={{
+                  ...input,
+                  borderColor: officeId ? '#363ee8' : '#cbd5e1',
+                }}
+              >
+                <option value="">Select an office…</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {!d.is_active ? ' (inactive)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              {incumbent && (
+                <div
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 12px',
-                    background: '#fef3c7',
-                    color: '#92400e',
-                    border: '1px solid #fcd34d',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
+                    marginTop: '10px',
+                    padding: '12px 14px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: '8px',
+                    color: '#78350f',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
                   }}
                 >
-                  Go to Transfer Flow
-                </button>
-              </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', lineHeight: 1.4 }}>
+                    <AlertCircle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: '1px' }} />
+                    <span>
+                      This office currently has an active Department Head ({incumbent.employee_name}). To replace this head, use Remove / Transfer to ensure pending IPCR reviews are rerouted.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenTransfer(incumbent)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        background: '#fef3c7',
+                        color: '#92400e',
+                        border: '1px solid #fcd34d',
+                        borderRadius: '999px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Go to Transfer Flow
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
 
-          {err && <div style={{ ...bannerErr, margin: '12px 0 0' }}>{err}</div>}
+            {/* 2. Employee to Appoint (Combobox) */}
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#28343D', marginBottom: '6px' }}>
+                Employee to Appoint <span style={{ color: '#e05252' }}>*</span>
+              </label>
+              <SearchableEmployeeCombobox
+                employees={employees}
+                selectedEmployee={selectedEmployee}
+                selectedOfficeName={selectedOffice?.name}
+                onSelect={(emp) => {
+                  setSelectedEmployee(emp);
+                  setErr('');
+                }}
+              />
+            </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
-            <button type="button" onClick={onClose} disabled={saving} style={secondaryBtn}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving || !!incumbent}
+            {/* 3. Promotion & Database Sync Preview Card */}
+            {selectedOffice && (
+              <div
+                style={{
+                  background: '#f0f7ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#1e40af',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '6px',
+                  }}
+                >
+                  PROMOTION &amp; DATABASE SYNC PREVIEW
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    gap: '4px 12px',
+                    fontSize: '12px',
+                    alignItems: 'baseline',
+                  }}
+                >
+                  <span style={{ color: '#64748b' }}>Official Title:</span>
+                  <strong style={{ color: '#040E6B' }}>{mappedTitle}</strong>
+                  <span style={{ color: '#64748b' }}>Sync Action:</span>
+                  <span style={{ color: '#047857', fontWeight: 600 }}>
+                    Promotion recorded in position_history
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Single Identity SSO Reassurance Banner */}
+            {selectedEmployee && (
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  color: '#475569',
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <ShieldCheck size={16} style={{ color: '#363ee8', flexShrink: 0, marginTop: '2px' }} />
+                <span>
+                  {selectedEmployee.full_name} uses their regular login credentials. Their profile switcher will automatically unlock the Department Head portal upon appointment.
+                </span>
+              </div>
+            )}
+
+            {err && <div style={{ ...bannerErr, margin: '4px 0 0 0' }}>{err}</div>}
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                style={{
+                  padding: '8px 20px',
+                  border: '1.5px solid #363EE8',
+                  background: '#ffffff',
+                  borderRadius: '999px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: '#363EE8',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenConfirm}
+                disabled={saving || !!incumbent}
+                style={{
+                  padding: '8px 22px',
+                  background: 'linear-gradient(180deg, #363EE8, #191FA8)',
+                  border: 'none',
+                  borderRadius: '999px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#ffffff',
+                  cursor: saving || incumbent ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(4, 14, 107, 0.15)',
+                  opacity: saving || incumbent ? 0.5 : 1,
+                }}
+              >
+                Appoint Department Head
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '16px 8px 8px 8px' }}>
+            <div
               style={{
-                ...primaryBtn,
-                ...(saving || incumbent ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: '#dcfce7',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
               }}
             >
-              {saving ? 'Assigning…' : 'Assign Role'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ color: 'var(--text-primary)' }}>
-          {successNotice && (
-            <div style={{ ...bannerOk, marginBottom: '16px' }}>
-              <CheckCircle2 size={18} style={{ color: '#047857', flexShrink: 0 }} />
-              <span>{successNotice}</span>
+              <CheckCircle2 size={32} style={{ color: '#047857' }} />
             </div>
-          )}
-          <p style={{ marginBottom: '12px', lineHeight: 1.5 }}>
-            Share these Office Account credentials securely — the password will not be shown again:
-          </p>
-          <div style={credBox}>
-            <div>
-              <div style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase' }}>Username</div>
-              <code style={{ fontSize: '15px', fontWeight: 700 }}>{creds.username}</code>
-            </div>
-            <div style={{ marginTop: '8px' }}>
-              <div style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase' }}>Temp password</div>
-              <code style={{ fontSize: '15px', fontWeight: 700 }}>{creds.password}</code>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#040E6B', margin: '0 0 10px 0' }}>
+              Department Head Appointed
+            </h3>
+            <p data-testid="success-description" style={{ fontSize: '14px', color: '#475569', lineHeight: 1.5, margin: '0 auto 24px auto', maxWidth: '380px' }}>
+              Successfully appointed <strong>{appointedDetails?.employeeName}</strong> as Department Head of <strong>{appointedDetails?.officeName}</strong>. They can access their office dashboard immediately using their current account switcher.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '9px 36px',
+                  background: 'linear-gradient(180deg, #363EE8, #191FA8)',
+                  border: 'none',
+                  borderRadius: '999px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(4, 14, 107, 0.15)',
+                }}
+              >
+                Done
+              </button>
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '16px' }}>
-            <button type="button" onClick={copy} style={secondaryBtn}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                {copied ? <Check size={15} /> : <Copy size={15} />}
-                {copied ? 'Copied' : 'Copy'}
-              </span>
-            </button>
-            <button type="button" onClick={onClose} style={primaryBtn}>
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-    </Dialog>
+        )}
+      </Dialog>
+
+      <AppointmentConfirmDialog
+        open={showConfirm}
+        employeeName={selectedEmployee?.full_name || ''}
+        officeName={selectedOffice?.name || ''}
+        mappedTitle={mappedTitle}
+        saving={saving}
+        onBack={() => setShowConfirm(false)}
+        onConfirm={handleExecuteAppointment}
+      />
+    </>
   );
 };
+
+export const AddPersonnelModal = AppointDepartmentHeadModal;
 
 // ── Remove / Transfer modal (with Succession Transfer Tool) ──────────────────
 const RemoveTransferModal = ({

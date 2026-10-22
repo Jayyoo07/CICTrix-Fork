@@ -27,6 +27,20 @@ status filter, Download Rater List, Designation / Position, Access Role,
 Assigned Job Position(s), Last Login, Add New Rater, and the pencil that opens
 the assign-positions modal.
 
+> **Revised 2026-10-22 (option A).** The scope above was option B. On review the
+> sidebar page was cut down to the simple table instead: **Rater Name (email
+> underneath), Status, and one Grant/Revoke button, plus Add New Rater.** The KPI
+> cards, search, status filter, Download Rater List, Designation / Position,
+> Access Role, Assigned Job Position(s), Last Login and the assign-positions
+> button are gone.
+>
+> **Consequence to live with.** The Add New Rater dialog still requires picking
+> at least one position, here and in the RSP Dashboard's own rater section, so a
+> rater is still created with positions. But nothing can now *change* an existing
+> rater's positions — that was the only edit path. `interviewerAccess.ts` filters
+> each interviewer's visible jobs by that list, so correcting a wrong assignment
+> means revoking the rater and adding them again.
+
 ## What actually differs
 
 Less than it first appears. Both already have Add Rater, a Rater Name column and

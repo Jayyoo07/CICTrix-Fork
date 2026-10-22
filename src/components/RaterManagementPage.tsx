@@ -1,14 +1,8 @@
 import {
   CheckCircle2,
-  Download,
-  PenLine,
   Plus,
-  ChevronRight,
-  Search,
-  Shield,
   ShieldCheck,
   ShieldOff,
-  UserPlus,
   X,
   XCircle,
 } from 'lucide-react';
@@ -218,8 +212,6 @@ export const RaterManagementPage = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const ratersLoad = useTableLoading(initialLoad, ratersData.length > 0);
   const [profileAccounts, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
   const [showGuide, setShowGuide] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [form, setForm] = useState<RaterFormState>(defaultFormState());
@@ -230,21 +222,6 @@ export const RaterManagementPage = () => {
   const [toast, setToast] = useState('');
   /** Email of the rater whose access change is in flight, for the button label. */
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
-  /**
-   * Row keys whose assigned positions are expanded. Collapsed by default: a
-   * rater with eight positions used to stack eight lines in one cell and set
-   * the height of every other column in that row.
-   */
-  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
-
-  const togglePositions = (key: string) => {
-    setExpandedPositions((previous) => {
-      const next = new Set(previous);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
 
   const loadRaters = async () => {
     // Assignments come from Supabase raters.assigned_positions only.
@@ -460,25 +437,9 @@ export const RaterManagementPage = () => {
       .sort((left, right) => left.localeCompare(right));
   }, [jobPostingsVersion]);
 
-  const filteredRaters = useMemo(() => {
-    return ratersData.filter((rater) => {
-      const matchesSearch =
-        !search ||
-        `${rater.name} ${rater.email} ${rater.designation} ${rater.assignedPositions.join(' ')}`
-          .toLowerCase()
-          .includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === 'All Status' ||
-        (statusFilter === 'Active' && rater.status === 'Active') ||
-        (statusFilter === 'Inactive' && rater.status === 'Inactive');
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [ratersData, search, statusFilter]);
-
-  const totalRaters = ratersData.length;
-  const activeRaters = ratersData.filter((rater) => rater.status === 'Active').length;
-  const inactiveRaters = ratersData.filter((rater) => rater.status === 'Inactive').length;
+  // The table shows every rater: the search box and status filter were dropped
+  // with the rest of the page's extra chrome.
+  const filteredRaters = ratersData;
 
   const openAssignModal = (rater?: RaterSourceRow) => {
     if (!rater) {
@@ -647,31 +608,6 @@ export const RaterManagementPage = () => {
     }
   };
 
-  const handleDownloadRaters = () => {
-    const csvRows = [
-      ['Name', 'Email', 'Designation', 'Assigned Positions', 'Last Login', 'Status'],
-      ...filteredRaters.map((rater) => [
-        rater.name,
-        rater.email,
-        rater.designation,
-        rater.assignedPositions.join('; '),
-        rater.lastLogin,
-        rater.status,
-      ]),
-    ];
-    const csv = csvRows
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'rater-list.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="rsp-ds min-h-screen bg-[#f8f9fa]">
@@ -694,78 +630,15 @@ export const RaterManagementPage = () => {
         </div>
         <div className="p-6 md:p-8">
 
-          <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Total Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{totalRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <UserPlus className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Active Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{activeRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-50 text-green-500">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Inactive Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{inactiveRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
-                <XCircle className="h-5 w-5" />
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-6 flex flex-col items-center justify-between gap-4 md:flex-row">
-            <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-                onClick={() => openAssignModal()}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add New Rater
-              </button>
-              <button
-                type="button"
-                className="flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                onClick={handleDownloadRaters}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download Rater List
-              </button>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  className="w-64 rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-4 text-sm focus:border-blue-500 focus:outline-none"
-                  placeholder="Search raters..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-              <select
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option>All Status</option>
-                <option>Active</option>
-                <option>Inactive</option>
-              </select>
-            </div>
+          <div className="mb-6 flex items-center">
+            <button
+              type="button"
+              className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              onClick={() => openAssignModal()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add New Rater
+            </button>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -773,10 +646,6 @@ export const RaterManagementPage = () => {
               <thead className="border-b border-gray-200 bg-white">
                 <tr>
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Rater Name</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Designation / Position</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Access Role</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Assigned Job Position(s)</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Last Login</th>
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Actions</th>
                 </tr>
@@ -784,13 +653,13 @@ export const RaterManagementPage = () => {
               <tbody className={`divide-y divide-gray-100 ${tableBodyClass(false)}`}>
                 {ratersLoad.initialLoading && (
                   <TableSkeletonRows show={ratersLoad.showSkeleton}
-                    columns={['two-line', 'text', 'badge', 'text', 'text', 'badge', 'button']} label="Loading raters…" />
+                    columns={['two-line', 'badge', 'button']} label="Loading raters…" />
                 )}
-                {!ratersLoad.initialLoading && filteredRaters.map((rater) => {
-                  const rowKey = `${rater.source}-${rater.id}-${rater.email}`;
-                  const positionsExpanded = expandedPositions.has(rowKey);
-                  return (
-                  <tr key={rowKey} className="transition-colors hover:bg-gray-50">
+                {!ratersLoad.initialLoading && filteredRaters.map((rater) => (
+                  <tr
+                    key={`${rater.source}-${rater.id}-${rater.email}`}
+                    className="transition-colors hover:bg-gray-50"
+                  >
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center">
                         <div className="mr-3 flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-sm font-bold text-blue-600">
@@ -802,65 +671,9 @@ export const RaterManagementPage = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{rater.designation}</td>
-                    <td className="whitespace-nowrap px-6 py-4">{roleBadge('Interviewer')}</td>
-                    <td className="px-6 py-4 align-top">
-                      {/* A position is a category, not a status, so it reads as a
-                          brand-tint chip rather than blue body text that looks
-                          like a link. One position needs no control; several
-                          collapse to a count so the row keeps its height. */}
-                      {rater.assignedPositions.length === 0 && (
-                        <span className="text-xs font-medium text-gray-400">No positions assigned</span>
-                      )}
-                      {rater.assignedPositions.length === 1 && (
-                        <span className="inline-flex max-w-[220px] items-center truncate rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                          {rater.assignedPositions[0]}
-                        </span>
-                      )}
-                      {rater.assignedPositions.length > 1 && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => togglePositions(rowKey)}
-                            aria-expanded={positionsExpanded}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                          >
-                            <ChevronRight
-                              className={`h-3 w-3 transition-transform motion-reduce:transition-none ${positionsExpanded ? 'rotate-90' : ''}`}
-                            />
-                            {rater.assignedPositions.length} positions
-                          </button>
-                          {positionsExpanded && (
-                            <ul className="mt-2 flex flex-col gap-1.5">
-                              {rater.assignedPositions.map((position) => (
-                                <li
-                                  key={`${rater.email}-${position}`}
-                                  className="border-l-2 border-blue-200 pl-2.5 text-[13px] font-medium text-gray-700"
-                                >
-                                  {position}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{rater.lastLogin}</td>
                     <td className="whitespace-nowrap px-6 py-4">{statusBadge(rater.status)}</td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {/* Outline, not filled: §9.1 keeps one filled button
-                            per group, and access is the emphasised action. The
-                            label says what the pencil never did — this opens
-                            the position assignments, not a rater's details. */}
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 rounded-xl border-[1.5px] border-blue-600 px-3.5 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50"
-                          aria-label={`Assign positions for ${rater.name}`}
-                          onClick={() => openAssignModal(rater)}
-                        >
-                          <PenLine className="h-3.5 w-3.5" /> Assign Positions
-                        </button>
+                      <div className="flex items-center">
                         {/* Labelled rather than a bare tick or cross. This
                             control grants or removes access to the interviewer
                             portal, and an unlabelled icon leaves the admin to
@@ -896,12 +709,11 @@ export const RaterManagementPage = () => {
                       </div>
                     </td>
                   </tr>
-                  );
-                })}
+                ))}
 
                 {!ratersLoad.initialLoading && filteredRaters.length === 0 && (
                   <tr>
-                    <td className="px-6 py-8 text-sm text-gray-500" colSpan={7}>
+                    <td className="px-6 py-8 text-sm text-gray-500" colSpan={3}>
                       No raters found.
                     </td>
                   </tr>

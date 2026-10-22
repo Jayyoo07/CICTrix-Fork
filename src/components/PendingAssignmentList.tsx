@@ -354,50 +354,34 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   return (
     <div className="space-y-4">
 
-      {/* Sub-tab toggle */}
-      <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1" style={{ width: 'fit-content' }}>
-        <button
-          type="button"
-          onClick={() => setSubTab('pending')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'pending'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <Clock size={14} />
-          Pending Assignment
-          {pendingApplicants.length > 0 && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-bold"
-              style={subTab === 'pending'
-                ? { background: 'rgba(255,255,255,0.25)', color: '#ffffff' }
-                : { background: '#FEF3C7', color: '#92400E' }}
+      {/* Tabs on white pages (DESIGN_IDENTITY §9.2), the same row Job Posts
+          uses, so a subtab looks the same wherever it appears. */}
+      <div role="tablist" className="-mb-px flex gap-2 border-b border-slate-200">
+        {([
+          { id: 'pending', label: 'Pending Assignment', icon: Clock, count: pendingApplicants.length },
+          { id: 'scheduled', label: 'Scheduled', icon: CalendarCheck, count: scheduledApplicants.length },
+        ] as const).map((tab) => {
+          const selected = subTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setSubTab(tab.id)}
+              className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${selected ? 'border-[#363EE8] text-[#363EE8]' : 'border-transparent text-slate-500 hover:text-[#040E6B]'}`}
             >
-              {pendingApplicants.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('scheduled')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'scheduled'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <CalendarCheck size={14} />
-          Scheduled
-          {scheduledApplicants.length > 0 && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-bold"
-              style={subTab === 'scheduled'
-                ? { background: 'rgba(255,255,255,0.25)', color: '#ffffff' }
-                : { background: '#DCFCE7', color: '#15803D' }}
-            >
-              {scheduledApplicants.length}
-            </span>
-          )}
-        </button>
+              <Icon size={16} />
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={`rounded-full px-2 py-px text-xs ${selected ? 'bg-[#EEF0FF] text-[#191FA8]' : 'bg-slate-100 text-slate-500'}`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── PENDING ASSIGNMENT VIEW ── */}

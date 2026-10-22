@@ -492,7 +492,7 @@ export const RaterManagementPage = () => {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-700">
                     Full Name
                   </label>
                   <input
@@ -500,11 +500,11 @@ export const RaterManagementPage = () => {
                     value={newName}
                     onChange={(event) => setNewName(event.target.value)}
                     placeholder="e.g. Melchor U. Tan"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-700">
                     Email
                   </label>
                   <input
@@ -512,7 +512,7 @@ export const RaterManagementPage = () => {
                     value={newEmail}
                     onChange={(event) => setNewEmail(event.target.value)}
                     placeholder="e.g. interviewer@cictrix.gov.ph"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
                   />
                 </div>
               </div>

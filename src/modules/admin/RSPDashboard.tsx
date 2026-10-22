@@ -3701,21 +3701,11 @@ export const RSPDashboard = () => {
               <>
                 {accountsView === 'directory' ? (
                   <>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
                       <p className="text-sm text-slate-500">{officeDirectoryTotalEmployees} total employees</p>
-                      <Button type="button" onClick={openBulkRequestDialog}>
-                        <FileText size={16} /> Bulk Document Request
-                      </Button>
                     </div>
-
 
                     <ErrorBanner error={officeDirectoryError} context="server" />
-
-                    <div className="flex items-center justify-center text-lg font-semibold text-slate-700">
-                      {filteredOfficeDirectoryRows.length === 0
-                        ? 'Office 0 to 0 of 0'
-                        : `Office ${safeEmployeeDirectoryPage * EMPLOYEE_DIRECTORY_OFFICES_PER_PAGE + 1} to ${Math.min((safeEmployeeDirectoryPage + 1) * EMPLOYEE_DIRECTORY_OFFICES_PER_PAGE, filteredOfficeDirectoryRows.length)} of ${filteredOfficeDirectoryRows.length}`}
-                    </div>
 
 {showPositionChangeModal && selectedEmployeeDetails && (
                     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPositionChangeModal(false)}>

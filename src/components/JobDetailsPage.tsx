@@ -576,7 +576,7 @@ export const JobDetailsPage = () => {
                 <button
                   type="button"
                   className="btn btn-md btn-white"
-                  onClick={() => navigate('/admin/rsp/jobs', { state: { editJobId: job.id } })}
+                  onClick={() => navigate('/admin/rsp/jobs?tab=positions', { state: { editJobId: job.id } })}
                 >
                   <Pencil size={18} strokeWidth={1.75} aria-hidden="true" />
                   Edit Posting

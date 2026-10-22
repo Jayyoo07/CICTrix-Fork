@@ -1,4 +1,4 @@
-import { Briefcase, ChevronLeft, ChevronRight, Lock, Search, X, XCircle } from 'lucide-react';
+import { Briefcase, ChevronLeft, ChevronRight, Lock, Search, Users, X, XCircle } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatOfficeLabel, formatOfficeName } from '../constants/positions';
 import { formatPHDate } from '../lib/recruitmentData';
@@ -27,22 +27,22 @@ const experienceText = (job: JobPosting) => {
 interface JobVacanciesPanelProps {
   jobs: JobPosting[];
   loading: boolean;
-  /** Applicants per posting id. */
-  applicantCounts: Map<string, number>;
+  /** Applications per posting id, as the filtered Applications tab lists them; undefined until loaded. */
+  applicantCounts?: Map<string, number>;
   /** Active vacancy rows, for the Date Opened column. */
   activeVacancies: Map<string, ActiveVacancy>;
   /** Opens a closed position as a vacancy. Resolves true when it opened. */
   onOpenVacancy: (job: JobPosting, input: OpenVacancyInput) => Promise<boolean>;
   /** Asks to close an open vacancy early (the page owns the confirmation). */
   onClose: (job: JobPosting) => void;
-  onDetails: (job: JobPosting) => void;
+  /** Opens Applicants › Applications filtered to this position. */
   onApplicants: (job: JobPosting) => void;
   /** No position matched the search: go create one. */
   onCreatePosition: () => void;
 }
 
 export const JobVacanciesPanel = ({
-  jobs, loading, applicantCounts, activeVacancies, onOpenVacancy, onClose, onDetails, onApplicants, onCreatePosition,
+  jobs, loading, applicantCounts, activeVacancies, onOpenVacancy, onClose, onApplicants, onCreatePosition,
 }: JobVacanciesPanelProps) => {
   const [search, setSearch] = useState('');
   const [officeFilter, setOfficeFilter] = useState('all');
@@ -133,12 +133,13 @@ export const JobVacanciesPanel = ({
                   <td className="px-4 py-3 text-sm text-slate-700">{formatOfficeLabel(job.department, job.division)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{openedOn ? formatPHDate(openedOn) : '—'}</td>
                   <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{job.applicationDeadline ? formatPHDate(job.applicationDeadline) : 'Not set'}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-700">{applicantCounts.get(job.id) ?? 0}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-700">{applicantCounts?.get(job.id) ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`badge ${BADGE_CLASS[status.tone]}`}>{status.label}</span></td>
                   <td className="px-4 py-3">
                     <div className="abyan-ds flex justify-end gap-2">
-                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => onDetails(job)}>Details</button>
-                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => onApplicants(job)}>Applicants</button>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => onApplicants(job)}>
+                        <Users size={14} /> Applicants{applicantCounts?.has(job.id) ? ` (${applicantCounts.get(job.id)})` : ''}
+                      </button>
                       <button type="button" className="btn btn-sm btn-destructive-outline" onClick={() => onClose(job)}>
                         <XCircle size={14} /> Close Vacancy
                       </button>

@@ -40,7 +40,6 @@ const renderPanel = (overrides: Partial<Parameters<typeof JobVacanciesPanel>[0]>
     activeVacancies: new Map([['a', { jobPostingId: 'a', openedOn: '2026-10-20', deadline: '2099-11-15' }]]),
     onOpenVacancy: vi.fn().mockResolvedValue(true),
     onClose: vi.fn(),
-    onDetails: vi.fn(),
     onApplicants: vi.fn(),
     onCreatePosition: vi.fn(),
     ...overrides,
@@ -66,15 +65,20 @@ describe('JobVacanciesPanel', () => {
     expect(screen.getByText(/No open vacancies\. Click 'Open Vacant Job Position' to open one\./)).toBeTruthy();
   });
 
-  it('closes, opens details and applicants from the row', () => {
+  it('offers only Applicants and Close Vacancy on a row', () => {
     const props = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Close Vacancy/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Applicants' }));
+    const row = within(screen.getByRole('table')).getByText('Engineer III').closest('tr') as HTMLElement;
+    expect(within(row).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Applicants (7)', 'Close Vacancy']);
+    fireEvent.click(within(row).getByRole('button', { name: /Close Vacancy/ }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Applicants (7)' }));
     expect(props.onClose).toHaveBeenCalledWith(jobs[0]);
-    expect(props.onDetails).toHaveBeenCalledWith(jobs[0]);
     expect(props.onApplicants).toHaveBeenCalledWith(jobs[0]);
-    expect(screen.queryByRole('button', { name: /Edit Deadline/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
+  });
+
+  it('keeps the plain Applicants label until counts load', () => {
+    renderPanel({ applicantCounts: undefined });
+    expect(screen.getByRole('button', { name: 'Applicants' })).toBeTruthy();
   });
 
   it('offers closed positions and shows open ones as Already open', () => {

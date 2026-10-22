@@ -14,11 +14,11 @@ import {
     Trash2,
     X
 } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { JobVacanciesPanel } from './JobVacanciesPanel';
 import { CloseVacancyDialog } from './CloseVacancyDialog';
-import { isOpenVacancy, matchesTitleOrPlantilla, positionStatus, type PositionStatus } from '../lib/vacancySearch';
+import { comparePositionRows, isOpenVacancy, matchesTitleOrPlantilla, positionStatus, type PositionStatus } from '../lib/vacancySearch';
 import { countListedApplicationsByPosition } from '../lib/applicationsByPosition';
 import { closeVacancy, listActiveVacancies, openVacancy as openVacancyRequest, type ActiveVacancy, type CloseReason, type OpenVacancyInput } from '../lib/vacancies';
 import { COMPETENCIES, EDUCATION_LEVELS, formatOfficeLabel, formatOfficeName } from '../constants/positions';
@@ -245,8 +245,6 @@ export const JobPostingsPage = () => {
   const [savingJob, setSavingJob] = useState(false);
   /** Applicant counts per slot id, so removing a slot can warn about them. */
   const [slotApplicantCounts, setSlotApplicantCounts] = useState<Map<string, number>>(new Map());
-  /** Job post ids whose Plantilla Item No. cell is expanded to the full list. */
-  const [expandedSlotJobIds, setExpandedSlotJobIds] = useState<Set<string>>(new Set());
 
   const resolveLiveApplicants = async (jobRows: JobPosting[]) => {
     const localApplicants = getApplicants();
@@ -663,7 +661,7 @@ export const JobPostingsPage = () => {
       const matchesStatus = statusFilter === 'all' || positionStatus(job) === statusFilter;
       const matchesOffice = officeFilter === 'all' || formatOfficeName(job.department) === officeFilter;
       return matchesSearch && matchesStatus && matchesOffice;
-    });
+    }).sort(comparePositionRows);
   }, [jobs, officeFilter, search, statusFilter]);
 
   const officeOptions = useMemo(
@@ -1067,9 +1065,12 @@ export const JobPostingsPage = () => {
     const linkedApplicants = liveApplicants.filter((row) => row.jobPostingId === job.id);
     const linkedCount = linkedApplicants.length;
 
+    // Name the plantilla: positions sharing a title are separate rows.
+    const plantillas = (job.plantillaSlots ?? []).map((slot) => plantillaLabel(slot)).join(', ');
+    const target = plantillas ? `"${job.title}" (${plantillas})` : `"${job.title}"`;
     const confirmMessage = linkedCount > 0
-      ? `Delete job post \"${job.title}\"? ${linkedCount} applicant record(s) and their document references will be archived to Reports.`
-      : `Delete job post \"${job.title}\"? This action cannot be undone.`;
+      ? `Delete ${target}? ${linkedCount} applicant record(s) and their document references will be archived to Reports.`
+      : `Delete ${target}? This action cannot be undone.`;
     const confirmed = window.confirm(confirmMessage);
     if (!confirmed) return;
 
@@ -1240,40 +1241,17 @@ export const JobPostingsPage = () => {
                 {!jobsLoad.initialLoading && currentPageJobs.map((job) => {
                   const liveCount = applicantCountsByJob.get(job.id) ?? { applicants: 0, qualified: 0, toReview: 0 };
                   const officeLabel = formatOfficeLabel(job.department, job.division);
+                  // One posting per plantilla (2026-10-23 split), so one row each.
                   const slots = job.plantillaSlots ?? [];
-                  const isMultiSlot = slots.length > 1;
-                  const expanded = expandedSlotJobIds.has(job.id);
                   // Open while the position has an unexpired vacancy, else Closed.
                   const status = positionStatus(job);
                   return (
-                    <Fragment key={job.id}>
-                    <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <tr key={job.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
                       <td className="px-5 py-4">
-                        {isMultiSlot ? (
-                          <button
-                            type="button"
-                            onClick={() => setExpandedSlotJobIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(job.id)) next.delete(job.id); else next.add(job.id);
-                              return next;
-                            })}
-                            className="inline-flex items-center gap-1 text-left text-sm font-semibold text-slate-900 hover:text-blue-700"
-                            aria-expanded={expanded}
-                            aria-label={`${expanded ? 'Collapse' : 'Expand'} plantillas for ${normalizeRomanNumeralsInText(job.title)}`}
-                          >
-                            <ChevronRight className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-                            {normalizeRomanNumeralsInText(job.title)}
-                          </button>
-                        ) : (
-                          <p className="font-semibold text-slate-900 text-sm">{normalizeRomanNumeralsInText(job.title)}</p>
-                        )}
+                        <p className="font-semibold text-slate-900 text-sm">{normalizeRomanNumeralsInText(job.title)}</p>
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-500">
-                        {isMultiSlot ? (
-                          <span className="whitespace-nowrap text-slate-700">{slots.length} plantillas</span>
-                        ) : (
-                          <span className="whitespace-nowrap">{slots[0] ? applicantsPerPlantillaText(plantillaLabel(slots[0]), slotApplicantCounts.get(slots[0].id) ?? 0) : "Plantilla 1"}</span>
-                        )}
+                        <span className="whitespace-nowrap">{slots.length > 0 ? slots.map((slot) => plantillaLabel(slot)).join(', ') : 'Plantilla 1'}</span>
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-700">{officeLabel}</td>
                       <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">{formatPHDate(job.postedDate)}</td>
@@ -1305,26 +1283,6 @@ export const JobPostingsPage = () => {
                         </div>
                       </td>
                     </tr>
-                    {isMultiSlot && expanded && slots.map((slot) => {
-                      const slotCount = slotApplicantCounts.get(slot.id) ?? 0;
-                      // A plantilla takes applications only while its position's
-                      // vacancy is open and the plantilla itself is still open.
-                      const slotStatus: PositionStatus = status === 'Open' && slot.status === 'open' ? 'Open' : 'Closed';
-                      return (
-                        <tr key={slot.id} className="border-b border-slate-100 bg-slate-50/70 text-sm">
-                          <td className="border-l-[3px] border-l-blue-200 px-5 py-2" />
-                          <td className="px-5 py-2 text-slate-700">{plantillaLabel(slot)}</td>
-                          <td className="px-5 py-2" />
-                          <td className="px-5 py-2" />
-                          <td className="px-5 py-2 text-center text-slate-900">{slotCount}</td>
-                          <td className="px-5 py-2 text-center">
-                            <span className={STATUS_BADGE[slotStatus]}>{slotStatus}</span>
-                          </td>
-                          <td className="px-5 py-2" />
-                        </tr>
-                      );
-                    })}
-                    </Fragment>
                   );
                 })}
                 {!jobsLoad.initialLoading && currentPageJobs.length === 0 && (

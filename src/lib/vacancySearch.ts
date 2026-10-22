@@ -52,6 +52,18 @@ export interface PositionMatch {
 export const plantillaNumbers = (job: JobPosting): string[] =>
   (job.plantillaSlots ?? []).map((slot) => plantillaNumberOf(slot.label) || String(slot.label ?? '').trim()).filter(Boolean);
 
+/**
+ * Job Positions order: newest Date Posted first, then title, then plantilla
+ * number (docs/plans/2026-10-23-plantilla-per-row.md, D6).
+ */
+export const comparePositionRows = (a: JobPosting, b: JobPosting): number => {
+  const posted = (job: JobPosting) => Date.parse(job.postedDate ?? '') || 0;
+  const firstNumber = (job: JobPosting) => Number(plantillaNumbers(job)[0]) || Number.MAX_SAFE_INTEGER;
+  return posted(b) - posted(a)
+    || a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+    || firstNumber(a) - firstNumber(b);
+};
+
 /** Title or plantilla number contains the term. */
 export const matchesTitleOrPlantilla = (job: JobPosting, term: string): boolean => {
   const needle = term.trim().toLowerCase();

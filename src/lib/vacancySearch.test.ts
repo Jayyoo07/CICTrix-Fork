@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  daysUntilDeadline, dashboardPostingStatus, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
+  comparePositionRows, daysUntilDeadline, dashboardPostingStatus, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
 } from './vacancySearch';
 import type { JobPosting } from '../types/recruitment.types';
 
@@ -102,5 +102,22 @@ describe('dashboardPostingStatus', () => {
     expect(dashboardPostingStatus('Open', job('A', 'Active', '2026-11-15'), today)).toBe('Open');
     expect(dashboardPostingStatus('Reviewing', job('A', 'Draft'), today)).toBe('Reviewing');
     expect(dashboardPostingStatus('Open', undefined, today)).toBe('Open');
+  });
+});
+
+describe('comparePositionRows', () => {
+  const posted = (title: string, postedDate: string, label: string) =>
+    ({ ...job(title, 'Active', '', [label]), id: `${title}-${label}`, postedDate } as JobPosting);
+
+  it('orders by newest Date Posted, then title, then plantilla number', () => {
+    const rows = [
+      posted('Nurse II', '2026-10-01', 'Plantilla 51'),
+      posted('Nurse II', '2026-10-01', 'Plantilla 48'),
+      posted('Architect I', '2026-10-01', 'Plantilla 45'),
+      posted('Midwife II', '2026-10-05', 'Plantilla 56'),
+    ].sort(comparePositionRows);
+    expect(rows.map((row) => row.id)).toEqual([
+      'Midwife II-Plantilla 56', 'Architect I-Plantilla 45', 'Nurse II-Plantilla 48', 'Nurse II-Plantilla 51',
+    ]);
   });
 });

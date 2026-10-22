@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysUntilDeadline, isOpenedVacancy, searchPositions, vacancyEligibility, vacancyStatus } from './vacancySearch';
+import { daysUntilDeadline, isOpenedVacancy, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots } from './vacancySearch';
 import type { JobPosting } from '../types/recruitment.types';
 
 const job = (title: string, status: JobPosting['status'], department = 'City Engineering Office', applicationDeadline = ''): JobPosting =>
@@ -22,6 +22,17 @@ describe('isOpenedVacancy', () => {
     expect(isOpenedVacancy(job('A', 'Closed'))).toBe(true);
     expect(isOpenedVacancy(job('A', 'Draft'))).toBe(false);
     expect(isOpenedVacancy(job('A', 'Filled'))).toBe(false);
+  });
+
+  it('drops a posting once every plantilla is filled', () => {
+    const withSlots = (statuses: Array<'open' | 'filled' | 'closed'>) => ({
+      ...job('A', 'Active'),
+      plantillaSlots: statuses.map((status, i) => ({ id: `s${i}`, jobPostingId: 'A', slotNumber: i + 1, itemNumber: `PLT-${i}`, status })),
+    }) as JobPosting;
+    expect(isOpenedVacancy(withSlots(['open', 'filled']))).toBe(true);
+    expect(isOpenedVacancy(withSlots(['closed']))).toBe(true);
+    expect(isOpenedVacancy(withSlots(['filled', 'filled']))).toBe(false);
+    expect(vacantPlantillaSlots(withSlots(['open', 'filled', 'closed'])).map((s) => s.status)).toEqual(['open', 'closed']);
   });
 });
 

@@ -14,12 +14,14 @@ import {
     Plus,
     Search,
     Trash2,
+    UserCheck,
     Users,
     X
 } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { JobVacanciesPanel } from './JobVacanciesPanel';
+import { FilledPositionsPanel, filledPlantillas } from './FilledPositionsPanel';
 import { isOpenedVacancy } from '../lib/vacancySearch';
 import { COMPETENCIES, EDUCATION_LEVELS, formatOfficeLabel, formatOfficeName } from '../constants/positions';
 import { useDepartmentNames } from '../hooks/useDepartmentOptions';
@@ -76,6 +78,9 @@ const normalizeRomanNumeralsInText = (value: string) =>
     .split(/(\s+)/)
     .map((token) => (/^[ivxlcdm]+$/i.test(token) ? token.toUpperCase() : token))
     .join('');
+
+/** Job Posts sub tabs, kept in `?tab=` so Back works. Positions is the default. */
+type JobPostsTab = 'positions' | 'vacancies' | 'filled';
 
 const STATUS_COLORS: Record<JobPosting['status'], string> = {
   Draft: 'bg-slate-100 text-slate-700',
@@ -249,10 +254,11 @@ export const JobPostingsPage = () => {
   const [lockConfirmJob, setLockConfirmJob] = useState<JobPosting | null>(null);
   // Job Positions (defaults) vs Job Vacancies, kept in the URL so Back works.
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab: 'positions' | 'vacancies' = searchParams.get('tab') === 'vacancies' ? 'vacancies' : 'positions';
-  const switchTab = (tab: 'positions' | 'vacancies') => {
+  const tabParam = searchParams.get('tab');
+  const activeTab: JobPostsTab = tabParam === 'vacancies' || tabParam === 'filled' ? tabParam : 'positions';
+  const switchTab = (tab: JobPostsTab) => {
     setViewingApplicantsFor(null);
-    setSearchParams(tab === 'vacancies' ? { tab } : {});
+    setSearchParams(tab === 'positions' ? {} : { tab });
   };
   /** Validation message for the Plantilla Slots section of the modal. */
   const [slotError, setSlotError] = useState('');
@@ -1366,6 +1372,7 @@ export const JobPostingsPage = () => {
             {([
               { id: 'positions', label: 'Job Positions', icon: FileText, count: jobs.length },
               { id: 'vacancies', label: 'Job Vacancies', icon: Briefcase, count: jobs.filter(isOpenedVacancy).length },
+              { id: 'filled', label: 'Filled Positions', icon: UserCheck, count: filledPlantillas(jobs).length },
             ] as const).map((tab) => {
               const selected = activeTab === tab.id;
               const Icon = tab.icon;
@@ -1395,6 +1402,9 @@ export const JobPostingsPage = () => {
             onUpdateDeadline={updateDeadline}
             onClose={closeApplication}
           />
+        )}
+        {activeTab === 'filled' && (
+          <FilledPositionsPanel jobs={jobs} loading={jobsLoad.initialLoading} />
         )}
         {activeTab === 'positions' && (
         <>

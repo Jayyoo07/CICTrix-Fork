@@ -5,6 +5,7 @@ import type { JobPosting } from '../types/recruitment.types';
 vi.mock('../lib/recruitmentData', () => ({
   formatPHDate: (value: string) => value.slice(0, 10),
 }));
+vi.mock('../hooks/useSalarySchedule', () => ({ useSalarySchedule: () => [] }));
 
 import { JobVacanciesPanel } from './JobVacanciesPanel';
 
@@ -52,6 +53,22 @@ describe('JobVacanciesPanel', () => {
     expect(within(table).getByText('Engineer III')).toBeTruthy();
     expect(within(table).queryByText('Engineer I')).toBeNull();
     expect(within(table).queryByText('Nurse II')).toBeNull();
+  });
+
+  it('leaves filled plantillas out, and drops a posting once all of them are filled', () => {
+    const slot = (id: string, n: number, status: 'open' | 'filled') =>
+      ({ id: `${id}-${n}`, jobPostingId: id, slotNumber: n, label: `Plantilla ${n}`, itemNumber: `PLT-${id}-${n}`, status });
+    renderPanel({
+      jobs: [
+        position('m', 'Clerk II', 'Active', { plantillaSlots: [slot('m', 31, 'open'), slot('m', 32, 'filled')] }),
+        position('f', 'Administrative Aide IV (Clerk II)', 'Active', { plantillaSlots: [slot('f', 40, 'filled')] }),
+      ],
+    });
+    const table = screen.getByRole('table');
+    const row = within(table).getByText('Clerk II').closest('tr') as HTMLElement;
+    expect(within(row).getByText('31')).toBeTruthy();
+    expect(within(row).queryByText(/32/)).toBeNull();
+    expect(within(table).queryByText('Administrative Aide IV (Clerk II)')).toBeNull();
   });
 
   it('suggests positions from one typed letter and blocks open or filled ones', () => {

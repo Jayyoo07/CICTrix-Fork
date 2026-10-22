@@ -2,8 +2,10 @@ import { Briefcase, Calendar, ChevronLeft, ChevronRight, Lock, Search, X } from 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatOfficeLabel } from '../constants/positions';
 import { formatPHDate } from '../lib/recruitmentData';
-import { plantillaLabel } from '../lib/plantillaRules';
-import { isOpenedVacancy, searchPositions, vacancyStatus, type PositionMatch } from '../lib/vacancySearch';
+import { plantillaLabel, plantillaNumberOf } from '../lib/plantillaRules';
+import { isOpenedVacancy, searchPositions, vacancyStatus, vacantPlantillaSlots, type PositionMatch } from '../lib/vacancySearch';
+import { vacancySalaryLabel } from '../lib/vacancySalary';
+import { useSalarySchedule } from '../hooks/useSalarySchedule';
 import { JobPosting } from '../types/recruitment.types';
 
 const ITEMS_PER_PAGE = 10;
@@ -45,6 +47,8 @@ export const JobVacanciesPanel = ({ jobs, loading, onOpenVacancy, onUpdateDeadli
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  // Loaded once for the whole table so every row shows the same range.
+  const salarySchedule = useSalarySchedule();
 
   const vacancies = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -85,12 +89,14 @@ export const JobVacanciesPanel = ({ jobs, loading, onOpenVacancy, onUpdateDeadli
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-full">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Position title</th>
               <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Office / Department</th>
+              <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Plantilla</th>
+              <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Monthly salary</th>
               <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Posting date</th>
               <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Application deadline</th>
               <th className="px-4 py-2.5 text-left text-[13px] font-semibold" style={{ color: '#040E6B' }}>Status</th>
@@ -99,20 +105,22 @@ export const JobVacanciesPanel = ({ jobs, loading, onOpenVacancy, onUpdateDeadli
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">Loading vacancies…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">Loading vacancies…</td></tr>
             )}
             {!loading && rows.map((job) => {
               const status = vacancyStatus(job);
-              const slots = job.plantillaSlots ?? [];
+              // Filled plantillas are held by employees; they live in Filled Positions.
+              const slots = vacantPlantillaSlots(job);
               return (
                 <tr key={job.id} className="border-b border-slate-100 last:border-0 hover:bg-[#F8FAFF]">
                   <td className="px-4 py-3">
                     <p className="!mb-0 text-sm font-semibold" style={{ color: '#040E6B' }}>{job.title}</p>
-                    {slots.length > 0 && (
-                      <p className="!mb-0 text-xs text-slate-500">{slots.map((slot) => plantillaLabel(slot)).join(', ')}</p>
-                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700">{formatOfficeLabel(job.department, job.division)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {slots.length > 0 ? slots.map((slot) => plantillaNumberOf(slot.label) || plantillaLabel(slot)).join(', ') : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{vacancySalaryLabel({ ...job, plantillaSlots: slots }, salarySchedule)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{job.postedDate ? formatPHDate(job.postedDate) : '—'}</td>
                   <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{job.applicationDeadline ? formatPHDate(job.applicationDeadline) : 'Not set'}</td>
                   <td className="px-4 py-3"><span className={`badge ${BADGE_CLASS[status.tone]}`}>{status.label}</span></td>
@@ -139,7 +147,7 @@ export const JobVacanciesPanel = ({ jobs, loading, onOpenVacancy, onUpdateDeadli
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
                   <Briefcase className="mx-auto mb-2 h-8 w-8 text-slate-300" />
                   <p className="!mb-1 font-medium text-slate-700">{search ? 'No vacancies match your search.' : 'No vacancies opened yet.'}</p>
                   {!search && <p className="!mb-0 text-sm">Use Open Vacant Job Position to advertise a position from Job Positions.</p>}

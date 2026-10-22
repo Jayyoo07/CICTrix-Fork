@@ -12,8 +12,21 @@ export type VacancyEligibility = 'available' | 'open' | 'filled';
 export const vacancyEligibility = (job: JobPosting): VacancyEligibility =>
   job.status === 'Active' ? 'open' : job.status === 'Filled' ? 'filled' : 'available';
 
+/**
+ * A plantilla whose slot is filled is held by an employee, so it is not a
+ * vacancy (docs/plans/2026-10-22-vacant-jobs-exclude-filled.md). The slot
+ * status is the one source of truth; it turns filled when a hire is placed.
+ */
+export const vacantPlantillaSlots = (job: JobPosting) =>
+  (job.plantillaSlots ?? []).filter((slot) => slot.status !== 'filled');
+
+/** A posting with no slot rows (legacy) has nothing recorded as filled. */
+export const hasVacantPlantilla = (job: JobPosting) =>
+  !job.plantillaSlots?.length || vacantPlantillaSlots(job).length > 0;
+
 /** Rows the Job Vacancies tab lists. Draft = defined but never opened. */
-export const isOpenedVacancy = (job: JobPosting) => job.status === 'Active' || job.status === 'Closed';
+export const isOpenedVacancy = (job: JobPosting) =>
+  (job.status === 'Active' || job.status === 'Closed') && hasVacantPlantilla(job);
 
 export interface PositionMatch {
   job: JobPosting;

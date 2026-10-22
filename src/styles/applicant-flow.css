@@ -357,6 +357,10 @@
 .abyan-ds .af-form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .abyan-ds .af-form-head h2:focus { outline: none; }
 .abyan-ds .af-form-head h2:focus-visible { box-shadow: 0 0 0 2px var(--color-primary); border-radius: var(--radius-sm); }
+/* Step 2 pages: "Page n of 5 · Section" over a thin progress bar. */
+.abyan-ds .af-pages { margin: -8px 0 24px; }
+.abyan-ds .af-pages .af-caption { margin: 0 0 8px; }
+.abyan-ds .af-pages-count { color: var(--color-primary-900); font-weight: 600; }
 
 /* Copy-answers dropdown */
 .abyan-ds .af-menu-wrap { position: relative; }

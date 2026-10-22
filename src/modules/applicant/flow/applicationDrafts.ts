@@ -59,10 +59,13 @@ export interface ApplyDrafts {
   authenticatedEmployeeAccount: EmployeePortalAccount | null;
   /** Position/department were set by the posting and can't be edited. */
   lockedPosition: boolean;
+  /** Current page of Step 2 (flow/formPages.ts), 1-based. */
+  formPage: number;
 }
 
 export const emptyDrafts = (): ApplyDrafts => ({
   lockedPosition: false,
+  formPage: 1,
   version: 2,
   entryMode: 'landing',
   step: 'fill',

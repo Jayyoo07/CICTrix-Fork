@@ -3371,6 +3371,7 @@ export const RSPDashboard = () => {
               onOpenApplicants={() => navigate('/interviewer/dashboard')}
               onOpenQualified={() => goToSection('qualified')}
               onOpenSuccession={() => goToSection('succession')}
+              onOpenNewHired={() => goToSection('new-hired')}
             />
             </div>
           )}

@@ -61,6 +61,11 @@
 .rspdash .rd-seg { display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .3); }
 .rspdash .rd-seg button { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; color: #fff; }
 .rspdash .rd-seg button.on { background: #fff; color: var(--rd-ink); font-weight: 600; }
+/* globals.css `button:hover` paints --bg-control (#fff) behind the label and
+   leaves the colour alone, so an unselected pill went white on white. Both
+   states state their own hover. */
+.rspdash .rd-seg button:hover { background: rgba(255, 255, 255, .22); color: #fff; }
+.rspdash .rd-seg button.on:hover { background: #fff; color: var(--rd-ink); }
 .rspdash .rd-seg button:focus-visible,
 .rspdash .rd-select:focus-within { outline: 2px solid #fff; outline-offset: 2px; }
 .rspdash .rd-select { position: relative; display: flex; align-items: center; height: 30px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .5); color: #fff; }
@@ -95,8 +100,9 @@
 .rspdash .rd-stats-card { background: #fff; margin: 0; }
 .rspdash .rd-s4 { grid-template-columns: repeat(4, 1fr); }
 .rspdash .rd-s2 { grid-template-columns: 1fr 1fr; }
+.rspdash .rd-s3 { grid-template-columns: repeat(3, 1fr); }
 .rspdash .rd-stat { padding: 10px 12px; border-right: 1px solid var(--rd-line); min-width: 0; }
-.rspdash .rd-s4 .rd-stat:last-child, .rspdash .rd-s2 .rd-stat:nth-child(2n) { border-right: 0; }
+.rspdash .rd-s4 .rd-stat:last-child, .rspdash .rd-s3 .rd-stat:last-child, .rspdash .rd-s2 .rd-stat:nth-child(2n) { border-right: 0; }
 .rspdash .rd-stat.rd-top { border-top: 1px solid var(--rd-line); }
 .rspdash .rd-stat .l { display: block; font-size: 11px; color: var(--rd-ink-2); }
 .rspdash .rd-stat .v { display: block; font-size: 20px; font-weight: 700; margin-top: 2px; color: var(--rd-ink); }
@@ -177,7 +183,9 @@
 }
 @media (max-width: 760px) {
   .rspdash .rd-cal-wrap { grid-template-columns: 1fr; }
-  .rspdash .rd-s4 { grid-template-columns: 1fr 1fr; }
+  .rspdash .rd-s4, .rspdash .rd-s3 { grid-template-columns: 1fr 1fr; }
+  .rspdash .rd-s3 .rd-stat:nth-child(2n) { border-right: 0; }
+  .rspdash .rd-s3 .rd-stat:nth-child(-n+2) { border-bottom: 1px solid var(--rd-line); }
   .rspdash .rd-s4 .rd-stat:nth-child(2n) { border-right: 0; }
   .rspdash .rd-s4 .rd-stat:nth-child(-n+2) { border-bottom: 1px solid var(--rd-line); }
   .rspdash .rd-desc { display: none; }

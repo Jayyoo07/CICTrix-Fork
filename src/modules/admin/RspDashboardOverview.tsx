@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, Users } from 'lucide-react';
+import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, UserPlus, Users } from 'lucide-react';
+import { fetchNewlyHiredStats, type NewlyHiredStats } from '../../lib/api/newlyHiredStats';
 import { getSuccessionDashboardOverview, type SuccessionOverview } from '../../lib/api/succession';
 import '../../styles/rsp-dashboard.css';
 import '../../styles/dashboard-scale.css';
 
 // RSP dashboard overview, built to docs/mockups/2026-10-15-rsp-dashboard-kpis.html.
-// Pure presentation over data RSPDashboard already loads; the only fetch of its
-// own is the succession overview.
+// Pure presentation over data RSPDashboard already loads, apart from two fetches
+// of its own: the succession overview and the newly-hired counts.
 
 export type OverviewFunnelStage = 'pending' | 'reviewed' | 'shortlisted' | 'qualified' | 'hired' | 'notQualified' | 'hiredElsewhere';
 
@@ -44,6 +45,7 @@ interface Props {
   onOpenApplicants: () => void;
   onOpenQualified: () => void;
   onOpenSuccession: () => void;
+  onOpenNewHired: () => void;
 }
 
 type Period = 'month' | 'quarter' | 'year';
@@ -120,6 +122,7 @@ export function RspDashboardOverview({
   onOpenApplicants,
   onOpenQualified,
   onOpenSuccession,
+  onOpenNewHired,
 }: Props) {
   const today = useMemo(() => startOfDay(new Date()), []);
   const [period, setPeriod] = useState<Period>('quarter');
@@ -129,6 +132,17 @@ export function RspDashboardOverview({
   const [sessionRange, setSessionRange] = useState<'week' | 'month'>('week');
   const [succession, setSuccession] = useState<SuccessionOverview | null>(null);
   const [successionError, setSuccessionError] = useState<string | null>(null);
+  const [newlyHired, setNewlyHired] = useState<NewlyHiredStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchNewlyHiredStats().then((stats) => {
+      if (!cancelled) setNewlyHired(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -577,7 +591,32 @@ export function RspDashboardOverview({
           </div>
         </section>
 
-        {/* 3. Succession */}
+        {/* 3. Newly hired — moved off the Newly Hired page, which now opens
+            straight into its department tables. */}
+        <section className="rd-sec">
+          <div className="rd-sec-h">
+            <span className="rd-ico"><UserPlus size={16} aria-hidden="true" /></span>
+            <h2>Newly hired</h2>
+            <span className="rd-desc">Employee accounts for hired applicants</span>
+            <button type="button" className="rd-link" onClick={onOpenNewHired}>Generate accounts ›</button>
+          </div>
+          <div className="rd-stats rd-s3 rd-stats-card">
+            <div className="rd-stat">
+              <span className="l">Total newly hired</span>
+              <span className="v">{newlyHired ? newlyHired.total : '—'}</span>
+            </div>
+            <div className="rd-stat">
+              <span className="l">With credentials</span>
+              <span className="v">{newlyHired ? newlyHired.withCredentials : '—'}</span>
+            </div>
+            <div className={`rd-stat ${newlyHired?.pendingCredentials ? 'warn' : ''}`}>
+              <span className="l">Pending credentials</span>
+              <span className="v">{newlyHired ? newlyHired.pendingCredentials : '—'}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Succession */}
         <section className="rd-sec">
           <div className="rd-sec-h">
             <span className="rd-ico"><GitBranch size={16} aria-hidden="true" /></span>

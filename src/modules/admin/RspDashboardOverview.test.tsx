@@ -50,6 +50,7 @@ const renderOverview = (applicants: OverviewApplicant[], evaluated = new Set<str
       onOpenApplicants={() => {}}
       onOpenQualified={() => {}}
       onOpenSuccession={() => {}}
+      onOpenNewHired={() => {}}
     />,
   );
 

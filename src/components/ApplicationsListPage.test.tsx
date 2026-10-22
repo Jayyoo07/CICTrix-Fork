@@ -36,8 +36,16 @@ vi.mock('../lib/plantillaSlots', () => ({
   ])),
 }));
 vi.mock('../lib/recruitmentData', () => {
-  const jobs = [{ id: 'P1', title: 'Engineer III' }, { id: 'Q1', title: 'Nurse II' }, { id: 'EMPTY', title: 'Clerk I' }];
-  return { getJobPostings: () => jobs, loadJobPostings: () => Promise.resolve(jobs) };
+  const slot = (id: string, label: string) => ({ id, label, slotNumber: 1, itemNumber: id, status: 'open' });
+  const job = (id: string, title: string, slots: ReturnType<typeof slot>[]) => ({
+    id, title, status: 'Active', department: 'City Engineering Office', applicationDeadline: '2099-11-15', plantillaSlots: slots,
+  });
+  const jobs = [
+    job('P1', 'Engineer III', [slot('p1-s1', 'Plantilla 21'), slot('p1-s2', 'Plantilla 22')]),
+    job('Q1', 'Nurse II', [slot('q1-s1', 'Plantilla 30')]),
+    job('EMPTY', 'Clerk I', [slot('e-s1', 'Plantilla 40')]),
+  ];
+  return { getJobPostings: () => jobs, loadJobPostings: () => Promise.resolve(jobs), formatPHDate: (v: string) => v.slice(0, 10) };
 });
 
 import { ApplicationsListPage } from './ApplicationsListPage';
@@ -57,9 +65,11 @@ const renderAt = (url: string) => render(
 );
 
 describe('ApplicationsListPage ?positionId=', () => {
-  it('lists only that position, across its plantillas, under a heading', async () => {
+  it('titles the page with the vacancy and lists only its applications, across its plantillas', async () => {
     renderAt('/admin/rsp/applications?positionId=P1');
-    expect(await screen.findByRole('heading', { name: 'Applicants for Engineer III' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Applicants for Engineer III' })).toBeTruthy();
+    expect(screen.getByText('City Engineering Office Department · Plantilla 21, 22 · Deadline 2099-11-15')).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Applications' })).toBeNull();
     const table = screen.getAllByRole('table')[0];
     expect(await within(table).findByText('Ana Cruz')).toBeTruthy();
     expect(within(table).getByText('Ben Cruz')).toBeTruthy();
@@ -72,6 +82,7 @@ describe('ApplicationsListPage ?positionId=', () => {
     expect(screen.getByTestId('where').textContent).toBe('/admin/rsp/applications');
     expect(await within(screen.getAllByRole('table')[0]).findByText('Cy Cruz')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: /Applicants for/ })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Applications' })).toBeTruthy();
   });
 
   it('links back to Job Vacancies', async () => {

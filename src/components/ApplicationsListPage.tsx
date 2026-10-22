@@ -10,7 +10,10 @@ import { ChevronLeft, ChevronRight, Search, Undo2, X } from 'lucide-react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../lib/plantillaSlots';
 import { belongsToPosition, isDisqualifiedStatus, isQualifiedStatus, isShortlistedStatus } from '../lib/applicationsByPosition';
-import { getJobPostings, loadJobPostings } from '../lib/recruitmentData';
+import { formatPHDate, getJobPostings, loadJobPostings } from '../lib/recruitmentData';
+import { isOpenVacancy, plantillaNumbers } from '../lib/vacancySearch';
+import { formatOfficeLabel } from '../constants/positions';
+import type { JobPosting } from '../types/recruitment.types';
 import { plantillaLabel } from '../lib/plantillaRules';
 import { samePositionRows } from '../lib/applicantReviewQueue';
 import { SortHeader, toTime, useTableSort } from './tableSort';
@@ -114,7 +117,7 @@ export const ApplicationsListPage = () => {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   /** Plantilla slot ids per position id. */
   const [slotIdsByPosition, setSlotIdsByPosition] = useState<Map<string, Set<string>>>(new Map());
-  const [position, setPosition] = useState<{ title: string } | null | undefined>(undefined);
+  const [position, setPosition] = useState<JobPosting | null | undefined>(undefined);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
   const [officeFilter, setOfficeFilter]     = useState('all');
@@ -177,21 +180,31 @@ export const ApplicationsListPage = () => {
     return () => window.removeEventListener('cictrix:applicants-updated', load);
   }, []);
 
-  // The filtered position's title. undefined = still looking, null = not found.
+  // The filtered position. undefined = still looking, null = not found.
   useEffect(() => {
     if (!positionId) { setPosition(undefined); return; }
     let cancelled = false;
-    const find = (jobs: ReturnType<typeof getJobPostings>) => jobs.find(job => job.id === positionId);
+    const find = (jobs: JobPosting[]) => jobs.find(job => job.id === positionId);
     const cached = find(getJobPostings());
-    if (cached) { setPosition({ title: cached.title }); return; }
+    if (cached) { setPosition(cached); return; }
     setPosition(undefined);
     void loadJobPostings().then(jobs => {
       if (cancelled) return;
-      const match = find(jobs);
-      setPosition(match ? { title: match.title } : null);
+      setPosition(find(jobs) ?? null);
     });
     return () => { cancelled = true; };
   }, [positionId]);
+
+  /** "Office · Plantilla 21, 22 · Deadline Oct 30, 2026" for the filtered header. */
+  const positionDetails = position
+    ? [
+        formatOfficeLabel(position.department, position.division),
+        plantillaNumbers(position).length > 0 ? `Plantilla ${plantillaNumbers(position).join(', ')}` : '',
+        isOpenVacancy(position)
+          ? position.applicationDeadline ? `Deadline ${formatPHDate(position.applicationDeadline)}` : 'Open'
+          : 'Closed',
+      ].filter(Boolean).join(' · ')
+    : '';
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const inPosition = useMemo(() => {
@@ -335,31 +348,33 @@ export const ApplicationsListPage = () => {
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
-          <div className="border-b border-slate-200 bg-white px-8 py-6">
-            <h1 className="!mb-1 !text-2xl font-bold">Applications</h1>
-            <p className="!mb-0 text-base text-slate-500">All applicants submitted across all job positions</p>
-          </div>
+          {positionId ? (
+            // Opened from Job Posts › Job Vacancies › Applicants: the title names the vacancy.
+            <div className="flex flex-wrap items-start gap-4 border-b border-slate-200 bg-white px-8 py-6">
+              <div className="min-w-0">
+                <Link to="/admin/rsp/jobs" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
+                  ‹ Back to Job Vacancies
+                </Link>
+                <h1 className="!mb-1 mt-1 !text-2xl font-bold">
+                  {position === null ? 'This position no longer exists' : `Applicants for ${position?.title ?? '…'}`}
+                </h1>
+                <p className="!mb-0 text-base text-slate-500">{positionDetails || ' '}</p>
+              </div>
+              <button type="button" onClick={clearPositionFilter}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]">
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+                Clear filter
+              </button>
+            </div>
+          ) : (
+            <div className="border-b border-slate-200 bg-white px-8 py-6">
+              <h1 className="!mb-1 !text-2xl font-bold">Applications</h1>
+              <p className="!mb-0 text-base text-slate-500">All applicants submitted across all job positions</p>
+            </div>
+          )}
           <ApplicantsTabBar />
 
           <div className="p-6">
-            {/* Opened from Job Posts › Job Vacancies › Applicants */}
-            {positionId && (
-              <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--color-primary-200)] bg-[var(--color-primary-50)] px-4 py-3">
-                <div className="min-w-0">
-                  <Link to="/admin/rsp/jobs" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
-                    ‹ Back to Job Vacancies
-                  </Link>
-                  <h2 className="!mb-0 mt-0.5 text-base font-semibold text-[var(--color-primary-900)]">
-                    {position === null ? 'This position no longer exists' : `Applicants for ${position?.title ?? '…'}`}
-                  </h2>
-                </div>
-                <button type="button" onClick={clearPositionFilter}
-                  className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]">
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                  Clear filter
-                </button>
-              </div>
-            )}
 
             {/* Filters */}
             <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">

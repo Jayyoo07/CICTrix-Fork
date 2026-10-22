@@ -5,6 +5,8 @@ import {
   Plus,
   Search,
   Shield,
+  ShieldCheck,
+  ShieldOff,
   UserPlus,
   X,
   XCircle,
@@ -225,6 +227,8 @@ export const RaterManagementPage = () => {
   const [manualDepartment, setManualDepartment] = useState('Unassigned');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  /** Email of the rater whose access change is in flight, for the button label. */
+  const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
 
   const loadRaters = async () => {
     // Assignments come from Supabase raters.assigned_positions only.
@@ -602,6 +606,7 @@ export const RaterManagementPage = () => {
   const handleToggleRaterAccess = async (rater: RaterSourceRow) => {
     const nextIsActive = rater.status !== 'Active';
     const previousRows = ratersData;
+    setTogglingEmail(rater.email);
     setRatersData((current) =>
       current.map((item) =>
         normalizeEmailKey(item.email) === normalizeEmailKey(rater.email)
@@ -621,6 +626,8 @@ export const RaterManagementPage = () => {
       setRatersData(previousRows);
       setToast('Failed to update interviewer access.');
       await loadRaters();
+    } finally {
+      setTogglingEmail(null);
     }
   };
 
@@ -799,25 +806,38 @@ export const RaterManagementPage = () => {
                         >
                           <PenLine className="h-4 w-4" />
                         </button>
-                        {rater.status === 'Active' ? (
-                          <button
-                            type="button"
-                            className="text-red-500 hover:text-red-700"
-                            aria-label={`Deactivate ${rater.name}`}
-                            onClick={() => void handleToggleRaterAccess(rater)}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-green-500 hover:text-green-700"
-                            aria-label={`Activate ${rater.name}`}
-                            onClick={() => void handleToggleRaterAccess(rater)}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        {/* Labelled rather than a bare tick or cross. This
+                            control grants or removes access to the interviewer
+                            portal, and an unlabelled icon leaves the admin to
+                            infer which way round it is. Carried over from the
+                            Qualified Applicants subtab this page replaces. */}
+                        {(() => {
+                          const isPending = togglingEmail === rater.email;
+                          const isActive = rater.status === 'Active';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleRaterAccess(rater)}
+                              disabled={isPending}
+                              aria-label={`${isActive ? 'Revoke' : 'Grant'} access for ${rater.name}`}
+                              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                isActive
+                                  ? 'bg-rose-600 text-white hover:bg-rose-700'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <ShieldOff className="h-3.5 w-3.5" /> {isPending ? 'Revoking…' : 'Revoke Access'}
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck className="h-3.5 w-3.5" /> {isPending ? 'Granting…' : 'Grant Access'}
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

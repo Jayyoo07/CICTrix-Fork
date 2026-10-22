@@ -15,7 +15,6 @@ import {
   Save,
   Search,
   UserCheck,
-  Users,
   X,
 } from 'lucide-react';
 import { SortButton, SortHeader, toTime, useTableSort } from './tableSort';
@@ -27,7 +26,6 @@ import {
   type InterviewerOption,
 } from '../lib/applicantSchedule';
 import type { ApplicantRecord } from './QualifiedApplicantsSection';
-import { RaterManagementSubsection } from './RaterManagementSubsection';
 import { ScheduleApplicantsModal } from './ScheduleApplicantsModal';
 import { SchedulingTree } from './SchedulingTree';
 import { SkeletonList, useDelayedLoading } from './table-loading';
@@ -109,7 +107,10 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   const showLoader = useDelayedLoading(loading);
   const awaitingData = loading || showLoader;
 
-  const [subTab, setSubTab] = useState<'pending' | 'scheduled' | 'rater-management'>('pending');
+  // Rater Management used to be a third subtab here. It now lives only on the
+  // sidebar's Rater Management page, which carries the same controls plus the
+  // position assignments this panel never showed.
+  const [subTab, setSubTab] = useState<'pending' | 'scheduled'>('pending');
   const [interviewers, setInterviewers] = useState<InterviewerOption[]>([]);
   const [overrides, setOverrides] = useState<Record<string, ApplicantAssignmentFields>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -397,17 +398,6 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
             </span>
           )}
         </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('rater-management')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'rater-management'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <Users size={14} />
-          Rater Management
-        </button>
       </div>
 
       {/* ── PENDING ASSIGNMENT VIEW ── */}
@@ -508,11 +498,6 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
             setToast(message);
           }}
         />
-      )}
-
-      {/* ── RATER MANAGEMENT TAB ── */}
-      {subTab === 'rater-management' && (
-        <RaterManagementSubsection onAccessChange={() => void fetchActiveInterviewers().then(setInterviewers)} />
       )}
 
       {/* ── SCHEDULED VIEW ── */}

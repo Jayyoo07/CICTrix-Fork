@@ -5,7 +5,6 @@ import type { JobPosting } from '../types/recruitment.types';
 vi.mock('../lib/recruitmentData', () => ({
   formatPHDate: (value: string) => value.slice(0, 10),
 }));
-vi.mock('../hooks/useSalarySchedule', () => ({ useSalarySchedule: () => [] }));
 
 import { JobVacanciesPanel } from './JobVacanciesPanel';
 
@@ -22,14 +21,14 @@ const position = (id: string, title: string, status: JobPosting['status'], extra
   applicationDeadline: '',
   postedDate: '2026-10-10T00:00:00.000Z',
   qualifications: { education: 'BS Civil Engineering', experience: { years: 2, field: 'Engineering' }, skills: [], certifications: [] },
-  plantillaSlots: [{ id: `${id}-s1`, jobPostingId: id, slotNumber: 1, label: 'Plantilla 21', itemNumber: 'PLT-x', status: 'open' }],
+  plantillaSlots: [{ id: `${id}-s1`, jobPostingId: id, slotNumber: 1, label: `Plantilla ${id.charCodeAt(0)}`, itemNumber: 'PLT-x', status: 'open' }],
   ...extra,
 }) as unknown as JobPosting;
 
 const jobs = [
   position('a', 'Engineer III', 'Active', { applicationDeadline: '2099-11-15' }),
-  position('b', 'Engineer II', 'Filled'),
-  position('c', 'Engineer I', 'Draft'),
+  position('b', 'Engineer II', 'Active', { applicationDeadline: '2020-01-01' }), // deadline passed
+  position('c', 'Engineer I', 'Closed'),
   position('d', 'Nurse II', 'Draft', { department: 'City Health Office' }),
 ];
 
@@ -37,9 +36,13 @@ const renderPanel = (overrides: Partial<Parameters<typeof JobVacanciesPanel>[0]>
   const props = {
     jobs,
     loading: false,
-    onOpenVacancy: vi.fn().mockResolvedValue(undefined),
-    onUpdateDeadline: vi.fn(),
+    applicantCounts: new Map([['a', 7]]),
+    activeVacancies: new Map([['a', { jobPostingId: 'a', openedOn: '2026-10-20', deadline: '2099-11-15' }]]),
+    onOpenVacancy: vi.fn().mockResolvedValue(true),
     onClose: vi.fn(),
+    onDetails: vi.fn(),
+    onApplicants: vi.fn(),
+    onCreatePosition: vi.fn(),
     ...overrides,
   };
   render(<JobVacanciesPanel {...props} />);
@@ -47,69 +50,75 @@ const renderPanel = (overrides: Partial<Parameters<typeof JobVacanciesPanel>[0]>
 };
 
 describe('JobVacanciesPanel', () => {
-  it('lists only opened vacancies, not unopened positions', () => {
+  it('lists only open vacancies, with date opened and applicants', () => {
     renderPanel();
     const table = screen.getByRole('table');
-    expect(within(table).getByText('Engineer III')).toBeTruthy();
+    const row = within(table).getByText('Engineer III').closest('tr') as HTMLElement;
+    expect(within(row).getByText('2026-10-20')).toBeTruthy();
+    expect(within(row).getByText('7')).toBeTruthy();
+    expect(within(table).queryByText('Engineer II')).toBeNull();
     expect(within(table).queryByText('Engineer I')).toBeNull();
     expect(within(table).queryByText('Nurse II')).toBeNull();
   });
 
-  it('leaves filled plantillas out, and drops a posting once all of them are filled', () => {
-    const slot = (id: string, n: number, status: 'open' | 'filled') =>
-      ({ id: `${id}-${n}`, jobPostingId: id, slotNumber: n, label: `Plantilla ${n}`, itemNumber: `PLT-${id}-${n}`, status });
-    renderPanel({
-      jobs: [
-        position('m', 'Clerk II', 'Active', { plantillaSlots: [slot('m', 31, 'open'), slot('m', 32, 'filled')] }),
-        position('f', 'Administrative Aide IV (Clerk II)', 'Active', { plantillaSlots: [slot('f', 40, 'filled')] }),
-      ],
-    });
-    const table = screen.getByRole('table');
-    const row = within(table).getByText('Clerk II').closest('tr') as HTMLElement;
-    expect(within(row).getByText('31')).toBeTruthy();
-    expect(within(row).queryByText(/32/)).toBeNull();
-    expect(within(table).queryByText('Administrative Aide IV (Clerk II)')).toBeNull();
+  it('shows the empty state when nothing is open', () => {
+    renderPanel({ jobs: [jobs[2], jobs[3]] });
+    expect(screen.getByText(/No open vacancies\. Click 'Open Vacant Job Position' to open one\./)).toBeTruthy();
   });
 
-  it('suggests positions from one typed letter and blocks open or filled ones', () => {
+  it('closes, opens details and applicants from the row', () => {
+    const props = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /Close Vacancy/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Applicants' }));
+    expect(props.onClose).toHaveBeenCalledWith(jobs[0]);
+    expect(props.onDetails).toHaveBeenCalledWith(jobs[0]);
+    expect(props.onApplicants).toHaveBeenCalledWith(jobs[0]);
+    expect(screen.queryByRole('button', { name: /Edit Deadline/ })).toBeNull();
+  });
+
+  it('offers closed positions and shows open ones as Already open', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /Open Vacant Job Position/ }));
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'e' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Job position/ }), { target: { value: 'e' } });
 
     const options = screen.getAllByRole('option');
-    expect(options.map((o) => o.textContent)).toEqual(
-      expect.arrayContaining([expect.stringContaining('Engineer I'), expect.stringContaining('Engineer III')]),
-    );
-    const open = options.find((o) => o.textContent?.includes('Already open'));
-    const filled = options.find((o) => o.textContent?.includes('Filled'));
+    const open = options.find((o) => o.textContent?.includes('Engineer III'));
+    const expired = options.find((o) => o.textContent?.includes('Engineer II') && !o.textContent?.includes('III'));
     expect(open?.getAttribute('aria-disabled')).toBe('true');
-    expect(filled?.getAttribute('aria-disabled')).toBe('true');
+    expect(open?.textContent).toContain('Already open');
+    expect(expired?.getAttribute('aria-disabled')).toBe('false');
   });
 
-  it('fills read-only details from the position and only asks for the deadline', async () => {
+  it('says when no closed position matches and links to Create Job Position', () => {
     const props = renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /Open Vacant Job Position/ }));
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'nur' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Job position/ }), { target: { value: 'zzz' } });
+    expect(screen.getByText('No matching job position found.')).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Create Job Position' }));
+    expect(props.onCreatePosition).toHaveBeenCalled();
+  });
+
+  it('opens a picked position with a deadline, date opened and remarks', async () => {
+    const props = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /Open Vacant Job Position/ }));
+    fireEvent.change(screen.getByRole('combobox', { name: /Job position/ }), { target: { value: 'nur' } });
     fireEvent.mouseDown(screen.getByRole('option', { name: /Nurse II/ }));
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('SG 19 · ₱51,357')).toBeTruthy();
-    expect(within(dialog).getByText('Plantilla 21')).toBeTruthy();
     const submit = screen.getByRole('button', { name: 'Open Vacancy' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
 
+    fireEvent.change(screen.getByLabelText(/Application deadline/), { target: { value: '2020-01-01' } });
+    expect(submit.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Application deadline/), { target: { value: '2099-12-01' } });
+    fireEvent.change(screen.getByLabelText(/Date opened/), { target: { value: '2099-11-01' } });
+    fireEvent.change(screen.getByLabelText(/Remarks/), { target: { value: 'Second call' } });
     expect(submit.disabled).toBe(false);
     fireEvent.click(submit);
-    await vi.waitFor(() => expect(props.onOpenVacancy).toHaveBeenCalledWith(jobs[3], '2099-12-01'));
-  });
-
-  it('edits only the deadline of an open vacancy', () => {
-    const props = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Edit Deadline/ }));
-    expect(screen.queryByRole('combobox')).toBeNull();
-    fireEvent.change(screen.getByLabelText(/Application deadline/), { target: { value: '2099-12-20' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Deadline' }));
-    return vi.waitFor(() => expect(props.onUpdateDeadline).toHaveBeenCalledWith(jobs[0], '2099-12-20'));
+    await vi.waitFor(() => expect(props.onOpenVacancy).toHaveBeenCalledWith(jobs[3], {
+      deadline: '2099-12-01', openedOn: '2099-11-01', remarks: 'Second call',
+    }));
   });
 });

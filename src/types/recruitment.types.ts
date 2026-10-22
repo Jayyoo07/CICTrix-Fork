@@ -96,7 +96,7 @@ export interface JobPosting {
   applicationDeadline: string;
   interviewPeriod?: { start: string; end: string };
   expectedStartDate?: string;
-  status: 'Draft' | 'Active' | 'Closed' | 'Filled';
+  status: 'Draft' | 'Active' | 'Closed';
   postedDate: string;
   postedBy: string;
   applicantCount: number;

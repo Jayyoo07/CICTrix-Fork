@@ -147,6 +147,15 @@
 :is(.abyan-ds, .rsp-ds) .btn-ghost-white:hover { background: var(--on-blue-hover); }
 :is(.abyan-ds, .rsp-ds) .btn-ghost-white:focus-visible { background: var(--on-blue-active); box-shadow: 0 0 0 3px var(--on-blue-border); }
 
+/* Destructive (§9.1): irreversible actions only, always behind a confirmation. */
+:is(.abyan-ds, .rsp-ds) .btn-destructive { background: var(--error-500); color: var(--color-white); }
+:is(.abyan-ds, .rsp-ds) .btn-destructive:hover { background: var(--error-700); }
+:is(.abyan-ds, .rsp-ds) .btn-destructive:focus-visible { box-shadow: 0 0 0 3px var(--error-300); }
+:is(.abyan-ds, .rsp-ds) .btn-destructive:disabled { background: var(--error-300); cursor: not-allowed; }
+:is(.abyan-ds, .rsp-ds) .btn-destructive-outline { background: var(--bg-surface); color: var(--error-700); border-color: var(--error-500); }
+:is(.abyan-ds, .rsp-ds) .btn-destructive-outline:hover { background: var(--error-100); }
+:is(.abyan-ds, .rsp-ds) .btn-destructive-outline:focus-visible { box-shadow: 0 0 0 3px var(--error-300); }
+
 /* Status badges, soft style (§9.8) */
 :is(.abyan-ds, .rsp-ds) .badge {
   display: inline-flex; align-items: center; gap: 6px;

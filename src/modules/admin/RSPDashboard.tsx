@@ -413,7 +413,7 @@ const mapRecruitmentPostingsToDashboardJobs = (rows: JobPosting[]): JobRecord[] 
     item_number: String(item.jobCode ?? ''),
     department: String(item.department ?? 'Unassigned'),
     status:
-      item.status === 'Closed' || item.status === 'Filled'
+      item.status === 'Closed'
         ? 'Closed'
         : item.status === 'Draft'
           ? 'Reviewing'

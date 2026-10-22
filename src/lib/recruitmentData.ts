@@ -460,7 +460,6 @@ const mapJobPostingToSupabaseRow = (job: JobPosting) => ({
   // Map the broader app-domain statuses into this allowed set.
   status:
     job.status === 'Active' ? 'Open'
-    : job.status === 'Filled' ? 'Closed'
     : job.status === 'Closed' ? 'Closed'
     : 'On Hold',
 

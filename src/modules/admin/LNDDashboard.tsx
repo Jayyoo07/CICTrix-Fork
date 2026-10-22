@@ -171,7 +171,10 @@ type WarningItem = { id: string; title: string; category: string | null; startDa
 
 const readDismissed = (storageKey: string): string[] => {
   try {
-    const raw = localStorage.getItem(storageKey);
+    // Clear the key an earlier build wrote to localStorage, which hid these
+    // warnings permanently.
+    localStorage.removeItem(storageKey);
+    const raw = sessionStorage.getItem(storageKey);
     return raw ? (JSON.parse(raw) as string[]) : [];
   } catch {
     return [];
@@ -179,9 +182,11 @@ const readDismissed = (storageKey: string): string[] => {
 };
 
 /**
- * An admin can dismiss a warning with its X. The dismissal is remembered per
- * browser for the trainings listed at the time, so the warning returns only
- * when a training that was not on the list joins it.
+ * An admin can dismiss a warning with its X. The dismissal lasts for the
+ * session only: it clears the warning out of the way now, and the warning is
+ * back the next time the admin opens the system, to be dismissed again. These
+ * say a training went live incomplete, which stays true until someone acts on
+ * it, so a permanent dismissal would bury it.
  */
 const DismissibleWarning = ({ storageKey, title, message, items }: {
   storageKey: string;
@@ -195,7 +200,7 @@ const DismissibleWarning = ({ storageKey, title, message, items }: {
   const dismiss = () => {
     const ids = items.map((item) => item.id);
     setDismissed(ids);
-    try { localStorage.setItem(storageKey, JSON.stringify(ids)); } catch { /* storage unavailable */ }
+    try { sessionStorage.setItem(storageKey, JSON.stringify(ids)); } catch { /* storage unavailable */ }
   };
 
   return (

@@ -12,6 +12,13 @@ import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-load
 import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
 import { mockDatabase } from '../lib/mockDatabase';
 import { isMockModeEnabled, supabase } from '../lib/supabase';
+import {
+  listRaterCandidates,
+  matchRaterAccount,
+  matchRaterAccountByName,
+  notifyRaterAdded,
+  type RaterCandidate,
+} from '../lib/api/raterAccounts';
 import { RaterManagementNavigationGuide } from './RaterManagementNavigationGuide';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
@@ -196,6 +203,8 @@ export const RaterManagementPage = () => {
   const [newEmail, setNewEmail] = useState('');
   const [addError, setAddError] = useState('');
   const [adding, setAdding] = useState(false);
+  /** Active employees, for the suggestions and the account check. */
+  const [candidates, setCandidates] = useState<RaterCandidate[]>([]);
   const [toast, setToast] = useState('');
   /** Email of the rater whose access change is in flight, for the button label. */
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
@@ -357,6 +366,28 @@ export const RaterManagementPage = () => {
   // with the rest of the page's extra chrome.
   const filteredRaters = ratersData;
 
+  useEffect(() => {
+    if (!showAddForm || candidates.length > 0) return;
+    let cancelled = false;
+    void listRaterCandidates().then((rows) => {
+      if (!cancelled) setCandidates(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showAddForm, candidates.length]);
+
+  /**
+   * The employee this rater is, if any. An empty candidate list means the
+   * employee read failed, so the panel says nothing rather than claiming the
+   * account does not exist.
+   */
+  const matchedAccount = useMemo(
+    () => matchRaterAccount(newEmail, candidates),
+    [newEmail, candidates],
+  );
+  const accountCheckable = candidates.length > 0 && newEmail.trim().length > 0;
+
   const resetAddForm = () => {
     setNewName('');
     setNewEmail('');
@@ -398,9 +429,15 @@ export const RaterManagementPage = () => {
       await loadRaters();
       // Lets the assignment dropdown pick up a freshly added active rater.
       window.dispatchEvent(new CustomEvent('cictrix:raters-updated'));
+
+      // Best-effort: the rater exists by now, so a failed notification must not
+      // read as a failed add. An unmatched rater has no inbox to write to.
+      const account = matchRaterAccount(trimmedEmail, candidates);
+      const notified = account ? await notifyRaterAdded(account) : false;
+
       resetAddForm();
       setShowAddForm(false);
-      setToast(`${trimmedName} added.`);
+      setToast(notified ? `${trimmedName} added and notified.` : `${trimmedName} added.`);
     } catch (err) {
       console.error('[RaterManagementPage] add threw', err);
       setAddError('Could not add the rater.');
@@ -497,11 +534,26 @@ export const RaterManagementPage = () => {
                   </label>
                   <input
                     type="text"
+                    list="rater-name-options"
                     value={newName}
-                    onChange={(event) => setNewName(event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewName(value);
+                      // Picking a suggestion fills the other field, so the admin
+                      // types one thing and gets a matched account.
+                      const picked = matchRaterAccountByName(value, candidates);
+                      if (picked && !newEmail.trim()) setNewEmail(picked.email);
+                    }}
                     placeholder="e.g. Melchor U. Tan"
                     className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
                   />
+                  <datalist id="rater-name-options">
+                    {candidates.map((employee) => (
+                      <option key={`name-${employee.id}`} value={employee.name}>
+                        {employee.position || employee.department}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-700">
@@ -509,11 +561,36 @@ export const RaterManagementPage = () => {
                   </label>
                   <input
                     type="email"
+                    list="rater-email-options"
                     value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewEmail(value);
+                      const picked = matchRaterAccount(value, candidates);
+                      if (picked && !newName.trim()) setNewName(picked.name);
+                    }}
                     placeholder="e.g. interviewer@cictrix.gov.ph"
                     className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
                   />
+                  <datalist id="rater-email-options">
+                    {candidates.map((employee) => (
+                      <option key={`email-${employee.id}`} value={employee.email}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </datalist>
+                  {accountCheckable && matchedAccount && (
+                    <p className="!mb-0 mt-1.5 text-xs font-medium text-green-700">
+                      Account found: {matchedAccount.name}
+                      {matchedAccount.position ? ` · ${matchedAccount.position}` : ''}
+                      {matchedAccount.department ? ` · ${matchedAccount.department}` : ''}
+                    </p>
+                  )}
+                  {accountCheckable && !matchedAccount && (
+                    <p className="!mb-0 mt-1.5 text-xs font-medium text-rose-600">
+                      Account not found. This rater has no employee account and won't be notified.
+                    </p>
+                  )}
                 </div>
               </div>
 

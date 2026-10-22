@@ -848,14 +848,18 @@ export const RaterManagementPage = () => {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{rater.lastLogin}</td>
                     <td className="whitespace-nowrap px-6 py-4">{statusBadge(rater.status)}</td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-2">
+                        {/* Outline, not filled: §9.1 keeps one filled button
+                            per group, and access is the emphasised action. The
+                            label says what the pencil never did — this opens
+                            the position assignments, not a rater's details. */}
                         <button
                           type="button"
-                          className="text-blue-500 hover:text-blue-700"
-                          aria-label={`Edit ${rater.name}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl border-[1.5px] border-blue-600 px-3.5 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50"
+                          aria-label={`Assign positions for ${rater.name}`}
                           onClick={() => openAssignModal(rater)}
                         >
-                          <PenLine className="h-4 w-4" />
+                          <PenLine className="h-3.5 w-3.5" /> Assign Positions
                         </button>
                         {/* Labelled rather than a bare tick or cross. This
                             control grants or removes access to the interviewer

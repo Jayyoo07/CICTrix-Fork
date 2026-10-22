@@ -526,11 +526,10 @@ export const ForHiringPage = () => {
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
-          <div className="border-b border-slate-200 bg-white px-8 py-6">
-            <h1 className="!mb-1 !text-2xl font-bold">For Hiring</h1>
-            <p className="!mb-0 text-base text-slate-500">Select one applicant per plantilla. Their credentials are generated after they sign.</p>
-          </div>
-          <ApplicantsTabBar />
+          <ApplicantsTabBar
+            title="For Hiring"
+            subtitle="Select one applicant per plantilla. Their credentials are generated after they sign."
+          />
           {children}
         </main>
       </div>

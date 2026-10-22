@@ -204,11 +204,10 @@ export const QualifiedApplicantsRSPPage = ({ mode = 'score' }: QualifiedApplican
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
-          <div className="border-b border-slate-200 bg-white px-8 py-6">
-            <h1 className="!mb-1 !text-2xl font-bold">{mode === 'pending' ? 'Qualified Applicants' : 'Applicant Score'}</h1>
-            <p className="!mb-0 text-base text-slate-500">{mode === 'pending' ? 'Applicants who passed evaluation and are eligible for further processing' : 'View and update applicant evaluation scores for original and promotional applicants'}</p>
-          </div>
-          <ApplicantsTabBar />
+          <ApplicantsTabBar
+            title={mode === 'pending' ? 'Qualified Applicants' : 'Applicant Score'}
+            subtitle={mode === 'pending' ? 'Applicants who passed evaluation and are eligible for further processing' : 'View and update applicant evaluation scores for original and promotional applicants'}
+          />
           <div className="p-6">
             {mode === 'pending' ? (
               <PendingAssignmentList

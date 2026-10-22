@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  daysUntilDeadline, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
+  daysUntilDeadline, dashboardPostingStatus, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
 } from './vacancySearch';
 import type { JobPosting } from '../types/recruitment.types';
 
@@ -93,5 +93,14 @@ describe('daysUntilDeadline / vacancyStatus', () => {
     expect(vacancyStatus(job('A', 'Active', '2026-10-19'), today)).toEqual({ label: 'Closing soon', tone: 'warning' });
     expect(vacancyStatus(job('A', 'Active', '2026-10-18'), today)).toEqual({ label: 'Closed', tone: 'neutral' });
     expect(vacancyStatus(job('A', 'Closed', '2026-11-15'), today)).toEqual({ label: 'Closed', tone: 'neutral' });
+  });
+});
+
+describe('dashboardPostingStatus', () => {
+  it('closes an Open posting whose deadline has passed, and leaves the rest alone', () => {
+    expect(dashboardPostingStatus('Open', job('A', 'Active', '2026-10-18'), today)).toBe('Closed');
+    expect(dashboardPostingStatus('Open', job('A', 'Active', '2026-11-15'), today)).toBe('Open');
+    expect(dashboardPostingStatus('Reviewing', job('A', 'Draft'), today)).toBe('Reviewing');
+    expect(dashboardPostingStatus('Open', undefined, today)).toBe('Open');
   });
 });

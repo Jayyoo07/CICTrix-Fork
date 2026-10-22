@@ -350,29 +350,25 @@ export const ApplicationsListPage = () => {
         <main className="admin-content bg-slate-50 !p-0">
           {positionId ? (
             // Opened from Job Posts › Job Vacancies › Applicants: the title names the vacancy.
-            <div className="flex flex-wrap items-start gap-4 border-b border-slate-200 bg-white px-8 py-6">
-              <div className="min-w-0">
+            <ApplicantsTabBar
+              breadcrumb={(
                 <Link to="/admin/rsp/jobs" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
                   ‹ Back to Job Vacancies
                 </Link>
-                <h1 className="!mb-1 mt-1 !text-2xl font-bold">
-                  {position === null ? 'This position no longer exists' : `Applicants for ${position?.title ?? '…'}`}
-                </h1>
-                <p className="!mb-0 text-base text-slate-500">{positionDetails || ' '}</p>
-              </div>
-              <button type="button" onClick={clearPositionFilter}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]">
-                <X className="h-3.5 w-3.5" aria-hidden="true" />
-                Clear filter
-              </button>
-            </div>
+              )}
+              title={position === null ? 'This position no longer exists' : `Applicants for ${position?.title ?? '…'}`}
+              subtitle={positionDetails || ' '}
+              actions={(
+                <button type="button" onClick={clearPositionFilter}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]">
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Clear filter
+                </button>
+              )}
+            />
           ) : (
-            <div className="border-b border-slate-200 bg-white px-8 py-6">
-              <h1 className="!mb-1 !text-2xl font-bold">Applications</h1>
-              <p className="!mb-0 text-base text-slate-500">All applicants submitted across all job positions</p>
-            </div>
+            <ApplicantsTabBar title="Applications" subtitle="All applicants submitted across all job positions" />
           )}
-          <ApplicantsTabBar />
 
           <div className="p-6">
 

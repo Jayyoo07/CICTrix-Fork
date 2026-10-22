@@ -134,11 +134,10 @@ export const GenerateCredentialsPage = () => {
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
-          <div className="border-b border-slate-200 bg-white px-8 py-6">
-            <h1 className="!mb-1 !text-2xl font-bold">Generate Employee Credentials</h1>
-            <p className="!mb-0 text-base text-slate-500">Selected applicants waiting for contract signing</p>
-          </div>
-          <ApplicantsTabBar />
+          <ApplicantsTabBar
+            title="Generate Employee Credentials"
+            subtitle="Selected applicants waiting for contract signing"
+          />
 
           <div className="p-6">
             {/* §9.4 toolbar */}

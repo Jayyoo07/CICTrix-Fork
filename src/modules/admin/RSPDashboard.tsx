@@ -36,6 +36,7 @@ import { QualifiedApplicantsSection } from '../../components/QualifiedApplicants
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { getAdminEmail } from '../../lib/adminSession';
 import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/applicantStatus';
+import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { fetchArchivedApplicants, type ArchivedApplicant } from '../../lib/hiringFlow';
 import { NotSelectedArchive } from '../../components/NotSelectedArchive';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
@@ -3363,12 +3364,18 @@ export const RSPDashboard = () => {
           {section === 'dashboard' && (
             <div className="dash-lg">
             <RspDashboardOverview
-              jobs={jobsWithCounts.map((job) => ({ ...job, applicationDeadline: job.posting?.applicationDeadline }))}
+              // Open = accepting applications now (status and Manila deadline),
+              // the rule the Job Vacancies tab counts with.
+              jobs={jobsWithCounts.map((job) => ({
+                ...job,
+                status: dashboardPostingStatus(job.status, job.posting),
+                applicationDeadline: job.posting?.applicationDeadline,
+              }))}
               applicants={applicants}
               evaluatedApplicantIds={evaluatedApplicantIds}
               stageOf={funnelStageOf}
               onOpenJobs={() => goToSection('jobs')}
-              onOpenApplicants={() => navigate('/interviewer/dashboard')}
+              onOpenApplicants={() => navigate('/admin/rsp/applications')}
               onOpenQualified={() => goToSection('qualified')}
               onOpenSuccession={() => goToSection('succession')}
               onOpenNewHired={() => goToSection('new-hired')}

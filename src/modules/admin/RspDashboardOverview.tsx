@@ -227,16 +227,17 @@ export function RspDashboardOverview({
       oldestWait,
       screened,
       qualifiedRate: screened > 0 ? pct(reachedQualified, screened) : null,
+      // Each row opens the list behind it (docs/plans/2026-10-23-applicant-kpi-links-and-applicants-tabs.md).
       funnel: [
-        { label: 'Received', value: scoped.length, tone: 'accent' },
-        { label: 'Shortlisted', value: reachedShortlisted, tone: 'accent' },
-        { label: 'Qualified', value: reachedQualified, tone: 'accent' },
-        { label: 'Hired', value: hired, tone: 'ok' },
+        { label: 'Received', value: scoped.length, tone: 'accent', open: onOpenApplicants },
+        { label: 'Shortlisted', value: reachedShortlisted, tone: 'accent', open: onOpenApplicants },
+        { label: 'Qualified', value: reachedQualified, tone: 'accent', open: onOpenQualified },
+        { label: 'Hired', value: hired, tone: 'ok', open: onOpenNewHired },
       ],
       closedOut,
       hiredElsewhere,
     };
-  }, [applicants, department, period, stageOf, today]);
+  }, [applicants, department, period, stageOf, today, onOpenApplicants, onOpenQualified, onOpenNewHired]);
 
   const perVacancy = postings.open > 0 ? (applicantStats.total / postings.open).toFixed(1) : '—';
 
@@ -451,21 +452,27 @@ export function RspDashboardOverview({
             <div className="rd-card">
               <div className="rd-h"><h3>Applicants</h3><button type="button" className="rd-link" onClick={onOpenApplicants}>All applicants ›</button></div>
               <div className="rd-stats rd-s4">
-                <div className="rd-stat"><span className="l">This {period}</span><span className="v">{applicantStats.total}</span></div>
-                <div className={`rd-stat ${applicantStats.pending ? 'warn' : ''}`}>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenApplicants}>
+                  <span className="l">This {period}</span><span className="v">{applicantStats.total}</span>
+                </button>
+                <button type="button" className={`rd-stat rd-stat-link ${applicantStats.pending ? 'warn' : ''}`} onClick={onOpenApplicants}>
                   <span className="l">Unscreened</span>
                   <span className="v">{applicantStats.pending}{applicantStats.pending > 0 && <small> oldest {applicantStats.oldestWait}d</small>}</span>
-                </div>
-                <div className="rd-stat"><span className="l">Per vacancy</span><span className="v">{perVacancy}</span></div>
-                <div className="rd-stat"><span className="l">Qualified</span><span className="v">{applicantStats.qualifiedRate ?? '—'}{applicantStats.qualifiedRate !== null && <small>%</small>}</span></div>
+                </button>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenJobs}>
+                  <span className="l">Per vacancy</span><span className="v">{perVacancy}</span>
+                </button>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenQualified}>
+                  <span className="l">Qualified</span><span className="v">{applicantStats.qualifiedRate ?? '—'}{applicantStats.qualifiedRate !== null && <small>%</small>}</span>
+                </button>
               </div>
               <span className="rd-subtitle rd-block">Application funnel · {PERIOD_LABEL[period]}</span>
               {applicantStats.funnel.map((f) => (
-                <div key={f.label} className="rd-fun">
+                <button key={f.label} type="button" className="rd-fun rd-fun-link" onClick={f.open}>
                   <span>{f.label}</span>
-                  <div className="rd-bar"><i style={{ width: `${pct(f.value, applicantStats.total)}%`, background: f.tone === 'ok' ? 'var(--rd-ok)' : 'var(--rd-accent)' }} /></div>
+                  <span className="rd-bar"><i style={{ width: `${pct(f.value, applicantStats.total)}%`, background: f.tone === 'ok' ? 'var(--rd-ok)' : 'var(--rd-accent)' }} /></span>
                   <b>{f.value}</b>
-                </div>
+                </button>
               ))}
               {applicantStats.screened > 0 && (
                 <p className="rd-conv">

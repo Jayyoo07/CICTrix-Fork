@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { RspDashboardOverview, type OverviewApplicant, type OverviewFunnelStage, type OverviewJob } from './RspDashboardOverview';
 
@@ -35,6 +35,13 @@ const applicant = (id: string, status: string, extra: Partial<OverviewApplicant>
 
 const stageOf = (status: string) => status as OverviewFunnelStage;
 
+const handlers = {
+  onOpenJobs: vi.fn(),
+  onOpenApplicants: vi.fn(),
+  onOpenQualified: vi.fn(),
+  onOpenNewHired: vi.fn(),
+};
+
 const renderOverview = (applicants: OverviewApplicant[], evaluated = new Set<string>()) =>
   render(
     <RspDashboardOverview
@@ -46,11 +53,11 @@ const renderOverview = (applicants: OverviewApplicant[], evaluated = new Set<str
       applicants={applicants}
       evaluatedApplicantIds={evaluated}
       stageOf={stageOf}
-      onOpenJobs={() => {}}
-      onOpenApplicants={() => {}}
-      onOpenQualified={() => {}}
+      onOpenJobs={handlers.onOpenJobs}
+      onOpenApplicants={handlers.onOpenApplicants}
+      onOpenQualified={handlers.onOpenQualified}
       onOpenSuccession={() => {}}
-      onOpenNewHired={() => {}}
+      onOpenNewHired={handlers.onOpenNewHired}
     />,
   );
 
@@ -86,6 +93,29 @@ describe('RspDashboardOverview', () => {
     const funnel = [...document.querySelectorAll('.rd-fun')].map((row) => row.textContent);
     expect(funnel).toEqual(['Received5', 'Shortlisted3', 'Qualified2', 'Hired1']);
     expect(statValue('Unscreened')).toContain('1');
+  });
+
+  it('opens the list behind each applicant tile and funnel row', () => {
+    Object.values(handlers).forEach((fn) => fn.mockClear());
+    renderOverview([applicant('a1', 'pending')]);
+    const card = screen.getByRole('heading', { name: 'Applicants' }).closest('.rd-card') as HTMLElement;
+    const click = (name: RegExp) => fireEvent.click(within(card).getByRole('button', { name }));
+
+    click(/^All applicants/);
+    click(/^This quarter/);
+    click(/^Unscreened/);
+    click(/^Received/);
+    click(/^Shortlisted/);
+    expect(handlers.onOpenApplicants).toHaveBeenCalledTimes(5);
+
+    click(/^Per vacancy/);
+    expect(handlers.onOpenJobs).toHaveBeenCalledTimes(1);
+
+    within(card).getAllByRole('button', { name: /^Qualified/ }).forEach((button) => fireEvent.click(button));
+    expect(handlers.onOpenQualified).toHaveBeenCalledTimes(2);
+
+    click(/^Hired/);
+    expect(handlers.onOpenNewHired).toHaveBeenCalledTimes(1);
   });
 
   it('groups scheduled applicants into sessions and flags interviews with no scores', () => {

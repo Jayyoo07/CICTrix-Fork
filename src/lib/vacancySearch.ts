@@ -92,3 +92,11 @@ export const vacancyStatus = (job: JobPosting, now = new Date()): { label: strin
   if (days !== null && days <= CLOSING_SOON_DAYS) return { label: 'Closing soon', tone: 'warning' };
   return { label: 'Open', tone: 'success' };
 };
+
+/**
+ * The RSP dashboard's posting status: a posting it would call Open stays Open
+ * only while it is still accepting applications, so Per vacancy and the open
+ * and closing-soon counts agree with the Job Vacancies tab.
+ */
+export const dashboardPostingStatus = <S extends string>(status: S, posting: JobPosting | undefined, now = new Date()): S | 'Closed' =>
+  (status === 'Open' && posting && !isOpenVacancy(posting, now) ? 'Closed' : status);

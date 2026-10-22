@@ -68,9 +68,9 @@ describe('JobVacanciesPanel', () => {
   it('offers only Applicants and Close Vacancy on a row', () => {
     const props = renderPanel();
     const row = within(screen.getByRole('table')).getByText('Engineer III').closest('tr') as HTMLElement;
-    expect(within(row).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Applicants (7)', 'Close Vacancy']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Applicants', 'Close Vacancy']);
     fireEvent.click(within(row).getByRole('button', { name: /Close Vacancy/ }));
-    fireEvent.click(within(row).getByRole('button', { name: 'Applicants (7)' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Applicants' }));
     expect(props.onClose).toHaveBeenCalledWith(jobs[0]);
     expect(props.onApplicants).toHaveBeenCalledWith(jobs[0]);
     expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();

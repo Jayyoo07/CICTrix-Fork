@@ -70,50 +70,66 @@ export const JobVacanciesPanel = ({
   const rows = vacancies.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   return (
+    <>
+    {/* Primary action sits on its own row at the left, like Create Job Position on the Job Positions tab. */}
+    <div className="abyan-ds mb-5 flex justify-start">
+      <button type="button" className="btn btn-md btn-primary" onClick={() => setDialogOpen(true)}>
+        <Briefcase size={16} />
+        Open Vacant Job Position
+      </button>
+    </div>
+
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      {/* Table toolbar (§9.4) */}
-      <div className="mb-4 flex flex-wrap items-start gap-4">
-        <div>
-          <h2 className={`!mb-0.5 text-xl font-semibold ${HEADING}`}>Job Vacancies</h2>
-          <p className="!mb-0 text-sm text-slate-500">Positions open for application. They close automatically at the deadline.</p>
+      <div className="mb-4">
+        <h2 className={`!mb-0.5 text-xl font-semibold ${HEADING}`}>Job Vacancies</h2>
+        <p className="!mb-0 text-sm text-slate-500">Positions open for application. They close automatically at the deadline.</p>
+      </div>
+
+      {/* Table toolbar (§9.4), left-aligned so it starts at the card's content edge. */}
+      <div className="abyan-ds mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-9 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm"
+            placeholder="Search title or plantilla…"
+            aria-label="Search vacancies by title or plantilla"
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+          />
         </div>
-        <div className="abyan-ds ml-auto flex flex-wrap items-center gap-3">
-          <div className="relative w-[260px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-9 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm"
-              placeholder="Search title or plantilla…"
-              aria-label="Search vacancies by title or plantilla"
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-            />
-          </div>
-          <select
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-            aria-label="Filter by office"
-            value={officeFilter}
-            onChange={(event) => { setOfficeFilter(event.target.value); setPage(1); }}
-          >
-            <option value="all">All Offices</option>
-            {officeOptions.map((office) => <option key={office} value={office}>{office}</option>)}
-          </select>
-          <button type="button" className="btn btn-md btn-primary" onClick={() => setDialogOpen(true)}>
-            <Briefcase size={16} />
-            Open Vacant Job Position
-          </button>
-        </div>
+        <select
+          className="h-9 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          aria-label="Filter by office"
+          value={officeFilter}
+          onChange={(event) => { setOfficeFilter(event.target.value); setPage(1); }}
+        >
+          <option value="all">All Offices</option>
+          {officeOptions.map((office) => <option key={office} value={office}>{office}</option>)}
+        </select>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full min-w-full">
+        {/* Fixed layout with set widths; Title and Office share what is left. Below
+            the min width the table scrolls and Actions stays pinned on the right. */}
+        <table className="w-full min-w-[1200px] table-fixed">
+          <colgroup>
+            <col />
+            <col className="w-[96px]" />
+            <col />
+            <col className="w-[128px]" />
+            <col className="w-[168px]" />
+            <col className="w-[112px]" />
+            <col className="w-[96px]" />
+            <col className="w-[300px]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               {['Position title', 'Plantilla(s)', 'Office / Department', 'Date opened', 'Application deadline'].map((label) => (
-                <th key={label} scope="col" className={`px-4 py-2.5 text-left text-[13px] font-semibold ${HEADING}`}>{label}</th>
+                <th key={label} scope="col" className={`whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold ${HEADING}`}>{label}</th>
               ))}
-              <th scope="col" className={`px-4 py-2.5 text-right text-[13px] font-semibold ${HEADING}`}>Applicants</th>
-              <th scope="col" className={`px-4 py-2.5 text-left text-[13px] font-semibold ${HEADING}`}>Status</th>
-              <th scope="col" className={`px-4 py-2.5 text-right text-[13px] font-semibold ${HEADING}`}>Actions</th>
+              <th scope="col" className={`whitespace-nowrap px-4 py-3 text-right text-[13px] font-semibold ${HEADING}`}>Applicants</th>
+              <th scope="col" className={`whitespace-nowrap px-4 py-3 text-left text-[13px] font-semibold ${HEADING}`}>Status</th>
+              <th scope="col" className={`sticky right-0 whitespace-nowrap border-l border-slate-200 bg-slate-50 px-4 py-3 text-right text-[13px] font-semibold ${HEADING}`}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -124,21 +140,27 @@ export const JobVacanciesPanel = ({
               const status = vacancyStatus(job);
               const openedOn = activeVacancies.get(job.id)?.openedOn || job.postedDate;
               const numbers = plantillaNumbers(job);
+              // Office on the first line, division (when there is one) muted below it.
+              const division = String(job.division ?? '').trim();
+              const office = division ? formatOfficeName(job.department) : formatOfficeLabel(job.department);
               return (
-                <tr key={job.id} className="border-b border-slate-100 last:border-0 hover:bg-[#F8FAFF]">
-                  <td className="px-4 py-3">
-                    <p className={`!mb-0 text-sm font-semibold ${HEADING}`}>{job.title}</p>
+                <tr key={job.id} className="group border-b border-slate-100 last:border-0 hover:bg-[#F8FAFF]">
+                  <td className="px-4 py-3 align-middle">
+                    <p className={`!mb-0 line-clamp-2 text-sm font-semibold ${HEADING}`} title={job.title}>{job.title}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{numbers.length > 0 ? numbers.join(', ') : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{formatOfficeLabel(job.department, job.division)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{openedOn ? formatPHDate(openedOn) : '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{job.applicationDeadline ? formatPHDate(job.applicationDeadline) : 'Not set'}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-700">{applicantCounts?.get(job.id) ?? '—'}</td>
-                  <td className="px-4 py-3"><span className={`badge ${BADGE_CLASS[status.tone]}`}>{status.label}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="abyan-ds flex justify-end gap-2">
+                  <td className="truncate px-4 py-3 align-middle text-sm text-slate-700" title={numbers.join(', ')}>{numbers.length > 0 ? numbers.join(', ') : '—'}</td>
+                  <td className="px-4 py-3 align-middle">
+                    <p className="!mb-0 truncate text-sm text-slate-700" title={office}>{office}</p>
+                    {division && <p className="!mb-0 truncate text-xs text-slate-500" title={division}>{division}</p>}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-middle text-sm text-slate-700">{openedOn ? formatPHDate(openedOn) : '—'}</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-middle text-sm text-slate-700">{job.applicationDeadline ? formatPHDate(job.applicationDeadline) : 'Not set'}</td>
+                  <td className="px-4 py-3 text-right align-middle text-sm text-slate-700">{applicantCounts?.get(job.id) ?? '—'}</td>
+                  <td className="px-4 py-3 align-middle"><span className={`badge ${BADGE_CLASS[status.tone]}`}>{status.label}</span></td>
+                  <td className="sticky right-0 border-l border-slate-200 bg-white px-4 py-3 align-middle group-hover:bg-[#F8FAFF]">
+                    <div className="abyan-ds flex justify-end gap-2 whitespace-nowrap">
                       <button type="button" className="btn btn-sm btn-secondary" onClick={() => onApplicants(job)}>
-                        <Users size={14} /> Applicants{applicantCounts?.has(job.id) ? ` (${applicantCounts.get(job.id)})` : ''}
+                        <Users size={14} /> Applicants
                       </button>
                       <button type="button" className="btn btn-sm btn-destructive-outline" onClick={() => onClose(job)}>
                         <XCircle size={14} /> Close Vacancy
@@ -186,6 +208,7 @@ export const JobVacanciesPanel = ({
         />
       )}
     </section>
+    </>
   );
 };
 

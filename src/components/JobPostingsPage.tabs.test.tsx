@@ -106,7 +106,9 @@ describe('Job Posts tabs', () => {
   it('sends Applicants to the Applications tab filtered to the position', async () => {
     renderAt('/admin/rsp/jobs');
     // Both applications count: one through its own plantilla, one through a linked plantilla.
-    fireEvent.click(await screen.findByRole('button', { name: 'Applicants (2)' }));
+    const button = await screen.findByRole('button', { name: 'Applicants' });
+    expect(within(button.closest('tr') as HTMLElement).getByText('2')).toBeTruthy();
+    fireEvent.click(button);
     expect(screen.getByTestId('where').textContent).toBe('/admin/rsp/applications?positionId=open');
   });
 });

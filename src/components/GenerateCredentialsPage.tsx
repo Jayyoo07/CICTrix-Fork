@@ -142,15 +142,23 @@ export const GenerateCredentialsPage = () => {
 
           <div className="p-6">
             {/* §9.4 toolbar */}
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="mb-3">
+              <div className="mb-3">
                 <h2 className="text-base font-semibold text-[var(--color-primary-900)]">Awaiting contract signing</h2>
                 <p className="text-sm text-[var(--neutral-600)]">
                   {rows.length} selected applicant{rows.length === 1 ? '' : 's'} in {new Set(rows.map((r) => r.department)).size} department
                   {new Set(rows.map((r) => r.department)).size === 1 ? '' : 's'}. Tick the ones who reported and secured their slot.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center justify-start gap-3">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  disabled={visibleIds.length === 0}
+                  onClick={() => setSelected(toggleGroup(visibleIds, selected))}
+                >
+                  {groupCheckState(visibleIds, selected) === 'checked' ? 'Clear all' : 'Select all'}
+                </button>
                 <label className="relative">
                   <span className="sr-only">Search applicants</span>
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--neutral-400)]" aria-hidden="true" />
@@ -161,19 +169,11 @@ export const GenerateCredentialsPage = () => {
                     className="h-9 w-[260px] rounded-lg border border-[var(--neutral-200)] bg-white pl-9 pr-3 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
                   />
                 </label>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  disabled={visibleIds.length === 0}
-                  onClick={() => setSelected(toggleGroup(visibleIds, selected))}
-                >
-                  {groupCheckState(visibleIds, selected) === 'checked' ? 'Clear all' : 'Select all'}
-                </button>
               </div>
             </div>
 
-            {/* Selection bar: totals across every department. */}
-            <div className="sticky top-[57px] z-[5] mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-primary-200)] bg-[var(--color-primary-50)] px-4 py-2.5">
+            {/* Selection bar: totals across every department, actions beside the count (primary first). */}
+            <div className="sticky top-[57px] z-[5] mb-3 flex flex-wrap items-center justify-start gap-3 rounded-xl border border-[var(--color-primary-200)] bg-[var(--color-primary-50)] px-4 py-2.5">
               <p className="text-sm text-[var(--color-primary-700)]" aria-live="polite">
                 <b>{selected.size} selected</b>
                 {selectedByDept.length > 0 && (
@@ -185,13 +185,13 @@ export const GenerateCredentialsPage = () => {
                   </>
                 )}
               </p>
-              <div className="flex gap-2">
-                <button type="button" className="btn btn-sm btn-secondary" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
-                  Clear
-                </button>
+              <div className="flex items-center gap-2">
                 <button type="button" className="btn btn-md btn-primary" disabled={selected.size === 0} onClick={() => setConfirmGenerate(true)}>
                   <KeyRound className="h-4 w-4" aria-hidden="true" />
                   Generate{selected.size > 0 ? ` (${selected.size})` : ''}
+                </button>
+                <button type="button" className="btn btn-sm btn-secondary" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+                  Clear
                 </button>
               </div>
             </div>

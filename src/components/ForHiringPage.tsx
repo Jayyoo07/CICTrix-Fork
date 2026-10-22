@@ -673,7 +673,7 @@ export const ForHiringPage = () => {
     <Shell>
       <div className="p-6">
         {/* Header */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="mb-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{selectedDept}</p>
             <h1 className="text-xl font-bold text-slate-900">{selectedPosition}</h1>
@@ -685,7 +685,7 @@ export const ForHiringPage = () => {
             type="button"
             disabled={!selectedRow || Boolean(reservedRow)}
             onClick={() => { void handleSelectClick(); }}
-            className="btn btn-md btn-primary"
+            className="btn btn-md btn-primary mt-4"
           >
             <UserCheck className="h-4 w-4" aria-hidden="true" />
             Select for Hiring

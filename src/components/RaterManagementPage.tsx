@@ -3,6 +3,7 @@ import {
   Download,
   PenLine,
   Plus,
+  ChevronRight,
   Search,
   Shield,
   ShieldCheck,
@@ -229,6 +230,21 @@ export const RaterManagementPage = () => {
   const [toast, setToast] = useState('');
   /** Email of the rater whose access change is in flight, for the button label. */
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
+  /**
+   * Row keys whose assigned positions are expanded. Collapsed by default: a
+   * rater with eight positions used to stack eight lines in one cell and set
+   * the height of every other column in that row.
+   */
+  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
+
+  const togglePositions = (key: string) => {
+    setExpandedPositions((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const loadRaters = async () => {
     // Assignments come from Supabase raters.assigned_positions only.
@@ -770,8 +786,11 @@ export const RaterManagementPage = () => {
                   <TableSkeletonRows show={ratersLoad.showSkeleton}
                     columns={['two-line', 'text', 'badge', 'text', 'text', 'badge', 'button']} label="Loading raters…" />
                 )}
-                {!ratersLoad.initialLoading && filteredRaters.map((rater) => (
-                  <tr key={`${rater.source}-${rater.id}-${rater.email}`} className="transition-colors hover:bg-gray-50">
+                {!ratersLoad.initialLoading && filteredRaters.map((rater) => {
+                  const rowKey = `${rater.source}-${rater.id}-${rater.email}`;
+                  const positionsExpanded = expandedPositions.has(rowKey);
+                  return (
+                  <tr key={rowKey} className="transition-colors hover:bg-gray-50">
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center">
                         <div className="mr-3 flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-sm font-bold text-blue-600">
@@ -785,14 +804,46 @@ export const RaterManagementPage = () => {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{rater.designation}</td>
                     <td className="whitespace-nowrap px-6 py-4">{roleBadge('Interviewer')}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        {rater.assignedPositions.map((position) => (
-                          <span key={`${rater.email}-${position}`} className="mb-1 block text-sm text-blue-600 last:mb-0">
-                            {position}
-                          </span>
-                        ))}
-                      </div>
+                    <td className="px-6 py-4 align-top">
+                      {/* A position is a category, not a status, so it reads as a
+                          brand-tint chip rather than blue body text that looks
+                          like a link. One position needs no control; several
+                          collapse to a count so the row keeps its height. */}
+                      {rater.assignedPositions.length === 0 && (
+                        <span className="text-xs font-medium text-gray-400">No positions assigned</span>
+                      )}
+                      {rater.assignedPositions.length === 1 && (
+                        <span className="inline-flex max-w-[220px] items-center truncate rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                          {rater.assignedPositions[0]}
+                        </span>
+                      )}
+                      {rater.assignedPositions.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => togglePositions(rowKey)}
+                            aria-expanded={positionsExpanded}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                          >
+                            <ChevronRight
+                              className={`h-3 w-3 transition-transform motion-reduce:transition-none ${positionsExpanded ? 'rotate-90' : ''}`}
+                            />
+                            {rater.assignedPositions.length} positions
+                          </button>
+                          {positionsExpanded && (
+                            <ul className="mt-2 flex flex-col gap-1.5">
+                              {rater.assignedPositions.map((position) => (
+                                <li
+                                  key={`${rater.email}-${position}`}
+                                  className="border-l-2 border-blue-200 pl-2.5 text-[13px] font-medium text-gray-700"
+                                >
+                                  {position}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{rater.lastLogin}</td>
                     <td className="whitespace-nowrap px-6 py-4">{statusBadge(rater.status)}</td>
@@ -841,7 +892,8 @@ export const RaterManagementPage = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
 
                 {!ratersLoad.initialLoading && filteredRaters.length === 0 && (
                   <tr>

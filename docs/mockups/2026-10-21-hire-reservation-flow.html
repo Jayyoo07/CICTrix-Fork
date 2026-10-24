@@ -1,0 +1,154 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Hire reservation flow (2026-10-21)</title><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"><style>body{font-family:Poppins,sans-serif;background:#F1F5F9;color:#28343D;padding:24px;max-width:1200px;margin:auto}.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}.mockup{border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;background:#fff;margin-bottom:16px}.mockup-header{padding:8px 12px;font-size:12px;color:#515F69;border-bottom:1px solid #E2E8F0}.cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{border:1px solid #E2E8F0;border-radius:12px;background:#fff;overflow:hidden}.card-body{padding:12px}.subtitle{color:#515F69}</style></head><body>
+<p><b>Decision 2026-10-21:</b> steps 1–2 as shown; step 3 = layout B with cross-department selection (second section); printout = option A (cut-out cards). Plan: docs/plans/2026-10-21-hire-reservation-and-credentials.md</p>
+<h2>For Hiring → contract signing → credentials</h2>
+<p class="subtitle">Steps 1–2 run when RSP clicks "Select for Hiring" (renamed from "Generate Employee Account"). Step 3 is the new sub-tab. Pick a layout for step 3.</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Step 1 — Multi-application notice (only if the applicant has other open applications)</div>
+    <div class="mockup-body" style="background:rgba(4,14,107,.45);padding:24px;font-family:Poppins,sans-serif">
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;margin:auto;box-shadow:0 12px 32px rgba(16,30,41,.16)">
+        <div style="width:40px;height:40px;border-radius:10px;background:#FCE8C8;color:#E8821A;display:grid;place-items:center;font-weight:700">!</div>
+        <h3 style="color:#040E6B;margin:12px 0 4px;font-size:16px">Juan Dela Cruz applied to other positions</h3>
+        <p style="color:#515F69;font-size:14px;margin:0 0 12px">Reference No. 2026-00412 has 2 other open applications:</p>
+        <div style="border:1px solid #E2E8F0;border-radius:12px;font-size:13px">
+          <div style="padding:10px 12px;border-bottom:1px solid #E2E8F0"><b style="color:#040E6B">Administrative Aide IV</b> · CHRMO · Plantilla 2<br><span style="display:inline-block;margin-top:4px;background:#FCE8C8;color:#A8590A;border-radius:999px;padding:0 10px;font-size:12px">For Evaluation</span></div>
+          <div style="padding:10px 12px"><b style="color:#040E6B">Clerk III</b> · City Treasurer · Plantilla 1<br><span style="display:inline-block;margin-top:4px;background:#E0E5FF;color:#191FA8;border-radius:999px;padding:0 10px;font-size:12px">Shortlisted</span></div>
+        </div>
+        <p style="color:#28343D;font-size:14px;margin:12px 0 0">Continue selecting them for <b>Engineer II · City Engineer's Office</b>?</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+          <button style="height:36px;padding:0 20px;border-radius:999px;border:1.5px solid #363EE8;background:#fff;color:#363EE8;font-weight:600">Cancel</button>
+          <button style="height:36px;padding:0 20px;border-radius:999px;border:0;background:linear-gradient(180deg,#363EE8,#191FA8);color:#fff;font-weight:600">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Step 2 — Final confirmation + signing date</div>
+    <div class="mockup-body" style="background:rgba(4,14,107,.45);padding:24px;font-family:Poppins,sans-serif">
+      <div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;margin:auto;box-shadow:0 12px 32px rgba(16,30,41,.16)">
+        <h3 style="color:#040E6B;margin:0 0 4px;font-size:16px">Select Juan Dela Cruz for Engineer II?</h3>
+        <p style="color:#515F69;font-size:13px;margin:0 0 12px">Plantilla 1 (OCE-ENG2-01)</p>
+        <div style="border-left:4px solid #E8821A;background:#FCE8C8;border-radius:12px;padding:12px;font-size:13px;color:#28343D">
+          <b>This updates the applicant's status and cannot be undone</b>, unless the applicant fails to secure the slot by the date below.
+        </div>
+        <label style="display:block;margin:16px 0 6px;font-size:13px;font-weight:500;color:#28343D">Report to the office on or before <span style="color:#E05252">*</span></label>
+        <input value="Oct 28, 2026" style="height:40px;width:100%;border:1.5px solid #363EE8;border-radius:8px;padding:0 12px;box-shadow:0 0 0 3px rgba(54,62,232,.15)">
+        <label style="display:block;margin:16px 0 6px;font-size:13px;font-weight:500;color:#28343D">Instructions to applicant</label>
+        <div style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-size:13px;color:#28343D;line-height:1.5">Please report to the CHRMO, 2nd floor, Iloilo City Hall, 8:00 AM–5:00 PM, for contract signing and document verification. Bring a valid ID and original copies of your submitted documents.<br><span style="color:#515F69">Failure to secure the position by Oct 28, 2026 may result in losing your place in the recruitment process or giving up your status as selected candidate.</span></div>
+        <p style="font-size:12px;color:#515F69;margin:6px 0 0">The last sentence is always added. Shown on the tracker as a congratulatory notice.</p>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13px;color:#28343D"><input type="checkbox" checked style="accent-color:#363EE8;margin-top:3px"> I understand this cannot be revoked unless the applicant does not secure the slot.</label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+          <button style="height:36px;padding:0 20px;border-radius:999px;border:1.5px solid #363EE8;background:#fff;color:#363EE8;font-weight:600">Back</button>
+          <button style="height:36px;padding:0 20px;border-radius:999px;border:0;background:linear-gradient(180deg,#363EE8,#191FA8);color:#fff;font-weight:600">Confirm Selection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>Generate Employee Credentials tab + printed credentials</h2>
+<p class="subtitle">Step 3 uses layout B. Selections are kept across departments, and a sticky bar shows the total. Below that are two options for the printout: pick one.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Step 3: grouped by Department › Position, selection across departments</div>
+  <div class="mockup-body" style="background:#F1F5F9;padding:16px;font-family:Poppins,sans-serif;font-size:13px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div><div style="color:#040E6B;font-weight:600;font-size:16px">Awaiting contract signing</div><div style="color:#515F69">5 selected applicants in 3 departments. Tick the ones who reported and secured their slot.</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input placeholder="Search name, position, office…" style="height:36px;width:220px;border:1px solid #E2E8F0;border-radius:8px;padding:0 12px">
+        <button style="height:36px;padding:0 14px;border-radius:999px;border:1.5px solid #363EE8;background:#fff;color:#363EE8;font-weight:600">Select all</button>
+      </div>
+    </div>
+
+    <div style="position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;background:#EEF0FF;border:1px solid #C8D1FF;border-radius:12px;padding:10px 16px;margin-bottom:12px">
+      <div style="color:#191FA8"><b>3 selected</b> across 2 departments · <span style="color:#515F69">City Engineer's Office (2), City Treasurer's Office (1)</span></div>
+      <div style="display:flex;gap:8px"><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #363EE8;background:#fff;color:#363EE8;font-weight:600;font-size:13px">Clear</button><button style="height:36px;padding:0 20px;border-radius:999px;border:0;background:linear-gradient(180deg,#363EE8,#191FA8);color:#fff;font-weight:600">Generate (3)</button></div>
+    </div>
+
+    <!-- Department group -->
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;margin-bottom:12px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E2E8F0">
+        <input type="checkbox" checked style="accent-color:#363EE8"><b style="color:#040E6B;flex:1">City Engineer's Office</b>
+        <span style="background:#EEF0FF;color:#191FA8;border-radius:999px;padding:2px 10px;font-size:12px">2 of 2 selected</span>
+      </div>
+      <div style="padding:8px 16px 4px;color:#515F69;font-size:12px;font-weight:600;letter-spacing:.4px">ENGINEER II · 2 OF 3 PLANTILLAS SELECTED</div>
+      <div style="padding:10px 16px;display:flex;gap:12px;align-items:center;background:#EEF0FF"><input type="checkbox" checked style="accent-color:#363EE8"><div style="flex:1"><b style="color:#040E6B">Juan Dela Cruz</b> · Plantilla 1<br><span style="color:#515F69;font-size:12px">2026-00412 · Report by Oct 28, 2026</span></div><span style="background:#FCE8C8;color:#A8590A;border-radius:999px;padding:2px 10px;font-size:12px">Awaiting signing</span><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #E05252;color:#B42323;background:#fff;font-size:12px;font-weight:600">Did not report</button></div>
+      <div style="padding:10px 16px;display:flex;gap:12px;align-items:center;background:#EEF0FF;border-top:1px solid #E2E8F0"><input type="checkbox" checked style="accent-color:#363EE8"><div style="flex:1"><b style="color:#040E6B">Pedro Garcia</b> · Plantilla 2<br><span style="color:#515F69;font-size:12px">2026-00418 · Report by Oct 28, 2026</span></div><span style="background:#FCE8C8;color:#A8590A;border-radius:999px;padding:2px 10px;font-size:12px">Awaiting signing</span><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #E05252;color:#B42323;background:#fff;font-size:12px;font-weight:600">Did not report</button></div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;margin-bottom:12px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E2E8F0">
+        <input type="checkbox" style="accent-color:#363EE8"><b style="color:#040E6B;flex:1">City Treasurer's Office</b>
+        <span style="background:#EEF0FF;color:#191FA8;border-radius:999px;padding:2px 10px;font-size:12px">1 of 2 selected</span>
+      </div>
+      <div style="padding:8px 16px 4px;color:#515F69;font-size:12px;font-weight:600;letter-spacing:.4px">CLERK III · 1 OF 1 PLANTILLA SELECTED</div>
+      <div style="padding:10px 16px;display:flex;gap:12px;align-items:center;background:#EEF0FF"><input type="checkbox" checked style="accent-color:#363EE8"><div style="flex:1"><b style="color:#040E6B">Maria Santos</b> · Plantilla 1<br><span style="color:#515F69;font-size:12px">2026-00377 · Report by Oct 25, 2026</span></div><span style="background:#FCE8C8;color:#A8590A;border-radius:999px;padding:2px 10px;font-size:12px">Awaiting signing</span><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #E05252;color:#B42323;background:#fff;font-size:12px;font-weight:600">Did not report</button></div>
+      <div style="padding:8px 16px 4px;color:#515F69;font-size:12px;font-weight:600;letter-spacing:.4px;border-top:1px solid #E2E8F0">CASHIER I · 1 OF 1 PLANTILLA SELECTED</div>
+      <div style="padding:10px 16px;display:flex;gap:12px;align-items:center"><input type="checkbox" style="accent-color:#363EE8"><div style="flex:1"><b style="color:#040E6B">Liza Mendoza</b> · Plantilla 1<br><span style="color:#515F69;font-size:12px">2026-00351 · Report by Oct 30, 2026</span></div><span style="background:#FCE8C8;color:#A8590A;border-radius:999px;padding:2px 10px;font-size:12px">Awaiting signing</span><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #E05252;color:#B42323;background:#fff;font-size:12px;font-weight:600">Did not report</button></div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E2E8F0">
+        <input type="checkbox" style="accent-color:#363EE8"><b style="color:#040E6B;flex:1">City Health Office</b>
+        <span style="background:#F1F5F9;color:#28343D;border-radius:999px;padding:2px 10px;font-size:12px">0 of 1 selected</span>
+      </div>
+      <div style="padding:8px 16px 4px;color:#515F69;font-size:12px;font-weight:600;letter-spacing:.4px">NURSE I · 1 OF 2 PLANTILLAS SELECTED</div>
+      <div style="padding:10px 16px;display:flex;gap:12px;align-items:center"><input type="checkbox" style="accent-color:#363EE8"><div style="flex:1"><b style="color:#040E6B">Ana Reyes</b> · Plantilla 3<br><span style="color:#515F69;font-size:12px">2026-00290 · Report by Oct 20, 2026</span></div><span style="background:#FDE2E2;color:#B42323;border-radius:999px;padding:2px 10px;font-size:12px">Deadline passed</span><button style="height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #E05252;color:#B42323;background:#fff;font-size:12px;font-weight:600">Did not report</button></div>
+    </div>
+  </div>
+</div>
+
+<h3 class="section">Printed credentials: pick one</h3>
+<div class="cards">
+  <div class="card" data-choice="print-cards" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:20px;font-family:Poppins,sans-serif;color:#28343D;font-size:11px;border:1px solid #E2E8F0">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:2px solid #040E6B;padding-bottom:8px">
+        <div style="width:28px;height:28px;border-radius:6px;background:#363EE8;color:#fff;display:grid;place-items:center;font-weight:700">A</div>
+        <div style="flex:1"><b style="color:#040E6B;font-size:13px">ABYAN HRIS</b><br>City Government of Iloilo · CHRMO</div>
+        <div style="text-align:right">Employee Credentials<br>Issued Oct 29, 2026</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <div style="border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
+          <div style="background:#040E6B;color:#fff;padding:6px 10px;font-weight:600">Juan Dela Cruz</div>
+          <div style="padding:8px 10px">Engineer II · City Engineer's Office<br>Plantilla 1 (OCE-ENG2-01)
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px"><div style="border:1px solid #E2E8F0;border-radius:6px;padding:4px 6px"><span style="color:#515F69;font-size:9px">EMPLOYEE ID</span><br><b style="font-family:monospace;color:#040E6B">EMP-2026-0142</b></div><div style="border:1px solid #E2E8F0;border-radius:6px;padding:4px 6px"><span style="color:#515F69;font-size:9px">TEMP PASSWORD</span><br><b style="font-family:monospace;color:#040E6B">k7Qm-29Tx</b></div></div>
+            <div style="margin-top:6px;border-top:1px dashed #CBD5E1;padding-top:4px;color:#515F69;font-size:9px">✂ Cut along the border. Change your password on first login.</div>
+          </div>
+        </div>
+        <div style="border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">
+          <div style="background:#040E6B;color:#fff;padding:6px 10px;font-weight:600">Pedro Garcia</div>
+          <div style="padding:8px 10px">Engineer II · City Engineer's Office<br>Plantilla 2 (OCE-ENG2-02)
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px"><div style="border:1px solid #E2E8F0;border-radius:6px;padding:4px 6px"><span style="color:#515F69;font-size:9px">EMPLOYEE ID</span><br><b style="font-family:monospace;color:#040E6B">EMP-2026-0143</b></div><div style="border:1px solid #E2E8F0;border-radius:6px;padding:4px 6px"><span style="color:#515F69;font-size:9px">TEMP PASSWORD</span><br><b style="font-family:monospace;color:#040E6B">Rb8n-41Lc</b></div></div>
+            <div style="margin-top:6px;border-top:1px dashed #CBD5E1;padding-top:4px;color:#515F69;font-size:9px">✂ Cut along the border. Change your password on first login.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A: Cut-out cards, several per page</h3><p>This is the current printout restyled to ABYAN tokens. It saves paper when printing a batch, and RSP cuts the page and hands out the slips.</p></div>
+  </div>
+
+  <div class="card" data-choice="print-letter" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:20px;font-family:Poppins,sans-serif;color:#28343D;font-size:11px;border:1px solid #E2E8F0">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:2px solid #040E6B;padding-bottom:8px">
+        <div style="width:28px;height:28px;border-radius:6px;background:#363EE8;color:#fff;display:grid;place-items:center;font-weight:700">A</div>
+        <div style="flex:1"><b style="color:#040E6B;font-size:13px">ABYAN HRIS</b><br>City Government of Iloilo · CHRMO</div>
+        <div style="text-align:right">Oct 29, 2026</div>
+      </div>
+      <p style="margin:12px 0 4px"><b style="color:#040E6B">Juan Dela Cruz</b><br>Reference No. 2026-00412</p>
+      <p style="margin:8px 0">Welcome to the City Government of Iloilo. Your appointment as <b>Engineer II</b>, City Engineer's Office (Plantilla 1, OCE-ENG2-01), is confirmed. Use the account below to sign in to the ABYAN Employee Portal.</p>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0">
+        <tr style="background:#040E6B;color:#fff"><th style="padding:5px 8px;text-align:left">Employee ID</th><th style="padding:5px 8px;text-align:left">Temporary password</th><th style="padding:5px 8px;text-align:left">Portal</th></tr>
+        <tr style="border:1px solid #E2E8F0"><td style="padding:6px 8px;font-family:monospace;font-weight:700;color:#040E6B">EMP-2026-0142</td><td style="padding:6px 8px;font-family:monospace;font-weight:700;color:#040E6B">k7Qm-29Tx</td><td style="padding:6px 8px">abyan-hris-iloilo.vercel.app</td></tr>
+      </table>
+      <p style="margin:6px 0;color:#515F69">You will be asked to change this password on first login. Keep this sheet confidential.</p>
+      <div style="display:flex;justify-content:space-between;margin-top:18px;gap:16px">
+        <div style="flex:1;border-top:1px solid #28343D;padding-top:3px;text-align:center">Received by (employee) / Date</div>
+        <div style="flex:1;border-top:1px solid #28343D;padding-top:3px;text-align:center">Released by (RSP) / Date</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B: One page per employee, with signatures</h3><p>A short welcome letter, the credentials table, and received-by / released-by lines. RSP keeps a signed copy as proof of release, at the cost of one sheet per hire.</p></div>
+  </div>
+</div>
+</body></html>

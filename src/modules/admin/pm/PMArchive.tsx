@@ -17,6 +17,7 @@ import {
   type ArchiveSemester,
 } from '../../../lib/api/ipcrArchive';
 import { getAdjectival } from './SummaryOfRatings';
+import { groupPeriodsByYear } from '../../../lib/ipcrPeriods';
 import { IpcrArchiveSemester } from './IpcrArchiveSemester';
 import { SkeletonList, useDelayedLoading } from '../../../components/table-loading';
 
@@ -90,9 +91,24 @@ export const PMArchive = () => {
         ) : semesters.length === 0 ? (
           <EmptyState title="No archived semesters" description="This employee has no closed, rated IPCR records yet." />
         ) : (
-          <div className="space-y-3">
-            {semesters.map((s, i) => (
-              <IpcrArchiveSemester key={s.period} semester={s} defaultOpen={i === 0} />
+          /* Grouped by year, then semester: a long archive read as one flat
+             run of periods, with nothing to anchor which year you were in. */
+          <div className="space-y-6">
+            {groupPeriodsByYear(semesters, (s) => s.period).map((group, groupIndex) => (
+              <section key={group.year ?? 'unknown'}>
+                <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-slate-500">
+                  {group.year ?? 'Other periods'}
+                </h3>
+                <div className="space-y-3">
+                  {group.items.map((s, i) => (
+                    <IpcrArchiveSemester
+                      key={s.period}
+                      semester={s}
+                      defaultOpen={groupIndex === 0 && i === 0}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}

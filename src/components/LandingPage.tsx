@@ -20,6 +20,7 @@ import type { JobPosting } from '../types/recruitment.types';
 import { plantillaLabel, plantillaNumberOf } from '../lib/plantillaRules';
 import { vacancySalaryLabel } from '../lib/vacancySalary';
 import { useSalarySchedule } from '../hooks/useSalarySchedule';
+import { vacantPlantillaSlots } from '../lib/vacancySearch';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 
 /* ── trish UI theme tokens ──────────────────────────────────────────
@@ -40,8 +41,8 @@ type VacancyRow = {
   rowKey: string;
   /** Job details reads this to show the one plantilla this row applies to. */
   plantillaSlotId: string;
-  /** This row's plantilla; filled ones show struck, closed ones get no row. */
-  plantilla: { text: string; open: boolean };
+  /** This row's plantilla number. Only open plantillas get a row. */
+  plantilla: { text: string };
   postingDate: string;
   closingDate: string;
   positionType: string;
@@ -119,11 +120,11 @@ export const LandingPage = () => {
         const today = localIsoDate(new Date());
         const rows = getAuthoritativeJobPostings()
           .filter((job) => isOpenToday(job, today))
-          // A posting whose every plantilla is closed or filled has nothing left to apply to.
-          .filter((job) => (job.plantillaSlots ?? []).some((slot) => slot.status === 'open'))
+          // Only vacant, open plantillas: a filled one is held by an employee
+          // and a closed one isn't taking applications, so neither gets a row.
           // One row per plantilla, even when several share a position title.
-          .flatMap((job) => [...(job.plantillaSlots ?? [])]
-            .filter((slot) => slot.status !== 'closed')
+          .flatMap((job) => vacantPlantillaSlots(job)
+            .filter((slot) => slot.status === 'open')
             .sort((a, b) => a.slotNumber - b.slotNumber)
             .map((slot): VacancyRow => ({
             id: job.id,
@@ -135,10 +136,7 @@ export const LandingPage = () => {
             type: job.employmentStatus === 'Permanent' ? 'Plantilla' : 'Contractual',
             status: job.status,
             openSlots: (job.plantillaSlots ?? []).filter((slot) => slot.status === 'open').length,
-            plantilla: {
-              text: plantillaNumberOf(slot.label) || plantillaLabel(slot),
-              open: slot.status === 'open',
-            },
+            plantilla: { text: plantillaNumberOf(slot.label) || plantillaLabel(slot) },
             postingDate: job.postedDate ? new Date(job.postedDate).toISOString().split('T')[0] : '',
             closingDate: job.applicationDeadline ? String(job.applicationDeadline).slice(0, 10) : '',
             positionType: job.positionType || '',
@@ -226,6 +224,9 @@ export const LandingPage = () => {
   }, [vacancyJobs, searchQuery, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedJobs.length / itemsPerPage));
+  // A live refresh can remove rows (a plantilla just filled), so never leave
+  // the user on a page past the end.
+  useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
   const startIdx = (currentPage - 1) * itemsPerPage;
   const endIdx = startIdx + itemsPerPage;
   const paginatedJobs = filteredAndSortedJobs.slice(startIdx, endIdx);
@@ -456,7 +457,7 @@ export const LandingPage = () => {
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
                       {vacancyJobs.length === 0
-                        ? 'No vacant positions are open at the moment. Please check back later.'
+                        ? 'No vacant positions at the moment. Please check back later.'
                         : 'No vacancies match your search.'}
                     </td>
                   </tr>
@@ -470,11 +471,7 @@ export const LandingPage = () => {
                         </td>
                         <td className="px-4 py-3 text-slate-600">{job.department || 'Not specified'}</td>
                         <td className="px-4 py-3 text-slate-600">
-                          {job.plantilla.open ? (
-                            <span className="font-semibold text-[#050D65]">{job.plantilla.text}</span>
-                          ) : (
-                            <s className="text-slate-400" title="Filled">{job.plantilla.text}</s>
-                          )}
+                          <span className="font-semibold text-[#050D65]">{job.plantilla.text}</span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">{vacancySalaryLabel(job.originalJob, salarySchedule)}</td>
                         <td className="px-4 py-3 text-slate-600">
@@ -484,11 +481,11 @@ export const LandingPage = () => {
                         <td className="abyan-ds px-4 py-3 text-center">
                           <button
                             type="button"
-                            disabled={isClosed || !job.plantilla.open}
+                            disabled={isClosed}
                             onClick={() => navigate('/apply', { state: { landingJob: job } })}
                             className="btn btn-sm btn-primary"
                           >
-                            {job.plantilla.open ? 'Apply' : 'Filled'}
+                            Apply
                           </button>
                         </td>
                       </tr>

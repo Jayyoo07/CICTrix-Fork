@@ -1,20 +1,25 @@
 import {
   CheckCircle2,
-  Download,
-  PenLine,
   Plus,
-  Search,
-  Shield,
   UserPlus,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
   X,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
 import { mockDatabase } from '../lib/mockDatabase';
-import { getAuthoritativeJobPostings } from '../lib/recruitmentData';
 import { isMockModeEnabled, supabase } from '../lib/supabase';
+import {
+  listRaterCandidates,
+  matchRaterAccount,
+  matchRaterAccountByName,
+  notifyRaterAdded,
+  type RaterCandidate,
+} from '../lib/api/raterAccounts';
 import { RaterManagementNavigationGuide } from './RaterManagementNavigationGuide';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
@@ -29,14 +34,6 @@ interface ProfileAccountRow {
   role: string;
 }
 
-interface RaterAccountOption {
-  email: string;
-  name: string;
-  designation: string;
-  department: string;
-  existingRaterId?: string;
-}
-
 interface RaterSourceRow {
   id: string;
   name: string;
@@ -49,21 +46,7 @@ interface RaterSourceRow {
   source: ClientSource;
 }
 
-interface RaterFormState {
-  selectedEmail: string;
-  assignedPositions: string[];
-  startDate: string;
-  endDate: string;
-}
-
 const RATER_ACCESS_STATE_KEY = 'cictrix_rater_access_state_map';
-
-const defaultFormState = (): RaterFormState => ({
-  selectedEmail: '',
-  assignedPositions: [],
-  startDate: '',
-  endDate: '',
-});
 
 const getPreferredClient = () => {
   const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
@@ -116,6 +99,18 @@ const formatLastLogin = (value: unknown) => {
     year: 'numeric',
   });
 };
+
+/**
+ * The busy marker for this page's buttons (§9.1). Tailwind here rather than
+ * .btn.is-loading, because these buttons are plain Tailwind like the rest of
+ * the page; converting them to the .btn system is its own change.
+ */
+const Spinner = () => (
+  <span
+    aria-hidden
+    className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none motion-reduce:opacity-60"
+  />
+);
 
 const statusBadge = (status: RaterStatus) => {
   if (status === 'Active') {
@@ -215,16 +210,25 @@ export const RaterManagementPage = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const ratersLoad = useTableLoading(initialLoad, ratersData.length > 0);
   const [profileAccounts, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
   const [showGuide, setShowGuide] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [form, setForm] = useState<RaterFormState>(defaultFormState());
-  const [manualName, setManualName] = useState('');
-  const [manualEmail, setManualEmail] = useState('');
-  const [manualDepartment, setManualDepartment] = useState('Unassigned');
-  const [saving, setSaving] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
+  /** Active employees, for the suggestions and the account check. */
+  const [candidates, setCandidates] = useState<RaterCandidate[]>([]);
   const [toast, setToast] = useState('');
+  /** Email of the rater whose access change is in flight, for the button label. */
+  const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
+  /** The rater the "Are you sure?" dialog is open for. */
+  const [pendingRemoval, setPendingRemoval] = useState<RaterSourceRow | null>(null);
+  /**
+   * A removal waiting out its undo window. The row is already hidden, but
+   * nothing has been deleted yet — see scheduleRemoval.
+   */
+  const [undoRemoval, setUndoRemoval] = useState<{ rater: RaterSourceRow; secondsLeft: number } | null>(null);
+  const removalTimer = useRef<number | null>(null);
 
   const loadRaters = async () => {
     // Assignments come from Supabase raters.assigned_positions only.
@@ -379,229 +383,169 @@ export const RaterManagementPage = () => {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const selectedRater = useMemo(
-    () => ratersData.find((rater) => normalizeEmailKey(rater.email) === normalizeEmailKey(form.selectedEmail)),
-    [ratersData, form.selectedEmail]
+  /**
+   * The table shows every rater except one waiting out its undo window. It is
+   * hidden here rather than removed from ratersData, because loadRaters runs on
+   * focus, visibility and route changes — mutating the list would let the row
+   * reappear mid-countdown.
+   */
+  const filteredRaters = useMemo(
+    () => (undoRemoval ? ratersData.filter((item) => item.id !== undoRemoval.rater.id) : ratersData),
+    [ratersData, undoRemoval],
   );
 
-  const availableAccounts = useMemo(() => {
-    const accounts = new Map<string, RaterAccountOption>();
-
-    ratersData.forEach((rater) => {
-      const emailKey = normalizeEmailKey(rater.email);
-      if (!emailKey) return;
-      accounts.set(emailKey, {
-        email: rater.email,
-        name: rater.name,
-        designation: rater.designation,
-        department: rater.department,
-        existingRaterId: rater.id,
-      });
-    });
-
-    profileAccounts.forEach((account) => {
-      const emailKey = normalizeEmailKey(account.email);
-      if (!emailKey || accounts.has(emailKey)) return;
-      accounts.set(emailKey, {
-        email: account.email,
-        name: account.name,
-        designation: account.role === 'RATER' ? 'Rater' : 'Interviewer',
-        department: 'Unassigned',
-      });
-    });
-
-    return Array.from(accounts.values()).sort((left, right) => left.name.localeCompare(right.name));
-  }, [profileAccounts, ratersData]);
-
-  const selectedAccount = useMemo(
-    () => availableAccounts.find((account) => normalizeEmailKey(account.email) === normalizeEmailKey(form.selectedEmail)),
-    [availableAccounts, form.selectedEmail]
-  );
-
-  // Reactive list of job titles to assign from. The job postings cache is
-  // populated asynchronously from Supabase at app boot, so we must re-read it
-  // whenever the 'cictrix:job-postings-updated' event fires; a useMemo with []
-  // deps captures an empty cache when the page mounts before the fetch resolves.
-  const [jobPostingsVersion, setJobPostingsVersion] = useState(0);
   useEffect(() => {
-    const onUpdate = () => setJobPostingsVersion((v) => v + 1);
-    window.addEventListener('cictrix:job-postings-updated', onUpdate as EventListener);
+    if (!showAddForm || candidates.length > 0) return;
+    let cancelled = false;
+    void listRaterCandidates().then((rows) => {
+      if (!cancelled) setCandidates(rows);
+    });
     return () => {
-      window.removeEventListener('cictrix:job-postings-updated', onUpdate as EventListener);
+      cancelled = true;
     };
-  }, []);
+  }, [showAddForm, candidates.length]);
 
-  const assignableJobPositions = useMemo(() => {
-    return getAuthoritativeJobPostings()
-      .filter((posting) => String(posting?.status ?? '').trim().toLowerCase() === 'active')
-      .map((posting) => String(posting?.title ?? '').trim())
-      .filter(Boolean)
-      .filter((value, index, rows) => rows.indexOf(value) === index)
-      .sort((left, right) => left.localeCompare(right));
-  }, [jobPostingsVersion]);
+  /**
+   * The employee this rater is, if any. An empty candidate list means the
+   * employee read failed, so the panel says nothing rather than claiming the
+   * account does not exist.
+   */
+  const matchedAccount = useMemo(
+    () => matchRaterAccount(newEmail, candidates),
+    [newEmail, candidates],
+  );
+  const accountCheckable = candidates.length > 0 && newEmail.trim().length > 0;
 
-  const filteredRaters = useMemo(() => {
-    return ratersData.filter((rater) => {
-      const matchesSearch =
-        !search ||
-        `${rater.name} ${rater.email} ${rater.designation} ${rater.assignedPositions.join(' ')}`
-          .toLowerCase()
-          .includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === 'All Status' ||
-        (statusFilter === 'Active' && rater.status === 'Active') ||
-        (statusFilter === 'Inactive' && rater.status === 'Inactive');
+  const resetAddForm = () => {
+    setNewName('');
+    setNewEmail('');
+    setAddError('');
+  };
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [ratersData, search, statusFilter]);
-
-  const totalRaters = ratersData.length;
-  const activeRaters = ratersData.filter((rater) => rater.status === 'Active').length;
-  const inactiveRaters = ratersData.filter((rater) => rater.status === 'Inactive').length;
-
-  const openAssignModal = (rater?: RaterSourceRow) => {
-    if (!rater) {
-      setForm(defaultFormState());
-      setShowAssignModal(true);
+  /**
+   * A rater is created with name, email and access only. Positions are not
+   * asked for here: interviewerAccess derives them from the applicants actually
+   * assigned to this interviewer in Pending Assignment.
+   */
+  const addRater = async () => {
+    const trimmedName = newName.trim();
+    const trimmedEmail = newEmail.trim().toLowerCase();
+    if (!trimmedName) {
+      setAddError('Name is required.');
+      return;
+    }
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setAddError('A valid email is required.');
+      return;
+    }
+    if (ratersData.some((rater) => normalizeEmailKey(rater.email) === normalizeEmailKey(trimmedEmail))) {
+      setAddError('A rater with this email already exists.');
       return;
     }
 
-    setForm({
-      selectedEmail: rater.email,
-      assignedPositions: [...rater.assignedPositions],
-      startDate: '',
-      endDate: '',
-    });
-    setShowAssignModal(true);
-  };
-
-  const closeAssignModal = () => {
-    setShowAssignModal(false);
-    setForm(defaultFormState());
-    setManualName('');
-    setManualEmail('');
-    setManualDepartment('Unassigned');
-  };
-
-  const handleRaterSelection = (email: string) => {
-    const nextSelected = ratersData.find((rater) => normalizeEmailKey(rater.email) === normalizeEmailKey(email));
-    setForm((current) => ({
-      ...current,
-      selectedEmail: email,
-      assignedPositions: nextSelected ? [...nextSelected.assignedPositions] : [],
-    }));
-  };
-
-  const toggleAssignedPosition = (position: string) => {
-    setForm((current) => ({
-      ...current,
-      assignedPositions: current.assignedPositions.includes(position)
-        ? current.assignedPositions.filter((item) => item !== position)
-        : [...current.assignedPositions, position],
-    }));
-  };
-
-  const handleSaveRaterAccess = async () => {
-    const fallbackEmail = normalizeEmailKey(manualEmail);
-    const fallbackName = String(manualName || manualEmail).trim();
-    const fallbackDepartment = String(manualDepartment || 'Unassigned').trim() || 'Unassigned';
-    const accountToUse: RaterAccountOption | null = selectedAccount
-      ? selectedAccount
-      : fallbackEmail
-        ? {
-            email: manualEmail.trim(),
-            name: fallbackName || manualEmail.trim(),
-            designation: 'Interviewer',
-            department: fallbackDepartment,
-          }
-        : null;
-
-    if (!accountToUse || form.assignedPositions.length === 0) {
-      setToast('Select a rater and assign at least one job position.');
-      return;
-    }
-
-    const previousRows = ratersData;
-    const nextAssignedPositions = uniqueStrings(form.assignedPositions);
-
-    setRatersData((current) =>
-      selectedRater
-        ? current.map((rater) =>
-            normalizeEmailKey(rater.email) === normalizeEmailKey(accountToUse.email)
-              ? { ...rater, assignedPositions: nextAssignedPositions, status: 'Active' }
-              : rater
-          )
-        : [
-            {
-              id: `pending-${normalizeEmailKey(accountToUse.email)}`,
-              name: accountToUse.name,
-              email: accountToUse.email,
-              designation: accountToUse.designation,
-              department: accountToUse.department,
-              assignedPositions: nextAssignedPositions,
-              lastLogin: 'N/A',
-              status: 'Active',
-              source: 'preferred',
-            },
-            ...current,
-          ]
-    );
-
-    setSaving(true);
-
+    setAddError('');
+    setAdding(true);
     try {
-      const accessClient = getAccessClient();
-
-      // The Supabase `raters` table has columns:
-      //   id, name, email, department, is_active, assigned_positions, created_at, updated_at
-      // It does NOT have `designation` or `last_login` — sending those silently
-      // failed every write, leaving assigned_positions stuck at [] in the DB.
-      if (selectedRater) {
-        await runRaterEmailUpdate(
-          accessClient,
-          {
-            assigned_positions: nextAssignedPositions,
-            is_active: true,
-            department: accountToUse.department,
-          },
-          accountToUse.email,
-          selectedRater.id
-        );
-      } else {
-        const insertResult = await accessClient.from('raters').insert({
-          name: accountToUse.name,
-          email: accountToUse.email,
-          department: accountToUse.department,
-          assigned_positions: nextAssignedPositions,
-          is_active: true,
-        });
-
-        if ((insertResult as any)?.error) {
-          throw (insertResult as any).error;
-        }
+      const { error } = await (supabase as any)
+        .from('raters')
+        .insert({ name: trimmedName, email: trimmedEmail, is_active: true });
+      if (error) {
+        console.error('[RaterManagementPage] add failed', error);
+        setAddError(error.message ?? 'Could not add the rater.');
+        return;
       }
-
-      await verifyRaterAccessState(accessClient, accountToUse.email, true);
-      saveRaterAccessState(accountToUse.email, true);
-      closeAssignModal();
-      setToast('Rater access updated.');
       await loadRaters();
-      // Let other pages (e.g. Qualified Applicants assignment dropdown) refetch
-      // their interviewer list so a newly-added rater shows up immediately.
+      // Lets the assignment dropdown pick up a freshly added active rater.
       window.dispatchEvent(new CustomEvent('cictrix:raters-updated'));
-    } catch {
-      setRatersData(previousRows);
-      setToast('Failed to save rater access.');
-      await loadRaters();
+
+      // Best-effort: the rater exists by now, so a failed notification must not
+      // read as a failed add. An unmatched rater has no inbox to write to.
+      const account = matchRaterAccount(trimmedEmail, candidates);
+      const notified = account ? await notifyRaterAdded(account) : false;
+
+      resetAddForm();
+      setShowAddForm(false);
+      setToast(notified ? `${trimmedName} added and notified.` : `${trimmedName} added.`);
+    } catch (err) {
+      console.error('[RaterManagementPage] add threw', err);
+      setAddError('Could not add the rater.');
     } finally {
-      setSaving(false);
+      setAdding(false);
     }
   };
+
+  /**
+   * Remove a rater, with ten seconds to take it back.
+   *
+   * Nothing is deleted until the window closes: the row is hidden locally and
+   * the delete runs on the timer. Deleting first and re-inserting on undo would
+   * mean a failed re-insert loses the rater for good, and the restored row
+   * would carry a new id. Not deleting is recoverable; deleting wrongly is not.
+   *
+   * The cost of that choice: leaving the page inside the window cancels the
+   * removal, and the rater is still there on return.
+   */
+  const UNDO_SECONDS = 10;
+
+  const finalizeRemoval = async (rater: RaterSourceRow) => {
+    try {
+      const client = getAccessClient();
+      const { error } = await client.from('raters').delete().eq('id', rater.id);
+      if (error) throw error;
+      window.dispatchEvent(new CustomEvent('cictrix:raters-updated'));
+      setToast(`${rater.name} removed.`);
+    } catch (err) {
+      console.error('[RaterManagementPage] remove failed', err);
+      setToast(`Could not remove ${rater.name}.`);
+    } finally {
+      await loadRaters();
+    }
+  };
+
+  const scheduleRemoval = (rater: RaterSourceRow) => {
+    // One pending removal at a time: a second one commits the first, so an
+    // earlier rater cannot be silently kept by starting another removal.
+    if (removalTimer.current !== null) {
+      window.clearInterval(removalTimer.current);
+      removalTimer.current = null;
+      if (undoRemoval) void finalizeRemoval(undoRemoval.rater);
+    }
+
+    setUndoRemoval({ rater, secondsLeft: UNDO_SECONDS });
+
+    removalTimer.current = window.setInterval(() => {
+      setUndoRemoval((current) => {
+        if (!current) return null;
+        if (current.secondsLeft > 1) return { ...current, secondsLeft: current.secondsLeft - 1 };
+        if (removalTimer.current !== null) {
+          window.clearInterval(removalTimer.current);
+          removalTimer.current = null;
+        }
+        void finalizeRemoval(current.rater);
+        return null;
+      });
+    }, 1000);
+  };
+
+  const undoScheduledRemoval = () => {
+    if (removalTimer.current !== null) {
+      window.clearInterval(removalTimer.current);
+      removalTimer.current = null;
+    }
+    const restored = undoRemoval?.rater;
+    setUndoRemoval(null);
+    if (restored) setToast(`${restored.name} kept.`);
+  };
+
+  // Leaving the page cancels a pending removal rather than committing it.
+  useEffect(() => () => {
+    if (removalTimer.current !== null) window.clearInterval(removalTimer.current);
+  }, []);
 
   const handleToggleRaterAccess = async (rater: RaterSourceRow) => {
     const nextIsActive = rater.status !== 'Active';
     const previousRows = ratersData;
+    setTogglingEmail(rater.email);
     setRatersData((current) =>
       current.map((item) =>
         normalizeEmailKey(item.email) === normalizeEmailKey(rater.email)
@@ -621,34 +565,11 @@ export const RaterManagementPage = () => {
       setRatersData(previousRows);
       setToast('Failed to update interviewer access.');
       await loadRaters();
+    } finally {
+      setTogglingEmail(null);
     }
   };
 
-  const handleDownloadRaters = () => {
-    const csvRows = [
-      ['Name', 'Email', 'Designation', 'Assigned Positions', 'Last Login', 'Status'],
-      ...filteredRaters.map((rater) => [
-        rater.name,
-        rater.email,
-        rater.designation,
-        rater.assignedPositions.join('; '),
-        rater.lastLogin,
-        rater.status,
-      ]),
-    ];
-    const csv = csvRows
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'rater-list.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="rsp-ds min-h-screen bg-[#f8f9fa]">
@@ -656,7 +577,7 @@ export const RaterManagementPage = () => {
     <div className="admin-layout">
       <Sidebar activeModule="RSP" userRole="rsp" />
       <main className="admin-content bg-slate-50 !p-0">
-        <div className="border-b border-slate-200 bg-white px-8 py-6 flex items-center justify-between gap-4">
+        <div className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 py-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="!mb-1 !text-2xl font-bold">Rater Management</h1>
             <p className="!mb-0 text-base text-slate-500">Assign raters and define their evaluation access for specific job positions.</p>
@@ -671,100 +592,153 @@ export const RaterManagementPage = () => {
         </div>
         <div className="p-6 md:p-8">
 
-          <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Total Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{totalRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <UserPlus className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Active Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{activeRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-50 text-green-500">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-6">
-              <div>
-                <p className="text-sm text-gray-500">Inactive Raters</p>
-                <p className="text-3xl font-bold text-gray-900">{inactiveRaters}</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
-                <XCircle className="h-5 w-5" />
-              </div>
-            </div>
+          <div className="mb-6 flex items-center">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              onClick={() => {
+                if (showAddForm) {
+                  setShowAddForm(false);
+                  resetAddForm();
+                } else {
+                  setShowAddForm(true);
+                }
+              }}
+            >
+              {showAddForm ? (
+                <>
+                  <X className="h-4 w-4" /> Cancel
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /> Add New Rater
+                </>
+              )}
+            </button>
           </div>
 
-          <div className="mb-6 flex flex-col items-center justify-between gap-4 md:flex-row">
-            <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-                onClick={() => openAssignModal()}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add New Rater
-              </button>
-              <button
-                type="button"
-                className="flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                onClick={handleDownloadRaters}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download Rater List
-              </button>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  className="w-64 rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-4 text-sm focus:border-blue-500 focus:outline-none"
-                  placeholder="Search raters..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
+          {showAddForm && (
+            <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-blue-700" />
+                <p className="!mb-0 text-sm font-semibold text-slate-900">Add a new rater</p>
               </div>
-              <select
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option>All Status</option>
-                <option>Active</option>
-                <option>Inactive</option>
-              </select>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-700">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    list="rater-name-options"
+                    value={newName}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewName(value);
+                      // Picking a suggestion fills the other field, so the admin
+                      // types one thing and gets a matched account.
+                      const picked = matchRaterAccountByName(value, candidates);
+                      if (picked && !newEmail.trim()) setNewEmail(picked.email);
+                    }}
+                    placeholder="e.g. Melchor U. Tan"
+                    className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                  />
+                  <datalist id="rater-name-options">
+                    {candidates.map((employee) => (
+                      <option key={`name-${employee.id}`} value={employee.name}>
+                        {employee.position || employee.department}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    list="rater-email-options"
+                    value={newEmail}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setNewEmail(value);
+                      const picked = matchRaterAccount(value, candidates);
+                      if (picked && !newName.trim()) setNewName(picked.name);
+                    }}
+                    placeholder="e.g. interviewer@cictrix.gov.ph"
+                    className="w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                  />
+                  <datalist id="rater-email-options">
+                    {candidates.map((employee) => (
+                      <option key={`email-${employee.id}`} value={employee.email}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </datalist>
+                  {accountCheckable && matchedAccount && (
+                    <p className="!mb-0 mt-1.5 text-xs font-medium text-green-700">
+                      Account found: {matchedAccount.name}
+                      {matchedAccount.position ? ` · ${matchedAccount.position}` : ''}
+                      {matchedAccount.department ? ` · ${matchedAccount.department}` : ''}
+                    </p>
+                  )}
+                  {accountCheckable && !matchedAccount && (
+                    <p className="!mb-0 mt-1.5 text-xs font-medium text-rose-600">
+                      Account not found. This rater has no employee account and won't be notified.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {addError && <p className="!mb-0 mt-2 text-xs font-medium text-rose-600">{addError}</p>}
+
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddForm(false);
+                    resetAddForm();
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void addRater()}
+                  disabled={adding}
+                  aria-busy={adding || undefined}
+                  className={`inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 ${adding ? 'cursor-progress opacity-70' : ''}`}
+                >
+                  {adding ? <Spinner /> : <UserPlus className="h-3.5 w-3.5" />}
+                  Add Rater
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <table className="w-full border-collapse text-left">
               <thead className="border-b border-gray-200 bg-white">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Rater Name</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Designation / Position</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Access Role</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Assigned Job Position(s)</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Last Login</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Actions</th>
+                  {/* Rater Name takes the slack; the other two hug their
+                      content, so Status and the access button sit together at
+                      the right instead of stranded mid-table. */}
+                  <th className="w-full px-6 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">Rater Name</th>
+                  <th className="whitespace-nowrap px-6 py-4 text-center text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
+                  <th className="whitespace-nowrap px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-gray-500">Action</th>
                 </tr>
               </thead>
               <tbody className={`divide-y divide-gray-100 ${tableBodyClass(false)}`}>
                 {ratersLoad.initialLoading && (
                   <TableSkeletonRows show={ratersLoad.showSkeleton}
-                    columns={['two-line', 'text', 'badge', 'text', 'text', 'badge', 'button']} label="Loading raters…" />
+                    columns={['two-line', 'badge', 'button']} label="Loading raters…" />
                 )}
                 {!ratersLoad.initialLoading && filteredRaters.map((rater) => (
-                  <tr key={`${rater.source}-${rater.id}-${rater.email}`} className="transition-colors hover:bg-gray-50">
+                  <tr
+                    key={`${rater.source}-${rater.id}-${rater.email}`}
+                    className="transition-colors hover:bg-gray-50"
+                  >
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center">
                         <div className="mr-3 flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-sm font-bold text-blue-600">
@@ -776,48 +750,47 @@ export const RaterManagementPage = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{rater.designation}</td>
-                    <td className="whitespace-nowrap px-6 py-4">{roleBadge('Interviewer')}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        {rater.assignedPositions.map((position) => (
-                          <span key={`${rater.email}-${position}`} className="mb-1 block text-sm text-blue-600 last:mb-0">
-                            {position}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">{rater.lastLogin}</td>
-                    <td className="whitespace-nowrap px-6 py-4">{statusBadge(rater.status)}</td>
+                    <td className="whitespace-nowrap px-6 py-4 text-center">{statusBadge(rater.status)}</td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Labelled rather than a bare tick or cross. This
+                            control grants or removes access to the interviewer
+                            portal, and an unlabelled icon leaves the admin to
+                            infer which way round it is. Carried over from the
+                            Qualified Applicants subtab this page replaces. */}
+                        {(() => {
+                          const isPending = togglingEmail === rater.email;
+                          const isActive = rater.status === 'Active';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleRaterAccess(rater)}
+                              disabled={isPending}
+                              aria-busy={isPending || undefined}
+                              aria-label={`${isActive ? 'Revoke' : 'Grant'} access for ${rater.name}`}
+                              className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                isActive
+                                  ? 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                              } ${isPending ? 'cursor-progress opacity-70' : ''}`}
+                            >
+                              {isPending ? <Spinner /> : isActive ? (
+                                <ShieldOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              )}
+                              {isActive ? 'Revoke Access' : 'Grant Access'}
+                            </button>
+                          );
+                        })()}
                         <button
                           type="button"
-                          className="text-blue-500 hover:text-blue-700"
-                          aria-label={`Edit ${rater.name}`}
-                          onClick={() => openAssignModal(rater)}
+                          onClick={() => setPendingRemoval(rater)}
+                          aria-label={`Remove ${rater.name}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl border-[1.5px] border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 active:bg-rose-100"
                         >
-                          <PenLine className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
                         </button>
-                        {rater.status === 'Active' ? (
-                          <button
-                            type="button"
-                            className="text-red-500 hover:text-red-700"
-                            aria-label={`Deactivate ${rater.name}`}
-                            onClick={() => void handleToggleRaterAccess(rater)}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-green-500 hover:text-green-700"
-                            aria-label={`Activate ${rater.name}`}
-                            onClick={() => void handleToggleRaterAccess(rater)}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -825,7 +798,7 @@ export const RaterManagementPage = () => {
 
                 {!ratersLoad.initialLoading && filteredRaters.length === 0 && (
                   <tr>
-                    <td className="px-6 py-8 text-sm text-gray-500" colSpan={7}>
+                    <td className="px-6 py-8 text-sm text-gray-500" colSpan={3}>
                       No raters found.
                     </td>
                   </tr>
@@ -838,171 +811,71 @@ export const RaterManagementPage = () => {
 
       <RaterManagementNavigationGuide open={showGuide} onClose={() => setShowGuide(false)} />
 
-      {showAssignModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-900/70 p-4" onClick={closeAssignModal}>
+      {/* Are you sure? (§9.10, destructive) */}
+      {pendingRemoval && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          style={{ background: 'rgba(4, 14, 107, .45)' }}
+          onClick={() => setPendingRemoval(null)}
+        >
           <div
-            className="mx-auto mt-6 flex h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-rater-title"
             onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-[420px] rounded-2xl bg-white p-6"
+            style={{ boxShadow: 'var(--shadow-3)' }}
           >
-            <div className="flex items-start justify-between bg-blue-700 px-6 py-4 text-white">
-              <div>
-                <h2 className="text-3xl font-bold">Assign Rater Access</h2>
-                <p className="text-base text-blue-100">Grant access to interviewer portal</p>
-              </div>
+            <h3 id="remove-rater-title" className="!mb-1 text-lg font-bold text-[#040E6B]">Are you sure?</h3>
+            <p className="!mb-0 text-sm text-slate-600">
+              Remove <span className="font-semibold text-slate-900">{pendingRemoval.name}</span> from the rater
+              list. You will have {UNDO_SECONDS} seconds to undo this.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-md p-1 text-white/90 hover:bg-white/10"
-                onClick={closeAssignModal}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              <section>
-                <label className="mb-2 block text-base font-semibold text-slate-700">
-                  Select Rater <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg"
-                  value={form.selectedEmail}
-                  onChange={(event) => handleRaterSelection(event.target.value)}
-                >
-                  <option value="">Choose a rater...</option>
-                  {availableAccounts.map((account) => (
-                    <option key={account.email} value={account.email}>
-                      {account.name} ({account.email})
-                    </option>
-                  ))}
-                </select>
-              </section>
-
-              <section>
-                <p className="mb-2 text-sm font-semibold text-slate-700">Cannot find the account above?</p>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <input
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-                    placeholder="Interviewer name"
-                    value={manualName}
-                    onChange={(event) => setManualName(event.target.value)}
-                  />
-                  <input
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-                    placeholder="Interviewer email"
-                    value={manualEmail}
-                    onChange={(event) => setManualEmail(event.target.value)}
-                  />
-                  <input
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-                    placeholder="Department"
-                    value={manualDepartment}
-                    onChange={(event) => setManualDepartment(event.target.value)}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Use this when database visibility rules hide `profiles` rows from this page.
-                </p>
-              </section>
-
-              <section>
-                <label className="mb-2 block text-base font-semibold text-slate-700">Designation / Role</label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-lg"
-                  value={selectedAccount?.designation ?? ''}
-                  placeholder="Auto-filled based on selected rater"
-                  readOnly
-                />
-                <p className="mt-2 text-sm text-slate-500">Auto-filled based on selected rater</p>
-              </section>
-
-              <section>
-                <label className="mb-2 block text-base font-semibold text-slate-700">
-                  Access Level <span className="text-red-500">*</span>
-                </label>
-                <select className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-lg" value="Interviewer" disabled>
-                  <option value="Interviewer">Interviewer</option>
-                </select>
-              </section>
-
-              <section>
-                <label className="mb-2 block text-base font-semibold text-slate-700">
-                  Assign Job Positions <span className="text-red-500">*</span>
-                </label>
-                <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-300 p-4">
-                  {assignableJobPositions.length === 0 ? (
-                    <p className="text-sm text-slate-500">No active job postings are available. Post or activate a job first.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
-                      {assignableJobPositions.map((position) => {
-                        const checked = form.assignedPositions.includes(position);
-                        return (
-                          <label key={position} className="flex items-center gap-3 text-lg text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleAssignedPosition(position)}
-                              className="h-5 w-5 rounded"
-                            />
-                            <span>{position}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <p className="mt-2 text-sm text-slate-500">
-                  Selected: {form.assignedPositions.length} position{form.assignedPositions.length === 1 ? '' : 's'}
-                </p>
-              </section>
-
-              <section>
-                <h3 className="mb-3 text-2xl font-bold text-slate-800">Access Duration (Optional)</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-base font-semibold text-slate-600">Start Date</label>
-                    <input
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg"
-                      type="date"
-                      value={form.startDate}
-                      onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-base font-semibold text-slate-600">End Date</label>
-                    <input
-                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg"
-                      type="date"
-                      value={form.endDate}
-                      onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))}
-                    />
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-4 py-2 text-lg"
-                onClick={closeAssignModal}
-                disabled={saving}
+                autoFocus
+                onClick={() => setPendingRemoval(null)}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-blue-600 px-4 py-2 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:bg-blue-300"
-                onClick={() => void handleSaveRaterAccess()}
-                disabled={saving || (!form.selectedEmail && !manualEmail.trim()) || form.assignedPositions.length === 0}
+                onClick={() => { const target = pendingRemoval; setPendingRemoval(null); scheduleRemoval(target); }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 active:bg-rose-800"
               >
-                Save &amp; Generate Access
+                <Trash2 className="h-4 w-4" /> Remove
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && (
+      {/* Undo window. It counts down so the ten seconds are visible rather
+          than something the admin has to race. */}
+      {undoRemoval && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+        >
+          {/* Colour set on the span itself: globals.css colours every <span>
+              directly, so it would not inherit the toast's white (§17 item 8). */}
+          <span style={{ color: '#FFFFFF' }}>
+            {undoRemoval.rater.name} removed · {undoRemoval.secondsLeft}s
+          </span>
+          <button
+            type="button"
+            onClick={undoScheduledRemoval}
+            style={{ color: '#FFFFFF' }}
+            className="rounded-full border border-white/40 px-3 py-1 text-xs font-semibold transition hover:bg-white/15"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
+      {toast && !undoRemoval && (
         <div className="fixed bottom-6 right-6 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">
           {toast}
         </div>

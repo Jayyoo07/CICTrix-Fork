@@ -7,22 +7,31 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
+/**
+ * The shared button.
+ *
+ * `loading` keeps the label and adds a spinner beside it (DESIGN_IDENTITY
+ * §9.1). It used to replace the children with a spinner, which left the user
+ * staring at a button that no longer said what it was doing, and changed width
+ * as it went.
+ */
+export const Button: React.FC<ButtonProps> = ({
   children,
   variant = 'primary',
   size = 'md',
   loading = false,
   className = '',
   disabled,
-  ...props 
+  ...props
 }) => {
   return (
     <button
-      className={`btn btn-${variant} btn-${size} ${className}`}
+      className={`btn btn-${variant} btn-${size}${loading ? ' is-loading' : ''} ${className}`}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {loading ? <span className="spinner"></span> : children}
+      {children}
     </button>
   );
 };

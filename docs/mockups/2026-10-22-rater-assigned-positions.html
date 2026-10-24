@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rater Assigned Positions</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --color-primary:#363EE8;--color-primary-700:#191FA8;--color-primary-900:#040E6B;
+  --color-primary-200:#C8D1FF;--color-primary-50:#EEF0FF;
+  --bg-page:#F1F5F9;--neutral-800:#28343D;--neutral-600:#515F69;--neutral-400:#94A3B8;--neutral-200:#E2E8F0;
+  --radius-md:8px;--radius-lg:12px;--radius-pill:999px;
+  --font-sans:'Poppins',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:32px 24px 64px;font-family:var(--font-sans);background:var(--bg-page);color:var(--neutral-800)}
+h1{font:700 24px/32px var(--font-sans);color:var(--color-primary-900);margin:0 0 4px}
+.sub{font:400 14px/22px var(--font-sans);color:var(--neutral-600);margin:0 0 28px;max-width:72ch}
+section{background:#fff;border:1px solid var(--neutral-200);border-radius:var(--radius-lg);padding:24px;margin-bottom:24px;max-width:1180px}
+h2{font:600 16px/24px var(--font-sans);color:var(--color-primary-900);margin:0 0 16px}
+table{width:100%;border-collapse:collapse;border:1px solid var(--neutral-200);border-radius:var(--radius-lg);overflow:hidden}
+thead th{background:var(--bg-page);font:600 13px/16px var(--font-sans);color:var(--color-primary-900);text-align:left;padding:10px 16px}
+tbody td{padding:12px 16px;border-top:1px solid var(--neutral-200);font:500 14px/18px var(--font-sans);vertical-align:top}
+tbody tr:hover{background:#F8FAFF}
+.who b{display:block;font:600 14px/20px var(--font-sans);color:var(--color-primary-900)}
+.who small{display:block;font:500 12px/16px var(--font-sans);color:var(--neutral-600)}
+.col-pos{width:46%}
+.empty{font:500 12px/16px var(--font-sans);color:var(--neutral-400)}
+.chip{display:inline-flex;align-items:center;max-width:220px;height:24px;padding:0 10px;border-radius:var(--radius-pill);
+  background:var(--color-primary-50);color:var(--color-primary-700);font:500 12px/16px var(--font-sans);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details{display:inline-block}
+details summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  height:26px;padding:0 12px;border-radius:var(--radius-pill);background:var(--color-primary-50);
+  color:var(--color-primary-700);font:600 12px/16px var(--font-sans)}
+details summary::-webkit-details-marker{display:none}
+details summary:hover{background:#E0E5FF}
+details summary:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}
+details[open] summary .caret{transform:rotate(90deg)}
+.caret{transition:transform 150ms ease-out;font-size:10px}
+details ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+details li{font:500 13px/18px var(--font-sans);color:#374151;padding-left:10px;border-left:2px solid var(--color-primary-200)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;max-width:1180px;
+  font:400 14px/22px var(--font-sans)}
+dt{font-weight:600;color:var(--color-primary-900)}
+dd{margin:0;color:var(--neutral-600)}
+@media (prefers-reduced-motion: reduce){*{transition-duration:0ms!important}}
+</style></head><body>
+
+<h1>Assigned Job Position(s) &mdash; count, expand in place</h1>
+<p class="sub">Decision for the Rater Management table on the sidebar (<code>/admin/rsp/raters</code>), chosen 2026-10-22 over wrapping chips. It replaces one title per line in brand blue, which let an eight-position rater set the height of every other column in its row.</p>
+
+<section>
+  <h2>Rater Management table</h2>
+  <table><thead><tr><th>Rater</th><th class="col-pos">Assigned Job Position(s)</th><th>Status</th></tr></thead><tbody>
+    <tr><td class="who"><b>Ma. Teresa Lopez</b><small>mt.lopez@iloilocity.gov.ph</small></td>
+      <td><details><summary><span class="caret">&#9654;</span> 8 positions</summary>
+        <ul><li>Administrative Aide IV</li><li>Administrative Officer II</li><li>Information Technology Officer I</li><li>Engineer II</li><li>Project Evaluation Officer III</li><li>Licensing Officer I</li><li>Nurse II</li><li>Social Welfare Officer II</li></ul>
+      </details></td><td>Active</td></tr>
+    <tr><td class="who"><b>Roberto Santiago</b><small>r.santiago@iloilocity.gov.ph</small></td>
+      <td><details open><summary><span class="caret">&#9654;</span> 2 positions</summary>
+        <ul><li>Engineer II</li><li>Architect I</li></ul></details></td><td>Active</td></tr>
+    <tr><td class="who"><b>Jenelyn Baroma</b><small>j.baroma@iloilocity.gov.ph</small></td>
+      <td><span class="chip">Administrative Aide IV</span></td><td>Active</td></tr>
+    <tr><td class="who"><b>Alfredo Gustilo</b><small>a.gustilo@iloilocity.gov.ph</small></td>
+      <td><span class="empty">No positions assigned</span></td><td>Inactive</td></tr>
+  </tbody></table>
+</section>
+
+<section>
+  <h2>Rules</h2>
+  <dl>
+    <dt>None</dt><dd>&ldquo;No positions assigned&rdquo; in Body S, <code>#94A3B8</code>. Never an empty cell.</dd>
+    <dt>Exactly one</dt><dd>The title itself as a brand-tint chip. No control: there is nothing to expand.</dd>
+    <dt>Two or more</dt><dd>A chip reading &ldquo;<i>n</i> positions&rdquo; with a caret, collapsed by default. The titles open beneath it, each on a 2px <code>#C8D1FF</code> left rule.</dd>
+    <dt>Colour</dt><dd>Brand tint only (<code>#EEF0FF</code> on <code>#191FA8</code>). A position is a category, not a status (&sect;10), so never green, orange or red &mdash; and never link blue, since it does not navigate.</dd>
+    <dt>Control</dt><dd>A real <code>&lt;button&gt;</code> carrying <code>aria-expanded</code>, focus ring 2px <code>#363EE8</code> at 2px offset (&sect;13). The caret rotates 90&deg; in 150ms, and not at all under <code>prefers-reduced-motion</code>.</dd>
+    <dt>Row height</dt><dd>Collapsed rows stay within the 48&ndash;56px of &sect;9.5 whatever the count. Expansion is per row and does not persist.</dd>
+    <dt>Truncation</dt><dd>A single chip caps at 220px and ellipsises; the expanded list never truncates (&sect;9.5: no truncating an identifier without recourse).</dd>
+  </dl>
+</section>
+
+</body></html>

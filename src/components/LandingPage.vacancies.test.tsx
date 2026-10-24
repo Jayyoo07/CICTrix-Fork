@@ -21,7 +21,7 @@ const jobs = [
   posting('b', 'Social Welfare Officer IV (Division Chief)', 'Office of the City Social Welfare and Development Officer',
     [['Plantilla 113', 'open'], ['Plantilla 114', 'open'], ['Plantilla 115', 'filled'], ['Plantilla 116', 'closed']]),
   posting('a', 'Engineer II (Drainage / Flood Control)', 'Office of the City Engineer', [['Plantilla 65', 'open']]),
-  // Every plantilla filled: nothing to apply to, so it is not listed.
+  // Its one plantilla is filled, so it is not a vacancy and gets no row.
   posting('c', 'Carpenter II', 'Office of the City Engineer', [['Plantilla 86', 'filled']]),
 ];
 
@@ -43,20 +43,21 @@ const renderPage = async () => {
 };
 
 describe('Landing — vacancies table plantilla numbers', () => {
-  it('gives each plantilla its own row, striking filled ones and leaving closed ones out', async () => {
+  it('gives each open plantilla its own row and leaves filled and closed ones out', async () => {
     const titles = await renderPage();
     const rows = titles.map((title) => title.closest('tr') as HTMLElement);
 
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByText('113')).toBeInTheDocument();
     expect(within(rows[0]).getByRole('button', { name: 'Apply' })).toBeEnabled();
     expect(within(rows[1]).getByText('114')).toBeInTheDocument();
-    expect(within(rows[2]).getByText('115').tagName).toBe('S');
-    expect(within(rows[2]).getByRole('button', { name: 'Filled' })).toBeDisabled();
+    expect(within(rows[1]).getByRole('button', { name: 'Apply' })).toBeEnabled();
+    expect(screen.queryByText('115')).not.toBeInTheDocument();
     expect(screen.queryByText('116')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Filled' })).not.toBeInTheDocument();
   });
 
-  it('sorts by department by default and hides fully filled postings', async () => {
+  it('sorts by department, drops a fully filled posting and counts only vacant rows', async () => {
     await renderPage();
     const titles = screen.getAllByRole('row').slice(1).map((r) => r.querySelector('td p')?.textContent);
 
@@ -64,7 +65,8 @@ describe('Landing — vacancies table plantilla numbers', () => {
       'Engineer II (Drainage / Flood Control)',
       'Social Welfare Officer IV (Division Chief)',
       'Social Welfare Officer IV (Division Chief)',
-      'Social Welfare Officer IV (Division Chief)',
     ]);
+    expect(screen.queryByText('Carpenter II')).not.toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 to 3 of 3 jobs/)).toBeInTheDocument();
   });
 });

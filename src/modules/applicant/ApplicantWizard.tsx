@@ -61,6 +61,7 @@ import {
     type ApplyDrafts,
     type PlantillaChoice,
 } from './flow/applicationDrafts';
+import { FORM_PAGES, FORM_PAGE_COUNT, clampFormPage, firstPageWithErrors, pageErrors } from './flow/formPages';
 
 const ATTACHMENT_PREVIEW_CACHE_KEY = 'cictrix_attachment_previews';
 const APPOINTMENT_TYPE_STORAGE_KEY = 'cictrix_rsp_score_setup';
@@ -176,6 +177,8 @@ export const ApplicantWizard: React.FC = () => {
 
   const [entryMode, setEntryMode] = useState<'landing' | 'wizard'>(persisted.entryMode);
   const [step, setStep] = useState<'fill' | 'review'>(persisted.step);
+  /** Page of Step 2 (flow/formPages.ts). Answers live in `apps`, so paging never loses data. */
+  const [formPage, setFormPage] = useState(() => clampFormPage(persisted.formPage));
   const [posting, setPosting] = useState<ApplyDrafts['posting']>(persisted.posting);
   const [choices, setChoices] = useState<PlantillaChoice[]>(persisted.choices);
   const [lockedPosition, setLockedPosition] = useState(persisted.lockedPosition);
@@ -267,8 +270,9 @@ export const ApplicantWizard: React.FC = () => {
       activeKey: currentKey,
       authenticatedEmployeeAccount,
       lockedPosition,
+      formPage,
     });
-  }, [entryMode, step, posting, choices, apps, currentKey, authenticatedEmployeeAccount, lockedPosition, completed]);
+  }, [entryMode, step, formPage, posting, choices, apps, currentKey, authenticatedEmployeeAccount, lockedPosition, completed]);
 
   const hasUnsavedWork = useMemo(
     () => entryMode === 'wizard' && !completed && Object.values(apps).some((app) => draftHasData(app.formData) || app.files.length > 0),
@@ -349,6 +353,7 @@ export const ApplicantWizard: React.FC = () => {
       setAuthenticatedEmployeeAccount(null);
       setEntryMode('wizard');
       setStep('fill');
+      setFormPage(1);
       setOutcomes({});
       return;
     }
@@ -384,6 +389,7 @@ export const ApplicantWizard: React.FC = () => {
       setLockedPosition(true);
       setEntryMode('wizard');
       setStep('fill');
+      setFormPage(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, location.search]);
@@ -694,10 +700,42 @@ export const ApplicantWizard: React.FC = () => {
       logErrorForAdmin('Validation error in Applicant Wizard', summary, 'Form Validation');
       focusInvalidRef.current = true;
       setActiveKey(summary[0].key);
+      const first = nextApps[summary[0].key];
+      setFormPage(firstPageWithErrors(first.errors, first.fileError) ?? FORM_PAGE_COUNT);
       return;
     }
     setStep('review');
     window.scrollTo({ top: 0 });
+  };
+
+  // ── Step 2 pages: Next validates only the fields on the current page ──────
+  const handleNextPage = () => {
+    const app = apps[currentKey] ?? blankApp({ ...INITIAL_FORM_DATA });
+    const full = validateApp(app);
+    const scoped = pageErrors(formPage, full.errors, full.fileError);
+    // Show this page's errors; keep any already shown on other pages.
+    updateApp(currentKey, (current) => ({
+      ...current,
+      errors: { ...current.errors, ...Object.fromEntries(FORM_PAGES[formPage - 1].fields.map((field) => [field, scoped.errors[field]])) },
+      fileError: FORM_PAGES[formPage - 1].documents ? scoped.fileError : current.fileError,
+    }));
+    if (scoped.count > 0) {
+      focusInvalidRef.current = true;
+      return;
+    }
+    setFormPage((page) => Math.min(page + 1, FORM_PAGE_COUNT));
+    window.scrollTo({ top: 0 });
+    focusHeading();
+  };
+
+  const handleBackPage = () => {
+    if (formPage > 1) {
+      setFormPage(formPage - 1);
+      window.scrollTo({ top: 0 });
+      focusHeading();
+      return;
+    }
+    handleBackFromFill();
   };
 
   // ── Submission: one application per plantilla ─────────────────────────────
@@ -1100,6 +1138,7 @@ export const ApplicantWizard: React.FC = () => {
     setAuthenticatedEmployeeAccount(null);
     setEntryMode('wizard');
     setStep('fill');
+    setFormPage(1);
     setOutcomes({});
     setCompleted(null);
   };
@@ -1180,6 +1219,7 @@ export const ApplicantWizard: React.FC = () => {
     setActiveKey(GENERAL_KEY);
     setEntryMode('wizard');
     setStep('fill');
+    setFormPage(1);
     setOutcomes({});
     setCompleted(null);
     // Mark the lookup as done so the debounced prefill doesn't redo it.
@@ -1546,7 +1586,12 @@ export const ApplicantWizard: React.FC = () => {
                       <ul>
                         {liveSummary.map((entry) => (
                           <li key={entry.key}>
-                            <button type="button" className="af-textbtn" style={{ minHeight: 28, padding: 0 }} onClick={() => { focusInvalidRef.current = true; selectTab(entry.key); }}>
+                            <button type="button" className="af-textbtn" style={{ minHeight: 28, padding: 0 }} onClick={() => {
+                              focusInvalidRef.current = true;
+                              selectTab(entry.key);
+                              const result = validateApp(apps[entry.key]);
+                              setFormPage(firstPageWithErrors(result.errors, result.fileError) ?? formPage);
+                            }}>
                               {choiceByKey.get(entry.key) ? choiceLabel(choiceByKey.get(entry.key)!) : 'Your application'}
                             </button>
                             {': '}
@@ -1618,8 +1663,28 @@ export const ApplicantWizard: React.FC = () => {
                 {/* One independent form per plantilla. `key` remounts the
                     sections on tab switch; the answers live in `apps`, so
                     switching tabs never loses data. */}
-                <div className="af-form-grid" key={currentKey}>
+                <div className="af-pages" aria-live="polite">
+                  <p className="af-caption">
+                    <span className="af-pages-count">Page {formPage} of {FORM_PAGE_COUNT}</span>
+                    {' · '}
+                    {FORM_PAGES[formPage - 1].title}
+                  </p>
+                  <div
+                    className="af-progress"
+                    role="progressbar"
+                    aria-label="Application pages"
+                    aria-valuemin={1}
+                    aria-valuemax={FORM_PAGE_COUNT}
+                    aria-valuenow={formPage}
+                  >
+                    <span style={{ width: `${(formPage / FORM_PAGE_COUNT) * 100}%` }} />
+                  </div>
+                </div>
+
+                <div className="af-form-grid" key={`${currentKey}-${formPage}`}>
+                  {formPage < FORM_PAGE_COUNT && (
                   <ApplicantAssessmentForm
+                    page={formPage}
                     idPrefix={`af-${keys.indexOf(currentKey)}`}
                     formData={activeApp.formData}
                     errors={activeApp.errors}
@@ -1643,6 +1708,8 @@ export const ApplicantWizard: React.FC = () => {
                       />
                     }
                   />
+                  )}
+                  {formPage === FORM_PAGE_COUNT && (
                   <AttachmentsUploadForm
                     part="documents"
                     idPrefix={`af-${keys.indexOf(currentKey)}`}
@@ -1655,18 +1722,26 @@ export const ApplicantWizard: React.FC = () => {
                     onChange={handleFormChangeFor(currentKey)}
                     errors={activeApp.errors}
                   />
+                  )}
                 </div>
               </div>
 
               <div className="af-actionbar">
-                <button type="button" className="btn btn-md btn-secondary" onClick={handleBackFromFill}>
+                <button type="button" className="btn btn-md btn-secondary" onClick={handleBackPage}>
                   <ArrowLeft size={18} strokeWidth={1.75} aria-hidden="true" />
                   Back
                 </button>
-                <button type="button" className="btn btn-md btn-primary" onClick={handleReview}>
-                  Review Application{keys.length > 1 ? 's' : ''}
-                  <ArrowRight size={18} strokeWidth={1.75} aria-hidden="true" />
-                </button>
+                {formPage < FORM_PAGE_COUNT ? (
+                  <button type="button" className="btn btn-md btn-primary" onClick={handleNextPage}>
+                    Next
+                    <ArrowRight size={18} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-md btn-primary" onClick={handleReview}>
+                    Continue to Review
+                    <ArrowRight size={18} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                )}
               </div>
             </>
           ) : (
@@ -1739,6 +1814,7 @@ export const ApplicantWizard: React.FC = () => {
                                 event.preventDefault();
                                 setActiveKey(key);
                                 setStep('fill');
+                                setFormPage(1);
                                 window.scrollTo({ top: 0 });
                               }}
                               aria-label={`Edit ${isPostingFlow ? labelFor(key) : 'your application'}`}

@@ -17,6 +17,7 @@ import {
   saveNewlyHired,
 } from '../lib/recruitmentData';
 import { supabase } from '../lib/supabase';
+import { isHiredApplicantStatus } from '../lib/api/newlyHiredStats';
 import { createPassword, createUniqueUsername, getEmployeePortalAccounts, upsertEmployeePortalAccount } from '../lib/employeePortalData';
 import { seedEmployeeContactFromApplication } from '../lib/api/employeePortal';
 import type { NewlyHired, NewlyHiredStatus } from '../types/recruitment.types';
@@ -35,7 +36,6 @@ type GeneratedCredential = {
   password: string;
 };
 
-const normalizeText = (v: string) => (v || '').trim().toLowerCase();
 
 
 export const NewlyHiredPage = () => {
@@ -109,8 +109,9 @@ export const NewlyHiredPage = () => {
         // applicants.status, and we still want them to show up here.
         const hiredFromDb = (applicantRows || [])
           .filter((row: any) => {
-            const normalized = normalizeText(String(row?.status ?? ''));
-            const matchesHired = normalized === 'hired' || normalized === 'accept';
+            // Same rule the dashboard's newly-hired counts use, so the page and
+            // the dashboard can't disagree on who is hired.
+            const matchesHired = isHiredApplicantStatus(row?.status);
             const applicantId = String(row?.id ?? '').trim();
             const inNewlyHired = Boolean(applicantId && persistedByApplicantId.has(applicantId));
             return matchesHired || inNewlyHired;
@@ -233,10 +234,6 @@ export const NewlyHiredPage = () => {
     if (!selectedDepartment) return [];
     return rows.filter((row) => row.department === selectedDepartment);
   }, [rows, selectedDepartment]);
-
-  const totalNewlyHired = rows.length;
-  const withCredentials = rows.filter((row) => Boolean(row.employeeId)).length;
-  const pendingCredentials = totalNewlyHired - withCredentials;
 
   const openDepartment = (department: string) => {
     setSelectedDepartment(department);
@@ -412,50 +409,12 @@ export const NewlyHiredPage = () => {
       <main className="admin-content bg-slate-100 !p-0">
         {mode === 'overview' && (
           <>
-            <header className="border-b border-slate-200 bg-white px-8 py-6">
+            <header className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 py-6">
               <h1 className="mb-1 text-2xl font-bold text-slate-900">Newly Hired Employees</h1>
               <p className="text-sm text-slate-500">Generate employee accounts for newly hired staff</p>
             </header>
 
             <section className="space-y-6 p-8">
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                <article className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500">Total Newly Hired</p>
-                      <p className="mt-2 text-3xl font-bold text-slate-900">{totalNewlyHired}</p>
-                    </div>
-                    <div className="rounded-2xl bg-blue-100 p-3 text-blue-600">
-                      <UserPlus size={22} />
-                    </div>
-                  </div>
-                </article>
-
-                <article className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500">With Credentials</p>
-                      <p className="mt-2 text-3xl font-bold text-green-600">{withCredentials}</p>
-                    </div>
-                    <div className="rounded-2xl bg-green-100 p-3 text-green-600">
-                      <CheckCircle2 size={22} />
-                    </div>
-                  </div>
-                </article>
-
-                <article className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500">Pending Credentials</p>
-                      <p className="mt-2 text-3xl font-bold text-orange-600">{pendingCredentials}</p>
-                    </div>
-                    <div className="rounded-2xl bg-orange-100 p-3 text-orange-600">
-                      <KeyRound size={22} />
-                    </div>
-                  </div>
-                </article>
-              </div>
-
               <div>
                 <h2 className="mb-4 text-2xl font-semibold text-slate-900">Departments</h2>
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -515,7 +474,7 @@ export const NewlyHiredPage = () => {
 
         {mode === 'department' && (
           <>
-            <header className="border-b border-slate-200 bg-white px-8 py-6">
+            <header className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 py-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h1 className="mb-1 text-2xl font-bold text-slate-900">{formatOfficeLabel(selectedDepartment)}</h1>

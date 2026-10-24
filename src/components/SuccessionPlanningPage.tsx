@@ -71,7 +71,7 @@ type OcboRow = {
  */
 const CRITERIA_COLUMNS = [
   { key: 'ipcr', label: 'Performance', weight: RANKING_WEIGHTS.ipcr },
-  { key: 'experience', label: 'Experience + Tenure', weight: RANKING_WEIGHTS.experience },
+  { key: 'experience', label: 'Experience', weight: RANKING_WEIGHTS.experience },
   { key: 'training', label: 'Training', weight: RANKING_WEIGHTS.training },
   { key: 'education', label: 'Education', weight: RANKING_WEIGHTS.education },
   { key: 'eligibility', label: 'Eligibility', weight: RANKING_WEIGHTS.eligibility },
@@ -129,7 +129,7 @@ const buildOcboRows = (res: AutoSuccessorsResult | undefined): OcboRow[] => {
     // Ordered as specification B lists them.
     criteria: [
       { key: 'ipcr', label: 'Performance', value: c.readiness.ipcr, max: c.readiness.ipcrMax },
-      { key: 'experience', label: 'Experience + Tenure', value: c.readiness.experience, max: c.readiness.experienceMax },
+      { key: 'experience', label: 'Experience', value: c.readiness.experience, max: c.readiness.experienceMax },
       { key: 'training', label: 'Training', value: c.readiness.training, max: c.readiness.trainingMax },
       { key: 'education', label: 'Education', value: c.readiness.education, max: c.readiness.educationMax },
       { key: 'eligibility', label: 'Eligibility', value: c.readiness.eligibility, max: c.readiness.eligibilityMax },
@@ -310,8 +310,13 @@ const OcboTableView = ({ admin }: { admin: string }) => {
             </tr>
 
             {open && (
-              <tr className="border-b border-slate-100 last:border-0">
-              <td colSpan={4} className="bg-slate-50/60 px-5 py-4">
+              /* The drill-down was bg-slate-50/60, barely off white, so the
+                 successor list ran straight into the next office's row. A
+                 darker fill, hard rules top and bottom and an inset shadow mark
+                 it as belonging to the office above it, and the white cards
+                 inside now have something to sit on. */
+              <tr className="last:border-0">
+              <td colSpan={4} className="border-y-2 border-slate-300 bg-slate-100 px-5 py-5 shadow-inner">
                 {loadingDept[dept.departmentId] && <SkeletonList show rows={3} label="Loading positions…" />}
                 {!loadingDept[dept.departmentId] && positions.length === 0 && (
                   <p className="text-sm text-[var(--text-secondary)]">No critical positions flagged for this office.</p>

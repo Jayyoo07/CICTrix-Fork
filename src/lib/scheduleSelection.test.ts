@@ -3,6 +3,7 @@ import {
   groupByDepartmentAndPosition,
   groupCheckState,
   isPastDate,
+  isSchedulableApplicant,
   localIsoDate,
   partitionForStatusAdvance,
   toggleGroup,
@@ -90,5 +91,32 @@ describe('date helpers', () => {
     expect(isPastDate('2026-10-10', '2026-10-11')).toBe(true);
     expect(isPastDate('2026-10-11', '2026-10-11')).toBe(false);
     expect(isPastDate('2026-10-12', '2026-10-11')).toBe(false);
+  });
+});
+
+describe('isSchedulableApplicant', () => {
+  it.each(['Shortlisted', 'Recommended for Hiring', 'Interview/Exam Scheduled', 'For Evaluation', 'Qualified'])(
+    'lists %s',
+    (status) => expect(isSchedulableApplicant(status, false)).toBe(true),
+  );
+
+  it.each(['Disqualified', 'Not Qualified', 'not qualified', 'Not Selected', 'Selected', 'Withdrawn - Hired Elsewhere'])(
+    'never lists %s, even with a completed evaluation',
+    (status) => {
+      expect(isSchedulableApplicant(status, false)).toBe(false);
+      expect(isSchedulableApplicant(status, true)).toBe(false);
+    },
+  );
+
+  it('leaves out earlier statuses unless the evaluation is complete', () => {
+    expect(isSchedulableApplicant('Submitted', false)).toBe(false);
+    expect(isSchedulableApplicant('For Contract Signing', false)).toBe(false);
+    expect(isSchedulableApplicant('For Contract Signing', true)).toBe(true);
+  });
+
+  it('leaves out blank and unrecognised statuses', () => {
+    expect(isSchedulableApplicant('', true)).toBe(false);
+    expect(isSchedulableApplicant(null, false)).toBe(false);
+    expect(isSchedulableApplicant('something odd', true)).toBe(false);
   });
 });

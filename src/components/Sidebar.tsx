@@ -203,6 +203,7 @@ export const Sidebar = ({ activeModule, userRole }: SidebarProps) => {
         location.pathname === '/admin/rsp/applicant-score' ||
         location.pathname === '/admin/rsp/applicant-ranking' ||
         location.pathname === '/admin/rsp/for-hiring' ||
+        location.pathname === '/admin/rsp/credentials' ||
         location.pathname.startsWith('/admin/rsp/qualified/') ||
         location.pathname.startsWith('/admin/rsp/applicant/'),
       roles: ['rsp'],

@@ -438,6 +438,7 @@ Tables scroll horizontally inside their container on small screens. Toolbars wra
 | Hover | Background `#191FA8` |
 | Focused / Pressed | Same fill + **glow shadow** `0 4px 14px rgba(54,62,232,.40)` and a 2px outer ring `#C8D1FF` |
 | Disabled | Background `#C8D1FF` (or 40% primary), text white at ~80%, `cursor: not-allowed`, no shadow |
+| Loading | Default fill at 70% opacity, leading 16px spinner, label unchanged, clicks ignored |
 
 **Secondary (outline)**
 
@@ -463,7 +464,13 @@ Tables scroll horizontally inside their container on small screens. Toolbars wra
 **Rules**
 - One primary button per view/section. Everything else is secondary.
 - Button order in dialogs: **Secondary (Cancel) on the left, Primary on the right.**
-- Loading state: replace label with a 16px spinner, keep width, disable clicks.
+- **Loading state: keep the action label.** A 16px spinner appears before it, the
+  button drops to 70% opacity and stops accepting clicks (`aria-busy="true"`,
+  `disabled`). Do **not** swap the label for a progress word ("Saving…",
+  "Adding…"): the label says what the button does, and replacing it loses that
+  just when the user is waiting to find out whether it worked. Reserve the
+  width so nothing reflows. Use `.btn.is-loading`, or the shared `Button`'s
+  `loading` prop.
 - Don't use square or slightly rounded buttons. Rounded-rectangles (12px) are reserved for the header **Login** and **Logout** buttons, nav pills, and pagination.
 
 > **Note:** The button kit lists the Small **Secondary** height as 45px, which appears to be a typo. Use **36px** for all Small buttons.

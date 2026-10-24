@@ -6,9 +6,14 @@ import { supabase } from '../lib/supabase';
 import { isMockModeEnabled } from '../lib/supabase';
 import { mockDatabase } from '../lib/mockDatabase';
 import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
-import { ChevronLeft, ChevronRight, Search, Undo2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Search, Undo2, X } from 'lucide-react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../lib/plantillaSlots';
+import { belongsToPosition, isDisqualifiedStatus, isQualifiedStatus, isShortlistedStatus } from '../lib/applicationsByPosition';
+import { formatPHDate, getJobPostings, loadJobPostings } from '../lib/recruitmentData';
+import { isOpenVacancy, plantillaNumbers } from '../lib/vacancySearch';
+import { formatOfficeLabel } from '../constants/positions';
+import type { JobPosting } from '../types/recruitment.types';
 import { plantillaLabel } from '../lib/plantillaRules';
 import { samePositionRows } from '../lib/applicantReviewQueue';
 import { SortHeader, toTime, useTableSort } from './tableSort';
@@ -36,20 +41,11 @@ interface Applicant {
    */
   plantilla_slots: Array<{ slotNumber: number; itemNumber: string; label?: string }>;
   needs_slot_reassignment: boolean;
+  /** Links to a position, for the ?positionId= filter (see applicationsByPosition). */
+  plantilla_slot_id: string | null;
+  job_posting_id: string | null;
+  linked_slot_ids: string[];
 }
-
-const isShortlistedStatus = (status: string) =>
-  status.trim().toLowerCase().includes('shortlist');
-
-const isQualifiedStatus = (status: string) => {
-  const s = status.trim().toLowerCase();
-  return s.includes('qualified') || s.includes('recommended') || s.includes('hired') || s.includes('accepted');
-};
-
-const isDisqualifiedStatus = (status: string) => {
-  const s = status.trim().toLowerCase();
-  return s.includes('not qualified') || s.includes('disqualif') || s.includes('reject');
-};
 
 const ITEMS_PER_PAGE = 10;
 
@@ -114,7 +110,14 @@ const PlantillaTags = ({ applicant }: { applicant: Applicant }) => {
 
 export const ApplicationsListPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Job Posts › Job Vacancies › Applicants opens this tab with ?positionId=.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const positionId = searchParams.get('positionId') ?? '';
   const [applicants, setApplicants] = useState<Applicant[]>([]);
+  /** Plantilla slot ids per position id. */
+  const [slotIdsByPosition, setSlotIdsByPosition] = useState<Map<string, Set<string>>>(new Map());
+  const [position, setPosition] = useState<JobPosting | null | undefined>(undefined);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
   const [officeFilter, setOfficeFilter]     = useState('all');
@@ -143,6 +146,7 @@ export const ApplicationsListPage = () => {
         const slotById = new Map<string, { slotNumber: number; itemNumber: string }>();
         slotsByJob.forEach(slots => slots.forEach(slot =>
           slotById.set(slot.id, { slotNumber: slot.slotNumber, itemNumber: slot.itemNumber })));
+        setSlotIdsByPosition(new Map([...slotsByJob].map(([jobId, slots]) => [jobId, new Set(slots.map(slot => slot.id))])));
 
         const rows: Applicant[] = (data ?? []).map((r: any) => ({
           id:               String(r.id ?? ''),
@@ -160,6 +164,9 @@ export const ApplicationsListPage = () => {
                               .filter((slot): slot is { slotNumber: number; itemNumber: string; label?: string } => Boolean(slot))
                               .sort((a, b) => a.slotNumber - b.slotNumber),
           needs_slot_reassignment: Boolean(r.needs_slot_reassignment),
+          plantilla_slot_id: r.plantilla_slot_id ? String(r.plantilla_slot_id) : null,
+          job_posting_id:   r.job_posting_id ? String(r.job_posting_id) : null,
+          linked_slot_ids:  (slotLinks.get(String(r.id ?? '')) ?? []).map(link => link.slotId),
         }));
         setApplicants(rows);
       } catch {
@@ -173,7 +180,43 @@ export const ApplicationsListPage = () => {
     return () => window.removeEventListener('cictrix:applicants-updated', load);
   }, []);
 
+  // The filtered position. undefined = still looking, null = not found.
+  useEffect(() => {
+    if (!positionId) { setPosition(undefined); return; }
+    let cancelled = false;
+    const find = (jobs: JobPosting[]) => jobs.find(job => job.id === positionId);
+    const cached = find(getJobPostings());
+    if (cached) { setPosition(cached); return; }
+    setPosition(undefined);
+    void loadJobPostings().then(jobs => {
+      if (cancelled) return;
+      setPosition(find(jobs) ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [positionId]);
+
+  /** "Office · Plantilla 21, 22 · Deadline Oct 30, 2026" for the filtered header. */
+  const positionDetails = position
+    ? [
+        formatOfficeLabel(position.department, position.division),
+        plantillaNumbers(position).length > 0 ? `Plantilla ${plantillaNumbers(position).join(', ')}` : '',
+        isOpenVacancy(position)
+          ? position.applicationDeadline ? `Deadline ${formatPHDate(position.applicationDeadline)}` : 'Open'
+          : 'Closed',
+      ].filter(Boolean).join(' · ')
+    : '';
+
   // ── Derived ────────────────────────────────────────────────────────────────
+  const inPosition = useMemo(() => {
+    if (!positionId) return () => true;
+    const slotIds = slotIdsByPosition.get(positionId) ?? new Set<string>();
+    const linked = new Map(applicants.map(a => [a.id, a.linked_slot_ids]));
+    return (a: Applicant) => belongsToPosition(
+      { id: a.id, plantillaSlotId: a.plantilla_slot_id, jobPostingId: a.job_posting_id }, positionId, slotIds, linked);
+  }, [positionId, slotIdsByPosition, applicants]);
+
+  const clearPositionFilter = () => { setSearchParams({}); setPage(1); };
+
   const offices   = useMemo(() => [...new Set(applicants.map(a => a.office).filter(Boolean))].sort(),    [applicants]);
   const positions = useMemo(() => [...new Set(applicants.map(a => a.position).filter(Boolean))].sort(), [applicants]);
 
@@ -189,7 +232,8 @@ export const ApplicationsListPage = () => {
       if (isQualifiedStatus(a.status)) return false;
       // Disqualified applicants are removed from all list views.
       if (isDisqualifiedStatus(a.status)) return false;
-      if (officeFilter   !== 'all' && a.office   !== officeFilter)   return false;
+      if (!inPosition(a)) return false;
+      if (officeFilter  !== 'all' && a.office   !== officeFilter)   return false;
       if (positionFilter !== 'all' && a.position !== positionFilter) return false;
       if (typeFilter     !== 'all' && normalizeType(a.application_type) !== typeFilter) return false;
       if (term) {
@@ -208,11 +252,11 @@ export const ApplicationsListPage = () => {
       }
       return true;
     });
-  }, [applicants, search, officeFilter, positionFilter, typeFilter]);
+  }, [applicants, search, officeFilter, positionFilter, typeFilter, inPosition]);
 
   const shortlisted = useMemo(
-    () => applicants.filter(a => isShortlistedStatus(a.status)),
-    [applicants],
+    () => applicants.filter(a => isShortlistedStatus(a.status) && inPosition(a)),
+    [applicants, inPosition],
   );
 
   const { sorted: sortedApplicants, sort: applicantSort, toggle: toggleApplicantSort } =
@@ -287,7 +331,8 @@ export const ApplicationsListPage = () => {
     const queueRows = target ? samePositionRows(rows, target) : rows;
     navigate(`/admin/rsp/applicant/${id}`, {
       state: {
-        from: '/admin/rsp/applications',
+        // Keeps ?positionId= so coming back returns to the filtered list.
+        from: `/admin/rsp/applications${location.search}`,
         navQueue: queueRows.map((row) => ({ id: row.id, name: row.full_name, status: row.status })),
       },
     });
@@ -303,13 +348,30 @@ export const ApplicationsListPage = () => {
       <div className="admin-layout">
         <Sidebar activeModule="RSP" userRole="rsp" />
         <main className="admin-content bg-slate-50 !p-0">
-          <div className="border-b border-slate-200 bg-white px-8 py-6">
-            <h1 className="!mb-1 !text-2xl font-bold">Applications</h1>
-            <p className="!mb-0 text-base text-slate-500">All applicants submitted across all job positions</p>
-          </div>
-          <ApplicantsTabBar />
+          {positionId ? (
+            // Opened from Job Posts › Job Vacancies › Applicants: the title names the vacancy.
+            <ApplicantsTabBar
+              breadcrumb={(
+                <Link to="/admin/rsp/jobs" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
+                  ‹ Back to Job Vacancies
+                </Link>
+              )}
+              title={position === null ? 'This position no longer exists' : `Applicants for ${position?.title ?? '…'}`}
+              subtitle={positionDetails || ' '}
+              actions={(
+                <button type="button" onClick={clearPositionFilter}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]">
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Clear filter
+                </button>
+              )}
+            />
+          ) : (
+            <ApplicantsTabBar title="Applications" subtitle="All applicants submitted across all job positions" />
+          )}
 
           <div className="p-6">
+
             {/* Filters */}
             <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -405,7 +467,11 @@ export const ApplicationsListPage = () => {
                     <tr>
                       <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
                         <Search className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                        <p className="font-medium">No applicants found for the selected filters.</p>
+                        <p className="font-medium">
+                          {positionId && filtered.length === 0 && shortlisted.length === 0 && !search && officeFilter === 'all' && positionFilter === 'all' && typeFilter === 'all'
+                            ? 'No applicants yet for this vacancy.'
+                            : 'No applicants found for the selected filters.'}
+                        </p>
                       </td>
                     </tr>
                   )}

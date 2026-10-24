@@ -207,9 +207,12 @@ export async function getOfficeDirectory(): Promise<
     // A posting whose department isn't in the table yet is appended so its
     // office still can't silently disappear.
     const jobDepts = Array.from(new Set(jobsData.map((j: any) => String(j.department || '').trim()).filter(Boolean)));
-    const knownDeptNames = new Set(departmentsFromDb.map((d: any) => norm(d.name)));
+    // "Legal Department" on a posting is the Legal office, so a deactivated
+    // office doesn't come back as a new row under a longer name.
+    const officeKey = (name: unknown) => norm(name).replace(/\s+(department|office)$/, '');
+    const knownDeptNames = new Set(departmentsFromDb.map((d: any) => officeKey(d.name)));
     const orphanDepts = jobDepts
-      .filter((deptName) => !knownDeptNames.has(norm(deptName)))
+      .filter((deptName) => !knownDeptNames.has(officeKey(deptName)))
       .map((deptName) => ({
         id: `dynamic-${deptName.toLowerCase().replace(/\s+/g, '-')}`,
         name: deptName,

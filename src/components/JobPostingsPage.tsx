@@ -1,4 +1,3 @@
-import { useBackClosesView } from '../hooks/useHistoryBack';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { SalaryGradeSelect } from './SalaryGradeSelect';
 import { formatSalary, listSalaryGrades, type SalaryGradeRow } from '../lib/api/salaryGrades';
@@ -9,18 +8,19 @@ import {
     ChevronLeft,
     ChevronRight,
     FileText,
-    Lock,
     MapPin,
     Plus,
     Search,
     Trash2,
-    Users,
     X
 } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { JobVacanciesPanel } from './JobVacanciesPanel';
-import { isOpenedVacancy } from '../lib/vacancySearch';
+import { CloseVacancyDialog } from './CloseVacancyDialog';
+import { comparePositionRows, isOpenVacancy, matchesTitleOrPlantilla, positionStatus, type PositionStatus } from '../lib/vacancySearch';
+import { countListedApplicationsByPosition } from '../lib/applicationsByPosition';
+import { closeVacancy, listActiveVacancies, openVacancy as openVacancyRequest, type ActiveVacancy, type CloseReason, type OpenVacancyInput } from '../lib/vacancies';
 import { COMPETENCIES, EDUCATION_LEVELS, formatOfficeLabel, formatOfficeName } from '../constants/positions';
 import { useDepartmentNames } from '../hooks/useDepartmentOptions';
 import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
@@ -43,8 +43,6 @@ import {
     fetchApplicantSlotLinks,
     fetchSlotApplicantCounts,
     saveSlotsForJob,
-    setSlotStatus,
-    summarizeSlots,
 } from '../lib/plantillaSlots';
 import {
     applicantsPerPlantillaText,
@@ -61,15 +59,11 @@ import { isCurriculumVitae } from '../lib/applicationDocuments';
 import { reviewOutcome } from '../lib/applicantReviewQueue';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
-import { SkeletonList, TableSkeletonRows, tableBodyClass, useDelayedLoading, useTableLoading } from './table-loading';
+import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 
 const ITEMS_PER_PAGE = 10;
 
 const normalizeText = (value: string) => String(value ?? '').trim().toLowerCase();
-
-/** Reference numbers get quoted back with arbitrary case and punctuation. */
-const normalizeReference = (value: string) =>
-  String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 const normalizeRomanNumeralsInText = (value: string) =>
   String(value ?? '')
@@ -77,19 +71,13 @@ const normalizeRomanNumeralsInText = (value: string) =>
     .map((token) => (/^[ivxlcdm]+$/i.test(token) ? token.toUpperCase() : token))
     .join('');
 
-const STATUS_COLORS: Record<JobPosting['status'], string> = {
-  Draft: 'bg-slate-100 text-slate-700',
-  Active: 'bg-emerald-100 text-emerald-700',
-  Closed: 'bg-slate-100 text-slate-700',   // §10: Closed = Neutral, not Error
-  Filled: 'bg-blue-100 text-blue-700',
-};
+/** Job Posts sub tabs, kept in `?tab=` so Back works. Positions is the default. */
+type JobPostsTab = 'positions' | 'vacancies';
 
-const STATUS_LABELS: Record<JobPosting['status'], string> = {
-  // A Draft is a position defined in Job Positions but not yet opened as a vacancy.
-  Draft: 'Not opened',
-  Active: 'Open',
-  Closed: 'Closed',
-  Filled: 'Filled',
+/** §10 vacancy status: Open = Success, Closed = Neutral. Derived, never edited. */
+const STATUS_BADGE: Record<PositionStatus, string> = {
+  Open: 'badge badge-success',
+  Closed: 'badge badge-neutral',
 };
 
 /**
@@ -216,16 +204,8 @@ export const JobPostingsPage = () => {
   // both card counts and the View Applicants list. Skips findJobIdFromRow so no rows
   // are silently dropped before counting.
   const [allApplicantsRaw, setAllApplicantsRaw] = useState<any[]>([]);
-  const [viewingApplicantsFor, setViewingApplicantsFor] = useState<JobPosting | null>(null);
-  const [jobApplicantsRows, setJobApplicantsRows] = useState<Array<{ id: string; full_name: string; email: string; contact_number: string; status: string; created_at: string; total_score: number | null; position: string; office: string; matched: boolean; slotIds: string[]; needsSlotReassignment: boolean; referenceNo: string }>>([]);
-  /** Plantilla slot id, or 'all', for the per-job applicants list. */
-  const [jobApplicantsSlotFilter, setJobApplicantsSlotFilter] = useState<string>('all');
-  const [jobApplicantsLoading, setJobApplicantsLoading] = useState(false);
-  const showApplicantsLoader = useDelayedLoading(jobApplicantsLoading);
-  const [jobApplicantsSearch, setJobApplicantsSearch] = useState('');
-  useBackClosesView(viewingApplicantsFor !== null, () => { setViewingApplicantsFor(null); }, 'jobposting-applicants');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | JobPosting['status']>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | PositionStatus>('all');
   const [officeFilter, setOfficeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [showGuide, setShowGuide] = useState(false);
@@ -246,21 +226,25 @@ export const JobPostingsPage = () => {
     return () => { cancelled = true; };
   }, []);
   const [toast, setToast] = useState('');
-  const [lockConfirmJob, setLockConfirmJob] = useState<JobPosting | null>(null);
-  // Job Positions (defaults) vs Job Vacancies, kept in the URL so Back works.
+  /** The vacancy the Close Vacancy confirmation is open for. */
+  const [closingJob, setClosingJob] = useState<JobPosting | null>(null);
+  const [closeError, setCloseError] = useState('');
+  /** Active vacancy rows by posting id (Date Opened); reloaded after open/close. */
+  const [activeVacancies, setActiveVacancies] = useState<Map<string, ActiveVacancy>>(new Map());
+  // Job Vacancies (default, no param) vs Job Positions (?tab=positions), kept
+  // in the URL so Back and refresh keep the tab. An old ?tab=vacancies still works.
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab: 'positions' | 'vacancies' = searchParams.get('tab') === 'vacancies' ? 'vacancies' : 'positions';
-  const switchTab = (tab: 'positions' | 'vacancies') => {
-    setViewingApplicantsFor(null);
-    setSearchParams(tab === 'vacancies' ? { tab } : {});
+  const activeTab: JobPostsTab = searchParams.get('tab') === 'positions' ? 'positions' : 'vacancies';
+  const switchTab = (tab: JobPostsTab) => {
+    setSearchParams(tab === 'vacancies' ? {} : { tab });
   };
+  /** Plantilla slot ids per applicant, for the Applicants (N) count. Null until loaded. */
+  const [applicantSlotLinks, setApplicantSlotLinks] = useState<Map<string, string[]> | null>(null);
   /** Validation message for the Plantilla Slots section of the modal. */
   const [slotError, setSlotError] = useState('');
   const [savingJob, setSavingJob] = useState(false);
   /** Applicant counts per slot id, so removing a slot can warn about them. */
   const [slotApplicantCounts, setSlotApplicantCounts] = useState<Map<string, number>>(new Map());
-  /** Job post ids whose Plantilla Item No. cell is expanded to the full list. */
-  const [expandedSlotJobIds, setExpandedSlotJobIds] = useState<Set<string>>(new Set());
 
   const resolveLiveApplicants = async (jobRows: JobPosting[]) => {
     const localApplicants = getApplicants();
@@ -505,6 +489,14 @@ export const JobPostingsPage = () => {
     void resolveLiveApplicants(normalizedJobs);
   }, [jobPostingsCacheVersion]);
 
+  // Opening or closing a vacancy reloads the postings, which bumps the cache
+  // version, so Date Opened refreshes with them.
+  useEffect(() => {
+    let cancelled = false;
+    void listActiveVacancies().then((rows) => { if (!cancelled) setActiveVacancies(rows); });
+    return () => { cancelled = true; };
+  }, [jobPostingsCacheVersion]);
+
   // Dedicated fetch for raw applicant rows. This is the source the card counts and
   // the View Applicants list both consume. Using .select('*') avoids column-drift 400s,
   // and skipping .order avoids the created_at error seen previously.
@@ -523,6 +515,9 @@ export const JobPostingsPage = () => {
         const rows = Array.isArray(data) ? data : [];
         console.info('[JobPostingsPage] allApplicantsRaw loaded', { count: rows.length });
         setAllApplicantsRaw(rows);
+        const links = await fetchApplicantSlotLinks();
+        if (cancelled) return;
+        setApplicantSlotLinks(new Map([...links].map(([applicantId, list]) => [applicantId, list.map((link) => link.slotId)])));
       } catch (err) {
         if (cancelled) return;
         console.error('[JobPostingsPage] allApplicantsRaw fetch exception:', err);
@@ -639,222 +634,34 @@ export const JobPostingsPage = () => {
     return counts;
   }, [jobs, allApplicantsRaw]);
 
+  // Job Vacancies › Applicants (N): what the filtered Applications tab will list.
+  const listedApplicationCounts = useMemo(() => {
+    if (!applicantSlotLinks) return undefined;
+    return countListedApplicationsByPosition(
+      jobs,
+      allApplicantsRaw.map((row) => ({
+        id: String(row?.id ?? ''),
+        status: String(row?.status ?? ''),
+        plantillaSlotId: row?.plantilla_slot_id ? String(row.plantilla_slot_id) : null,
+        jobPostingId: row?.job_posting_id ? String(row.job_posting_id) : null,
+      })),
+      applicantSlotLinks,
+    );
+  }, [jobs, allApplicantsRaw, applicantSlotLinks]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(''), 2000);
     return () => clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if (!viewingApplicantsFor) {
-      setJobApplicantsRows([]);
-      return;
-    }
-
-    let cancelled = false;
-    const job = viewingApplicantsFor;
-
-    const fetchRows = async () => {
-      setJobApplicantsLoading(true);
-
-      // Supabase is the source of truth. Query it directly. If RLS blocks the select,
-      // surface the error (so we see it in console) rather than silently falling back.
-      const fetchFromSupabase = async (): Promise<{ rows: any[] | null; error: any }> => {
-        // Use select('*') so the query can't fail due to a column name drift between
-        // the TypeScript schema and the actual Supabase table. We read fields defensively.
-        try {
-          const { data, error } = await (supabase as any)
-            .from('applicants')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (error) return { rows: null, error };
-          return { rows: Array.isArray(data) ? data : [], error: null };
-        } catch (err) {
-          return { rows: null, error: err };
-        }
-      };
-
-      const fetchFromBackend = async (): Promise<any[] | null> => {
-        try {
-          const res = await fetch('/api/applicants/?skip=0&limit=1000');
-          if (!res.ok) return null;
-          const contentType = res.headers.get('content-type') ?? '';
-          if (!contentType.includes('application/json')) return null;
-          const payload = await res.json();
-          return Array.isArray(payload) ? payload : null;
-        } catch {
-          return null;
-        }
-      };
-
-      try {
-        // Primary: Supabase
-        const supabaseResult = await fetchFromSupabase();
-        let data: any[] | null = supabaseResult.rows;
-        let source = 'supabase';
-
-        if (supabaseResult.error) {
-          console.error('[JobPostingsPage] supabase select error:', supabaseResult.error);
-        }
-
-        // Only fall through to the backend when Supabase truly failed (not when it
-        // succeeded but returned zero rows). An RLS policy that returns zero rows is
-        // indistinguishable here from "there are none", so we try backend as a second
-        // chance when rows is null OR when rows is empty and backend might have more.
-        if (!data || data.length === 0) {
-          const backendData = await fetchFromBackend();
-          if (backendData && backendData.length > 0) {
-            data = backendData;
-            source = 'backend';
-          }
-        }
-
-        if (cancelled) return;
-        if (!data) {
-          console.warn('[JobPostingsPage] no applicants source reachable. Check Supabase RLS or backend on :8000.');
-          setJobApplicantsRows([]);
-          return;
-        }
-        console.info(`[JobPostingsPage] applicants loaded from ${source} (${data.length} rows)`);
-
-        const normalize = (value: string) =>
-          normalizeRomanNumeralsInText(String(value ?? ''))
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, ' ');
-
-        const expandAbbrev = (value: string) =>
-          normalize(value)
-            .replace(/\badmin\b/g, 'administrative')
-            .replace(/\bit\b/g, 'information technology')
-            .replace(/\bhr\b/g, 'human resource');
-
-        const tokens = (value: string) =>
-          new Set(expandAbbrev(value).split(/\s+/).filter((t) => t.length >= 3));
-
-        const jobTitleKey = normalize(job.title);
-        const jobTitleExpanded = expandAbbrev(job.title);
-        // Every plantilla item on this posting, not just slot 1's mirror —
-        // an applicant who ticked Plantilla 3 carries THAT item number.
-        const jobItemKeys = new Set(
-          [job.jobCode, ...(job.plantillaSlots ?? []).map((slot) => slot.itemNumber)]
-            .map(normalize)
-            .filter(Boolean),
-        );
-        const jobOfficeKey = normalize(job.division || job.department || '');
-        const jobTitleTokens = tokens(job.title);
-
-        // Which plantilla slot(s) each applicant ticked. An applicant can be in
-        // the running for several slots on this same posting under one
-        // application, so this is a list, not a single value.
-        const slotIdsOnThisJob = new Set((job.plantillaSlots ?? []).map((slot) => slot.id));
-        const slotLinks = await fetchApplicantSlotLinks();
-
-        // IDs that the page's existing loader already matched to this job via
-        // findJobIdFromRow (handles position+office fallback resolution).
-        const preMatchedIds = new Set(
-          liveApplicants
-            .filter((entry) => entry.jobPostingId === job.id)
-            .map((entry) => String(entry.id)),
-        );
-
-        const isMatch = (row: any) => {
-          const rowId = String(row?.id ?? '');
-          if (preMatchedIds.has(rowId)) return true;
-
-          // A real slot link is proof, not a guess.
-          const linked = slotLinks.get(rowId) ?? [];
-          if (linked.some((link) => slotIdsOnThisJob.has(link.slotId))) return true;
-
-          const rowItem = normalize(row?.item_number);
-          if (rowItem && jobItemKeys.has(rowItem)) return true;
-
-          const rowPositionNormalized = normalize(row?.position);
-          const rowPositionExpanded = expandAbbrev(row?.position);
-          if (!jobTitleKey || !rowPositionNormalized) return false;
-
-          if (rowPositionNormalized === jobTitleKey) return true;
-          if (rowPositionExpanded === jobTitleExpanded) return true;
-          if (rowPositionExpanded.includes(jobTitleExpanded) || jobTitleExpanded.includes(rowPositionExpanded)) return true;
-
-          const rowTokens = tokens(row?.position);
-          const overlap = [...jobTitleTokens].filter((t) => rowTokens.has(t)).length;
-          if (jobTitleTokens.size > 0 && overlap / jobTitleTokens.size >= 0.75) {
-            const rowOffice = normalize(row?.office);
-            if (!jobOfficeKey || !rowOffice || rowOffice === jobOfficeKey) return true;
-          }
-
-          return false;
-        };
-
-        // Local status overrides: persistStatus writes status changes to the
-        // recruitment store in localStorage. When RLS blocks the DB update, the UI
-        // would otherwise show stale status. Overlay localStorage status on the DB
-        // row so the user sees their own actions immediately.
-        const localApplicants = getApplicants();
-        const localStatusById = new Map<string, string>();
-        for (const entry of localApplicants) {
-          if (entry?.id && entry?.status) localStatusById.set(String(entry.id), String(entry.status));
-        }
-
-        const mapped = data.map((row: any) => {
-          const firstName = String(row.first_name ?? '').trim();
-          const middleName = String(row.middle_name ?? '').trim();
-          const lastName = String(row.last_name ?? '').trim();
-          const middleInitial = middleName ? `${middleName.charAt(0).toUpperCase()}.` : '';
-          const fullName = [firstName, middleInitial, lastName].filter(Boolean).join(' ');
-          const rowId = String(row.id);
-          const localStatus = localStatusById.get(rowId);
-          return {
-            id: rowId,
-            full_name: fullName,
-            email: String(row.email ?? ''),
-            contact_number: String(row.contact_number ?? ''),
-            status: localStatus ?? String(row.status ?? 'New Application'),
-            created_at: String(row.created_at ?? ''),
-            total_score: typeof row.total_score === 'number' ? row.total_score : null,
-            position: String(row.position ?? ''),
-            office: String(row.office ?? ''),
-            matched: isMatch(row),
-            slotIds: (slotLinks.get(rowId) ?? [])
-              .map((link) => link.slotId)
-              .filter((slotId) => slotIdsOnThisJob.has(slotId)),
-            needsSlotReassignment: Boolean(row.needs_slot_reassignment),
-            referenceNo: String(row.reference_no ?? ''),
-          };
-        });
-
-        console.info('[JobPostingsPage] applicants fetch result', {
-          jobTitle: job.title,
-          jobCode: job.jobCode,
-          jobOffice: job.division || job.department,
-          totalRows: data.length,
-          preMatchedByLiveApplicants: preMatchedIds.size,
-          matchedAfterFuzzy: mapped.filter((r) => r.matched).length,
-          samplePositions: Array.from(new Set(data.map((r: any) => r?.position))).slice(0, 10),
-        });
-
-        setJobApplicantsRows(mapped);
-      } catch (err) {
-        console.error('[JobPostingsPage] fetch applicants exception:', err);
-        if (!cancelled) setJobApplicantsRows([]);
-      } finally {
-        if (!cancelled) setJobApplicantsLoading(false);
-      }
-    };
-
-    void fetchRows();
-    return () => { cancelled = true; };
-  }, [viewingApplicantsFor, liveApplicants]);
-
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
-      const query = `${job.title} ${job.jobCode} ${job.summary}`.toLowerCase();
-      const matchesSearch = !search || query.includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
+      const matchesSearch = matchesTitleOrPlantilla(job, search);
+      const matchesStatus = statusFilter === 'all' || positionStatus(job) === statusFilter;
       const matchesOffice = officeFilter === 'all' || formatOfficeName(job.department) === officeFilter;
       return matchesSearch && matchesStatus && matchesOffice;
-    });
+    }).sort(comparePositionRows);
   }, [jobs, officeFilter, search, statusFilter]);
 
   const officeOptions = useMemo(
@@ -993,7 +800,7 @@ export const JobPostingsPage = () => {
     if (!job) return;
     editRequestHandled.current = true;
     // Drop the request from history so a refresh doesn't reopen the form.
-    navigate(location.pathname, { replace: true, state: null });
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     setEditOpenedFromDetails(true);
     openEditModal(job);
   }, [location.state, jobs]);
@@ -1204,16 +1011,6 @@ export const JobPostingsPage = () => {
       : `Job position created${slotNote}. Open it from Job Vacancies to advertise it.`);
   };
 
-  const updateStatus = (id: string, nextStatus: JobPosting['status']) => {
-    const nextJobs = jobs.map((job) => (job.id === id ? { ...job, status: nextStatus } : job));
-    saveJobs(nextJobs);
-    setToast(`Posting marked as ${nextStatus}.`);
-    // If status is 'Filled' or 'Hired', navigate to Newly Hired page
-    if (nextStatus === 'Filled') {
-      navigate('/admin/rsp/new-hired');
-    }
-  };
-
   const duplicatePosting = async (job: JobPosting) => {
     const duplicatedId = crypto.randomUUID();
     // The copy keeps the plantilla names; internal keys are unique system-wide,
@@ -1261,12 +1058,19 @@ export const JobPostingsPage = () => {
   };
 
   const deleteJobPosting = async (job: JobPosting) => {
+    if (isOpenVacancy(job)) {
+      setToast('Close the vacancy first before deleting this position.');
+      return;
+    }
     const linkedApplicants = liveApplicants.filter((row) => row.jobPostingId === job.id);
     const linkedCount = linkedApplicants.length;
 
+    // Name the plantilla: positions sharing a title are separate rows.
+    const plantillas = (job.plantillaSlots ?? []).map((slot) => plantillaLabel(slot)).join(', ');
+    const target = plantillas ? `"${job.title}" (${plantillas})` : `"${job.title}"`;
     const confirmMessage = linkedCount > 0
-      ? `Delete job post \"${job.title}\"? ${linkedCount} applicant record(s) and their document references will be archived to Reports.`
-      : `Delete job post \"${job.title}\"? This action cannot be undone.`;
+      ? `Delete ${target}? ${linkedCount} applicant record(s) and their document references will be archived to Reports.`
+      : `Delete ${target}? This action cannot be undone.`;
     const confirmed = window.confirm(confirmMessage);
     if (!confirmed) return;
 
@@ -1296,61 +1100,36 @@ export const JobPostingsPage = () => {
     setToast(linkedCount > 0 ? 'Job post deleted and applicant data archived to Reports.' : 'Job post deleted.');
   };
 
-  const closeApplication = (job: JobPosting) => {
-    setLockConfirmJob(job);
+  // Opening and closing go through the database (src/lib/vacancies.ts), which
+  // also opens or closes the plantillas and records the vacancy history. The
+  // reload that follows refreshes the tabs, counts and Date Opened.
+
+  /** Job Vacancies › Open Vacant Job Position. Resolves true when it opened. */
+  const openVacancy = async (job: JobPosting, input: OpenVacancyInput) => {
+    const result = await openVacancyRequest(job.id, input);
+    if (!result.ok) {
+      setToast(result.error ?? 'We couldn\'t open this vacancy. Try again.');
+      return false;
+    }
+    await loadJobPostings();
+    setToast(`Vacancy opened. Applications close on ${formatPHDate(input.deadline)}.`);
+    return true;
   };
 
-  const confirmLock = async () => {
-    if (!lockConfirmJob) return;
-    const job = lockConfirmJob;
-    setLockConfirmJob(null);
-    updateStatus(job.id, 'Closed');
-
-    // Closing the posting has to close its still-open plantilla slots too,
-    // otherwise the portal would keep offering them. Filled slots are left
-    // alone — they record a hire that happened.
-    const openSlots = (job.plantillaSlots ?? []).filter((slot) => slot.status === 'open' && !slot.id.startsWith('legacy:'));
-    if (openSlots.length === 0) return;
-
-    await Promise.allSettled(openSlots.map((slot) => setSlotStatus(slot.id, 'closed')));
-    setJobs((prev) => prev.map((row) => (row.id === job.id
-      ? {
-          ...row,
-          plantillaSlots: (row.plantillaSlots ?? []).map((slot) =>
-            slot.status === 'open' ? { ...slot, status: 'closed' as PlantillaSlotStatus } : slot),
-        }
-      : row)));
+  /** Close Vacancy confirmation. Resolves true when it closed. */
+  const confirmCloseVacancy = async (reason: CloseReason, remarks: string) => {
+    if (!closingJob) return false;
+    const result = await closeVacancy(closingJob.id, reason, remarks);
+    if (!result.ok) {
+      setCloseError(result.error ?? 'We couldn\'t close this vacancy. Try again.');
+      return false;
+    }
+    setClosingJob(null);
+    await loadJobPostings();
+    setToast('Vacancy closed.');
+    return true;
   };
 
-  /** Job Vacancies: open (or reopen) a position with its YYYY-MM-DD application deadline. */
-  const openVacancy = async (job: JobPosting, deadline: string) => {
-    const now = new Date().toISOString();
-
-    // Reopening the posting reopens the slots that were closed with it. A
-    // filled slot stays filled — its vacancy is gone, not merely paused.
-    const closedSlots = (job.plantillaSlots ?? []).filter((slot) => slot.status === 'closed' && !slot.id.startsWith('legacy:'));
-    await Promise.allSettled(closedSlots.map((slot) => setSlotStatus(slot.id, 'open')));
-
-    const nextJobs = jobs.map((j) =>
-      j.id === job.id
-        ? {
-            ...j,
-            status: 'Active' as JobPosting['status'],
-            postedDate: now,
-            applicationDeadline: new Date(deadline).toISOString(),
-            plantillaSlots: (j.plantillaSlots ?? []).map((slot) =>
-              slot.status === 'closed' ? { ...slot, status: 'open' as PlantillaSlotStatus } : slot),
-          }
-        : j
-    );
-    saveJobs(nextJobs);
-    setToast(`${normalizeRomanNumeralsInText(job.title)} is now open to applicants.`);
-  };
-
-  const updateDeadline = (job: JobPosting, deadline: string) => {
-    saveJobs(jobs.map((j) => (j.id === job.id ? { ...j, applicationDeadline: new Date(deadline).toISOString() } : j)));
-    setToast('Application deadline updated.');
-  };
 
   return (
     <div className="rsp-ds min-h-screen bg-[#f8f9fa]">
@@ -1358,14 +1137,14 @@ export const JobPostingsPage = () => {
     <div className="admin-layout">
       <Sidebar activeModule="RSP" userRole="rsp" />
       <main className="admin-content bg-slate-50 !p-0">
-        <div className="border-b border-slate-200 bg-white px-8 pt-6">
+        <div className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 pt-6">
           <h1 className="!mb-1 !text-2xl font-bold">Job Posts</h1>
-          <p className="!mb-4 text-base text-slate-500">Define positions once, then open them as vacancies with an application deadline.</p>
+          <p className="!mb-4 text-base text-slate-500">Define positions once, then open them as vacancies with an application deadline. Vacancies close automatically at the deadline, or you can close them early.</p>
           {/* Tabs on white pages (DESIGN_IDENTITY §9.2) */}
           <div role="tablist" className="-mb-px flex gap-2">
             {([
+              { id: 'vacancies', label: 'Job Vacancies', icon: Briefcase, count: jobs.filter((job) => isOpenVacancy(job)).length },
               { id: 'positions', label: 'Job Positions', icon: FileText, count: jobs.length },
-              { id: 'vacancies', label: 'Job Vacancies', icon: Briefcase, count: jobs.filter(isOpenedVacancy).length },
             ] as const).map((tab) => {
               const selected = activeTab === tab.id;
               const Icon = tab.icon;
@@ -1391,9 +1170,12 @@ export const JobPostingsPage = () => {
           <JobVacanciesPanel
             jobs={jobs}
             loading={jobsLoad.initialLoading}
+            applicantCounts={listedApplicationCounts}
+            activeVacancies={activeVacancies}
             onOpenVacancy={openVacancy}
-            onUpdateDeadline={updateDeadline}
-            onClose={closeApplication}
+            onClose={(job) => { setCloseError(''); setClosingJob(job); }}
+            onApplicants={(job) => navigate(`/admin/rsp/applications?positionId=${encodeURIComponent(job.id)}`)}
+            onCreatePosition={() => { switchTab('positions'); openCreateModal(); }}
           />
         )}
         {activeTab === 'positions' && (
@@ -1405,223 +1187,6 @@ export const JobPostingsPage = () => {
           </button>
         </div>
 
-        {viewingApplicantsFor && (() => {
-          const job = viewingApplicantsFor;
-          const jobSlots = job.plantillaSlots ?? [];
-          const slotById = new Map(jobSlots.map((slot) => [slot.id, slot]));
-          const term = jobApplicantsSearch.trim().toLowerCase();
-          // Reference No. matches on its normalised form, so an admin can
-          // paste it exactly as the applicant quoted it.
-          const referenceTerm = normalizeReference(term);
-          const bySearch = term
-            ? jobApplicantsRows.filter((r) =>
-                r.full_name.toLowerCase().includes(term) ||
-                r.email.toLowerCase().includes(term) ||
-                r.status.toLowerCase().includes(term) ||
-                r.position.toLowerCase().includes(term) ||
-                (referenceTerm.length > 0 && normalizeReference(r.referenceNo).includes(referenceTerm)),
-              )
-            : jobApplicantsRows;
-
-          const searched = jobApplicantsSlotFilter === 'all'
-            ? bySearch
-            : bySearch.filter((r) => r.slotIds.includes(jobApplicantsSlotFilter));
-
-          const matchedRows = searched.filter((r) => r.matched);
-          const totalMatched = jobApplicantsRows.filter((r) => r.matched).length;
-
-          const statusClass = (status: string) => {
-            const s = status.toLowerCase();
-            // DESIGN_IDENTITY.md §10 application-status map. Negatives first:
-            // "not qualified" / "disqualified" both contain "qualified".
-            if (s.includes('reject') || s.includes('not qualified') || s.includes('disqual')) return 'bg-rose-100 text-rose-700';
-            if (s.includes('withdraw') || s.includes('closed') || s.includes('draft')) return 'bg-slate-100 text-slate-700';
-            if (s.includes('interview') || s.includes('review') || s.includes('pending')) return 'bg-amber-100 text-amber-700';
-            if (s.includes('shortlist')) return 'bg-blue-100 text-blue-700';
-            if (s.includes('qualified') || s.includes('recommend') || s.includes('hired') || s.includes('approved')) return 'bg-emerald-100 text-emerald-700';
-            return 'bg-blue-100 text-blue-700';   // Submitted / Received
-          };
-
-          // The cards shown, in shown order, so the details page can step through them.
-          const visibleRows = matchedRows;
-
-          const renderCard = (a: typeof jobApplicantsRows[number], i: number) => (
-            <article
-              key={a.id}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => navigate(`/admin/rsp/applicant/${a.id}`, {
-                state: {
-                  from: '/admin/rsp/jobs',
-                  job: { id: job.id, title: job.title, jobCode: job.jobCode },
-                  navQueue: visibleRows.map((row) => ({ id: row.id, name: row.full_name, status: row.status })),
-                },
-              })}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
-                    #{i + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="!mb-0 text-base font-bold text-slate-900">
-                        {a.full_name || <span className="italic text-slate-400">Unnamed applicant</span>}
-                      </p>
-                    </div>
-                    <p className="!mb-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-600">
-                      {a.email && <span>{a.email}</span>}
-                      {a.contact_number && <span>· {a.contact_number}</span>}
-                    </p>
-                    {/* The code the applicant quotes when they write in. */}
-                    {a.referenceNo && (
-                      <p className="!mb-1 text-xs text-slate-500">
-                        Reference No. <span className="font-mono text-slate-700">{a.referenceNo}</span>
-                      </p>
-                    )}
-                    <p className="!mb-0 text-xs text-slate-400">
-                      Applied for <span className="font-semibold text-slate-600">{a.position || '—'}</span>
-                      {a.office && <> · {a.office}</>}
-                      {a.created_at && <> · {formatPHDate(a.created_at)}</>}
-                    </p>
-                    {/* Which plantilla item(s) this one application covers. */}
-                    {(a.slotIds.length > 0 || a.needsSlotReassignment) && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {a.slotIds.map((slotId) => {
-                          const slot = slotById.get(slotId);
-                          if (!slot) return null;
-                          return (
-                            <span
-                              key={slotId}
-                              className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200"
-                            >
-                              {plantillaLabel(slot)}
-                            </span>
-                          );
-                        })}
-                        {a.needsSlotReassignment && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                            Needs reassignment
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {(() => {
-                  // Spec: status badge on the right should only read
-                  // "New Applicant" when the applicant just applied; otherwise
-                  // omit it.
-                  const normalized = String(a.status ?? '').trim().toLowerCase();
-                  const isNew = normalized === 'new application' || normalized === 'pending' || normalized === '' || normalized === 'submitted';
-                  if (!isNew) return null;
-                  return (
-                    <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                      New Applicant
-                    </span>
-                  );
-                })()}
-              </div>
-            </article>
-          );
-
-          return (
-            <>
-              <section className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => { setViewingApplicantsFor(null); }}
-                  className="rounded-xl border border-slate-300 bg-slate-50 p-2.5 text-slate-600 hover:bg-slate-100"
-                  aria-label="Back to job postings"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="!mb-1 text-xs font-semibold uppercase tracking-widest text-blue-600">
-                    Job Postings &gt; Applicants
-                  </p>
-                  <h2 className="!mb-0.5 text-xl font-bold text-slate-900">{job.title}</h2>
-                  <p className="!mb-0 text-sm text-slate-600">
-                    {formatOfficeLabel(job.department, job.division)} ·{' '}
-                    {jobSlots.length > 1
-                      ? `${jobSlots.length} plantillas`
-                      : jobSlots[0] ? plantillaLabel(jobSlots[0]) : 'Plantilla 1'}{' '}
-                    · {totalMatched} applicant{totalMatched === 1 ? '' : 's'}
-                  </p>
-                </div>
-                {(() => {
-                  const summary = summarizeSlots(jobSlots);
-                  const multi = jobSlots.length > 1;
-                  const className = multi
-                    ? summary.tone === 'filled' ? STATUS_COLORS.Filled
-                      : summary.tone === 'closed' ? STATUS_COLORS.Closed
-                      : STATUS_COLORS.Active
-                    : STATUS_COLORS[job.status];
-                  return (
-                    <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${className}`}>
-                      {multi ? summary.label : STATUS_LABELS[job.status]}
-                    </span>
-                  );
-                })()}
-              </section>
-
-              <section className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="h-10 w-full rounded-xl border border-slate-300 pl-10 pr-3 text-sm"
-                    placeholder="Search applicants by name, email, position, status, or Reference No.…"
-                    value={jobApplicantsSearch}
-                    onChange={(event) => setJobApplicantsSearch(event.target.value)}
-                  />
-                </div>
-                {jobSlots.length > 1 && (
-                  <select
-                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm"
-                    value={jobApplicantsSlotFilter}
-                    onChange={(event) => setJobApplicantsSlotFilter(event.target.value)}
-                    aria-label="Filter by plantilla slot"
-                  >
-                    <option value="all">All plantillas</option>
-                    {jobSlots.map((slot) => (
-                      <option key={slot.id} value={slot.id}>
-                        {applicantsPerPlantillaText(plantillaLabel(slot), slotApplicantCounts.get(slot.id) ?? 0)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </section>
-
-              <section className="mt-4 flex flex-col gap-3">
-                {jobApplicantsLoading ? (
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-busy="true">
-                    <SkeletonList show={showApplicantsLoader} label="Loading applicants…" />
-                  </div>
-                ) : totalMatched === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-                    <Users className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-                    <p className="!mb-1 font-semibold text-slate-600">No applicants yet</p>
-                    <p className="!mb-0 text-sm text-slate-400">
-                      Applications for this position will appear here once submitted.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {matchedRows.map((a, i) => renderCard(a, i))}
-
-                    {matchedRows.length === 0 && term && (
-                      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-                        <p className="!mb-0 text-sm text-slate-500">No applicants match your search.</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </section>
-            </>
-          );
-        })()}
-
-        {!viewingApplicantsFor && (
-        <>
         <section className="rounded-xl border border-slate-200 bg-white p-0 shadow-sm">
           <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,0.75fr)_minmax(0,0.75fr)]">
             <div className="relative">
@@ -1634,12 +1199,10 @@ export const JobPostingsPage = () => {
               />
             </div>
 
-            <select className="h-10 rounded-xl border border-slate-300 px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | JobPosting['status'])}>
+            <select className="h-10 rounded-xl border border-slate-300 px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | PositionStatus)}>
               <option value="all">All Status</option>
-              <option value="Active">Open</option>
-              <option value="Draft">Not opened</option>
+              <option value="Open">Open</option>
               <option value="Closed">Closed</option>
-              <option value="Filled">Filled</option>
             </select>
 
             <select className="h-10 rounded-xl border border-slate-300 px-3 text-sm" value={officeFilter} onChange={(event) => setOfficeFilter(event.target.value)}>
@@ -1657,17 +1220,28 @@ export const JobPostingsPage = () => {
         </section>
 
         <section className="mt-5">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {/* No overflow-hidden here: it would make this div the sticky
+              scroll container, and the header would pin to the top of the
+              table instead of the viewport, i.e. look like it does nothing.
+              The corners are clipped on the header cells and the last row
+              instead. */}
+          <div className="rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
+                {/* Sticky under the page header, which is itself sticky under
+                    the §8.2 bar. The cells stick, not the row: a sticky <tr>
+                    leaves its own background behind. The bottom rule is an
+                    inset shadow rather than a border, because a border on a
+                    sticky cell in a border-collapse table detaches from it
+                    while scrolling. */}
+                <tr className="bg-slate-50 [&>th]:sticky [&>th]:top-[168px] [&>th]:z-20 [&>th]:bg-slate-50 [&>th]:shadow-[inset_0_-1px_0_#e2e8f0] sm:[&>th]:top-[180px] [&>th:first-child]:rounded-tl-2xl [&>th:last-child]:rounded-tr-2xl">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position Title</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plantillas</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Office / Department</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Date Posted</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Applicants</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+                  <th className="w-[140px] px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody className={tableBodyClass(false)}>
@@ -1678,51 +1252,17 @@ export const JobPostingsPage = () => {
                 {!jobsLoad.initialLoading && currentPageJobs.map((job) => {
                   const liveCount = applicantCountsByJob.get(job.id) ?? { applicants: 0, qualified: 0, toReview: 0 };
                   const officeLabel = formatOfficeLabel(job.department, job.division);
+                  // One posting per plantilla (2026-10-23 split), so one row each.
                   const slots = job.plantillaSlots ?? [];
-                  const slotSummary = summarizeSlots(slots);
-                  const isMultiSlot = slots.length > 1;
-                  const expanded = expandedSlotJobIds.has(job.id);
-                  // A multi-slot post reports its own aggregate ("2/4 Open");
-                  // a single-slot post keeps the posting-level label so nothing
-                  // changes for the ordinary case.
-                  const statusLabel = isMultiSlot ? slotSummary.label : STATUS_LABELS[job.status];
-                  const statusClass = isMultiSlot
-                    ? slotSummary.tone === 'filled' ? STATUS_COLORS.Filled
-                      : slotSummary.tone === 'closed' ? STATUS_COLORS.Closed
-                      : STATUS_COLORS.Active
-                    : STATUS_COLORS[job.status];
+                  // Open while the position has an unexpired vacancy, else Closed.
+                  const status = positionStatus(job);
                   return (
-                    <Fragment key={job.id}>
-                    <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <tr key={job.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
                       <td className="px-5 py-4">
-                        {isMultiSlot ? (
-                          <button
-                            type="button"
-                            onClick={() => setExpandedSlotJobIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(job.id)) next.delete(job.id); else next.add(job.id);
-                              return next;
-                            })}
-                            className="inline-flex items-center gap-1 text-left text-sm font-semibold text-slate-900 hover:text-blue-700"
-                            aria-expanded={expanded}
-                            aria-label={`${expanded ? 'Collapse' : 'Expand'} plantillas for ${normalizeRomanNumeralsInText(job.title)}`}
-                          >
-                            <ChevronRight className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-                            {normalizeRomanNumeralsInText(job.title)}
-                          </button>
-                        ) : (
-                          <p className="font-semibold text-slate-900 text-sm">{normalizeRomanNumeralsInText(job.title)}</p>
-                        )}
+                        <p className="font-semibold text-slate-900 text-sm">{normalizeRomanNumeralsInText(job.title)}</p>
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-500">
-                        {isMultiSlot ? (
-                          <span className="whitespace-nowrap">
-                            <span className="text-slate-700">{slots.length} plantillas</span>
-                            {slotSummary.filled > 0 && <span className="text-xs text-slate-500"> · {slotSummary.filled} filled</span>}
-                          </span>
-                        ) : (
-                          <span className="whitespace-nowrap">{slots[0] ? applicantsPerPlantillaText(plantillaLabel(slots[0]), slotApplicantCounts.get(slots[0].id) ?? 0) : "Plantilla 1"}</span>
-                        )}
+                        <span className="whitespace-nowrap">{slots.length > 0 ? slots.map((slot) => plantillaLabel(slot)).join(', ') : 'Plantilla 1'}</span>
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-700">{officeLabel}</td>
                       <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">{formatPHDate(job.postedDate)}</td>
@@ -1735,10 +1275,10 @@ export const JobPostingsPage = () => {
                         )}
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
+                        <span className={STATUS_BADGE[status]}>{status}</span>
                       </td>
                       <td className="px-5 py-4">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
                             title="View Details"
@@ -1747,56 +1287,13 @@ export const JobPostingsPage = () => {
                           >
                             Details
                           </button>
-                          <button
-                            type="button"
-                            title="View Applicants"
-                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
-                            onClick={() => { setViewingApplicantsFor(job); setJobApplicantsSearch(''); setJobApplicantsSlotFilter('all'); }}
-                          >
-                            Applicants
-                          </button>
-                          <button type="button" title="Delete" onClick={() => void deleteJobPosting(job)}
+                          <button type="button" title="Delete" aria-label={`Delete ${normalizeRomanNumeralsInText(job.title)}`} onClick={() => void deleteJobPosting(job)}
                             className="rounded-lg border border-rose-300 px-2 py-1.5 text-rose-500 hover:bg-rose-50 transition-colors">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </td>
                     </tr>
-                    {isMultiSlot && expanded && slots.map((slot) => {
-                      const slotCount = slotApplicantCounts.get(slot.id) ?? 0;
-                      // An open plantilla nobody has applied to yet reads as
-                      // "No applicants" so it stands out from ones in progress.
-                      const slotStatus = slot.status === 'filled'
-                        ? { label: 'Filled', className: STATUS_COLORS.Filled }
-                        : slot.status === 'closed'
-                          ? { label: 'Closed', className: STATUS_COLORS.Closed }
-                          : slotCount === 0
-                            ? { label: 'No applicants', className: 'bg-slate-100 text-slate-500' }
-                            : { label: 'Open', className: STATUS_COLORS.Active };
-                      return (
-                        <tr key={slot.id} className="border-b border-slate-100 bg-slate-50/70 text-sm">
-                          <td className="border-l-[3px] border-l-blue-200 px-5 py-2" />
-                          <td className="px-5 py-2 text-slate-700">{plantillaLabel(slot)}</td>
-                          <td className="px-5 py-2" />
-                          <td className="px-5 py-2" />
-                          <td className="px-5 py-2 text-center text-slate-900">{slotCount}</td>
-                          <td className="px-5 py-2 text-center">
-                            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${slotStatus.className}`}>{slotStatus.label}</span>
-                          </td>
-                          <td className="px-5 py-2 text-center">
-                            <button
-                              type="button"
-                              title={`View applicants for ${plantillaLabel(slot)}`}
-                              className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
-                              onClick={() => { setViewingApplicantsFor(job); setJobApplicantsSearch(''); setJobApplicantsSlotFilter(slot.id); }}
-                            >
-                              Applicants
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    </Fragment>
                   );
                 })}
                 {!jobsLoad.initialLoading && currentPageJobs.length === 0 && (
@@ -1824,8 +1321,6 @@ export const JobPostingsPage = () => {
             </div>
           </div>
         </section>
-        </>
-        )}
         </>
         )}
         </div>{/* /p-6 */}
@@ -2156,38 +1651,12 @@ export const JobPostingsPage = () => {
         </div>
       )}
 
-      {/* Lock confirmation modal */}
-      {lockConfirmJob && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100">
-                <Lock className="h-5 w-5 text-orange-500" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900">Close Application?</h3>
-                <p className="text-sm text-slate-500">This will stop accepting new applicants.</p>
-              </div>
-            </div>
-            <p className="mb-5 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <span className="font-semibold">{lockConfirmJob.title}</span> will be marked as <span className="font-semibold text-orange-600">Closed</span>. Applicants already submitted will not be affected.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setLockConfirmJob(null)}
-                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button type="button" onClick={() => void confirmLock()}
-                className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
-                <Lock className="mr-1.5 inline h-3.5 w-3.5" /> Confirm Lock
-              </button>
-            </div>
-          </div>
-        </div>
+      {closingJob && (
+        <CloseVacancyDialog job={closingJob} error={closeError} onCancel={() => setClosingJob(null)} onConfirm={confirmCloseVacancy} />
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">{toast}</div>
+        <div role="status" className="fixed bottom-6 right-6 z-[400] rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">{toast}</div>
       )}
     </div>
     </div>

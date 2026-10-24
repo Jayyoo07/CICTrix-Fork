@@ -24,6 +24,7 @@ import {
   Target
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ConfirmLogoutDialog } from '../../components/ConfirmLogoutDialog';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { MyTrainingsSection } from './MyTrainingsSection';
 import { MyArchiveSection } from './MyArchiveSection';
@@ -197,6 +198,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Employee>(currentUser);
   const [showSwitchModal, setShowSwitchModal] = useState(false);
+  // The employee portal logged out on the first click, with no way back.
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [hasOfficeRole, setHasOfficeRole] = useState(false);
   const location = useLocation();
 
@@ -1536,7 +1539,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               )}
             </div>
             <button
-              onClick={onLogout}
+              onClick={() => setLogoutConfirmOpen(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', padding: '0.4rem 0.85rem', fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', cursor: 'pointer', transition: 'background 0.15s' }}
             >
               <LogOut className="h-4 w-4" />
@@ -2834,6 +2837,14 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           </>
         );
       })()}
+
+      {/* The same confirmation every other portal uses (§9.10). */}
+      <ConfirmLogoutDialog
+        open={logoutConfirmOpen}
+        sessionLabel="Employee Portal"
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => { setLogoutConfirmOpen(false); onLogout(); }}
+      />
     </div>
   );
 };

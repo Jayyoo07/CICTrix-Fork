@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, Users } from 'lucide-react';
+import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, UserPlus, Users } from 'lucide-react';
+import { fetchNewlyHiredStats, type NewlyHiredStats } from '../../lib/api/newlyHiredStats';
 import { getSuccessionDashboardOverview, type SuccessionOverview } from '../../lib/api/succession';
 import '../../styles/rsp-dashboard.css';
 import '../../styles/dashboard-scale.css';
 
 // RSP dashboard overview, built to docs/mockups/2026-10-15-rsp-dashboard-kpis.html.
-// Pure presentation over data RSPDashboard already loads; the only fetch of its
-// own is the succession overview.
+// Pure presentation over data RSPDashboard already loads, apart from two fetches
+// of its own: the succession overview and the newly-hired counts.
 
 export type OverviewFunnelStage = 'pending' | 'reviewed' | 'shortlisted' | 'qualified' | 'hired' | 'notQualified' | 'hiredElsewhere';
 
@@ -44,6 +45,7 @@ interface Props {
   onOpenApplicants: () => void;
   onOpenQualified: () => void;
   onOpenSuccession: () => void;
+  onOpenNewHired: () => void;
 }
 
 type Period = 'month' | 'quarter' | 'year';
@@ -120,6 +122,7 @@ export function RspDashboardOverview({
   onOpenApplicants,
   onOpenQualified,
   onOpenSuccession,
+  onOpenNewHired,
 }: Props) {
   const today = useMemo(() => startOfDay(new Date()), []);
   const [period, setPeriod] = useState<Period>('quarter');
@@ -129,6 +132,17 @@ export function RspDashboardOverview({
   const [sessionRange, setSessionRange] = useState<'week' | 'month'>('week');
   const [succession, setSuccession] = useState<SuccessionOverview | null>(null);
   const [successionError, setSuccessionError] = useState<string | null>(null);
+  const [newlyHired, setNewlyHired] = useState<NewlyHiredStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchNewlyHiredStats().then((stats) => {
+      if (!cancelled) setNewlyHired(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,16 +227,17 @@ export function RspDashboardOverview({
       oldestWait,
       screened,
       qualifiedRate: screened > 0 ? pct(reachedQualified, screened) : null,
+      // Each row opens the list behind it (docs/plans/2026-10-23-applicant-kpi-links-and-applicants-tabs.md).
       funnel: [
-        { label: 'Received', value: scoped.length, tone: 'accent' },
-        { label: 'Shortlisted', value: reachedShortlisted, tone: 'accent' },
-        { label: 'Qualified', value: reachedQualified, tone: 'accent' },
-        { label: 'Hired', value: hired, tone: 'ok' },
+        { label: 'Received', value: scoped.length, tone: 'accent', open: onOpenApplicants },
+        { label: 'Shortlisted', value: reachedShortlisted, tone: 'accent', open: onOpenApplicants },
+        { label: 'Qualified', value: reachedQualified, tone: 'accent', open: onOpenQualified },
+        { label: 'Hired', value: hired, tone: 'ok', open: onOpenNewHired },
       ],
       closedOut,
       hiredElsewhere,
     };
-  }, [applicants, department, period, stageOf, today]);
+  }, [applicants, department, period, stageOf, today, onOpenApplicants, onOpenQualified, onOpenNewHired]);
 
   const perVacancy = postings.open > 0 ? (applicantStats.total / postings.open).toFixed(1) : '—';
 
@@ -437,21 +452,27 @@ export function RspDashboardOverview({
             <div className="rd-card">
               <div className="rd-h"><h3>Applicants</h3><button type="button" className="rd-link" onClick={onOpenApplicants}>All applicants ›</button></div>
               <div className="rd-stats rd-s4">
-                <div className="rd-stat"><span className="l">This {period}</span><span className="v">{applicantStats.total}</span></div>
-                <div className={`rd-stat ${applicantStats.pending ? 'warn' : ''}`}>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenApplicants}>
+                  <span className="l">This {period}</span><span className="v">{applicantStats.total}</span>
+                </button>
+                <button type="button" className={`rd-stat rd-stat-link ${applicantStats.pending ? 'warn' : ''}`} onClick={onOpenApplicants}>
                   <span className="l">Unscreened</span>
                   <span className="v">{applicantStats.pending}{applicantStats.pending > 0 && <small> oldest {applicantStats.oldestWait}d</small>}</span>
-                </div>
-                <div className="rd-stat"><span className="l">Per vacancy</span><span className="v">{perVacancy}</span></div>
-                <div className="rd-stat"><span className="l">Qualified</span><span className="v">{applicantStats.qualifiedRate ?? '—'}{applicantStats.qualifiedRate !== null && <small>%</small>}</span></div>
+                </button>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenJobs}>
+                  <span className="l">Per vacancy</span><span className="v">{perVacancy}</span>
+                </button>
+                <button type="button" className="rd-stat rd-stat-link" onClick={onOpenQualified}>
+                  <span className="l">Qualified</span><span className="v">{applicantStats.qualifiedRate ?? '—'}{applicantStats.qualifiedRate !== null && <small>%</small>}</span>
+                </button>
               </div>
               <span className="rd-subtitle rd-block">Application funnel · {PERIOD_LABEL[period]}</span>
               {applicantStats.funnel.map((f) => (
-                <div key={f.label} className="rd-fun">
+                <button key={f.label} type="button" className="rd-fun rd-fun-link" onClick={f.open}>
                   <span>{f.label}</span>
-                  <div className="rd-bar"><i style={{ width: `${pct(f.value, applicantStats.total)}%`, background: f.tone === 'ok' ? 'var(--rd-ok)' : 'var(--rd-accent)' }} /></div>
+                  <span className="rd-bar"><i style={{ width: `${pct(f.value, applicantStats.total)}%`, background: f.tone === 'ok' ? 'var(--rd-ok)' : 'var(--rd-accent)' }} /></span>
                   <b>{f.value}</b>
-                </div>
+                </button>
               ))}
               {applicantStats.screened > 0 && (
                 <p className="rd-conv">
@@ -577,7 +598,32 @@ export function RspDashboardOverview({
           </div>
         </section>
 
-        {/* 3. Succession */}
+        {/* 3. Newly hired — moved off the Newly Hired page, which now opens
+            straight into its department tables. */}
+        <section className="rd-sec">
+          <div className="rd-sec-h">
+            <span className="rd-ico"><UserPlus size={16} aria-hidden="true" /></span>
+            <h2>Newly hired</h2>
+            <span className="rd-desc">Employee accounts for hired applicants</span>
+            <button type="button" className="rd-link" onClick={onOpenNewHired}>Generate accounts ›</button>
+          </div>
+          <div className="rd-stats rd-s3 rd-stats-card">
+            <div className="rd-stat">
+              <span className="l">Total newly hired</span>
+              <span className="v">{newlyHired ? newlyHired.total : '—'}</span>
+            </div>
+            <div className="rd-stat">
+              <span className="l">With credentials</span>
+              <span className="v">{newlyHired ? newlyHired.withCredentials : '—'}</span>
+            </div>
+            <div className={`rd-stat ${newlyHired?.pendingCredentials ? 'warn' : ''}`}>
+              <span className="l">Pending credentials</span>
+              <span className="v">{newlyHired ? newlyHired.pendingCredentials : '—'}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Succession */}
         <section className="rd-sec">
           <div className="rd-sec-h">
             <span className="rd-ico"><GitBranch size={16} aria-hidden="true" /></span>

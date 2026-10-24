@@ -1,21 +1,22 @@
 // Subtab 2 — "Qualified Applicants" within the RSP qualified page.
 // Two sub-views:
 //   "Pending Assignment" — qualified applicants that still need a schedule,
-//                          picked from a department → position tree.
+//                          picked from one filterable, paged table.
 //   "Scheduled"         — applicants with a complete schedule, awaiting evaluation.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
   CalendarCheck,
   CalendarPlus,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Pencil,
   Save,
   Search,
   UserCheck,
-  Users,
   X,
 } from 'lucide-react';
 import { SortButton, SortHeader, toTime, useTableSort } from './tableSort';
@@ -27,11 +28,16 @@ import {
   type InterviewerOption,
 } from '../lib/applicantSchedule';
 import type { ApplicantRecord } from './QualifiedApplicantsSection';
-import { RaterManagementSubsection } from './RaterManagementSubsection';
 import { ScheduleApplicantsModal } from './ScheduleApplicantsModal';
-import { SchedulingTree } from './SchedulingTree';
 import { SkeletonList, useDelayedLoading } from './table-loading';
-import { normalizeStatus } from '../lib/api/applicantStatus';
+import {
+  formatDisplayDate,
+  groupCheckState,
+  isSchedulableApplicant,
+  toggleGroup,
+  toggleId,
+  type CheckState,
+} from '../lib/scheduleSelection';
 
 interface PendingAssignmentListProps {
   applicants: ApplicantRecord[];
@@ -40,18 +46,8 @@ interface PendingAssignmentListProps {
   loading?: boolean;
 }
 
-const isQualified = (a: ApplicantRecord, completedIds: Set<string>): boolean => {
-  const s = (a.status ?? '').toLowerCase();
-  return (
-    // Batch scheduling advances Shortlisted applicants to this status, so they
-    // must stay listed (now under Scheduled) instead of disappearing.
-    normalizeStatus(a.status) === 'Interview/Exam Scheduled' ||
-    s.includes('qualified') ||
-    s.includes('shortlist') ||
-    s.includes('recommended') ||
-    completedIds.has(a.id)
-  );
-};
+const isQualified = (a: ApplicantRecord, completedIds: Set<string>): boolean =>
+  isSchedulableApplicant(a.status, completedIds.has(a.id));
 
 const fmtDate = (iso: string) => {
   if (!iso) return '—';
@@ -101,6 +97,47 @@ const SCHEDULED_DESC_FIRST: readonly ScheduledSortKey[] = ['qualified'];
 
 const SCHEDULED_TH = 'px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500';
 
+type PendingSortKey = 'qualified' | 'name' | 'position' | 'department';
+
+const PENDING_SORT_ACCESSORS: Record<PendingSortKey, (a: ApplicantRecord) => string | number> = {
+  qualified:  qualifiedTime,
+  name:       (a) => a.full_name,
+  position:   (a) => a.position,
+  department: (a) => a.office,
+};
+const PENDING_DESC_FIRST: readonly PendingSortKey[] = ['qualified'];
+
+const PENDING_PAGE_SIZE = 10;
+/** §9.6: past this many pages, show first, last and current ±1 with ellipses. */
+const MAX_PLAIN_PAGES = 7;
+
+/** Zero-based page indexes to show, with null standing for an ellipsis. */
+const pageItems = (current: number, total: number): (number | null)[] => {
+  if (total <= MAX_PLAIN_PAGES) return Array.from({ length: total }, (_, i) => i);
+  const shown = [0, current - 1, current, current + 1, total - 1].filter((p) => p >= 0 && p < total);
+  const unique = [...new Set(shown)].sort((a, b) => a - b);
+  return unique.flatMap((p, i) => (i > 0 && p - unique[i - 1] > 1 ? [null, p] : [p]));
+};
+
+const CHECKBOX_CLASS = 'h-[18px] w-[18px] shrink-0 cursor-pointer accent-[var(--color-primary)]';
+
+const TriStateCheckbox = ({ state, label, onChange }: { state: CheckState; label: string; onChange: () => void }) => {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === 'indeterminate';
+  }, [state]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label={label}
+      checked={state === 'checked'}
+      onChange={onChange}
+      className={CHECKBOX_CLASS}
+    />
+  );
+};
+
 /** "2026-10-07 09:30" sorts chronologically as text; blank when there is no date. */
 const scheduleKey = (date: string | null | undefined, time: string | null | undefined) =>
   date ? `${date} ${time ?? ''}` : '';
@@ -109,7 +146,10 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   const showLoader = useDelayedLoading(loading);
   const awaitingData = loading || showLoader;
 
-  const [subTab, setSubTab] = useState<'pending' | 'scheduled' | 'rater-management'>('pending');
+  // Rater Management used to be a third subtab here. It now lives only on the
+  // sidebar's Rater Management page, which carries the same controls plus the
+  // position assignments this panel never showed.
+  const [subTab, setSubTab] = useState<'pending' | 'scheduled'>('pending');
   const [interviewers, setInterviewers] = useState<InterviewerOption[]>([]);
   const [overrides, setOverrides] = useState<Record<string, ApplicantAssignmentFields>>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -207,9 +247,7 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
     setTypeFilter('all');
   };
 
-  // The Pending tree is already grouped by department and position, so only
-  // the search applies there; the dropdown filters belong to Scheduled.
-  const searchedPending = useMemo(() => pendingApplicants.filter(matchesSearch), [pendingApplicants, matchesSearch]);
+  const filteredPending = useMemo(() => pendingApplicants.filter(matchesFilters), [pendingApplicants, matchesFilters]);
   const filteredScheduled = useMemo(() => scheduledApplicants.filter(matchesFilters), [scheduledApplicants, matchesFilters]);
 
   // Schedule values come from the merged record so a just-published schedule sorts correctly.
@@ -229,7 +267,19 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   const { sorted: sortedScheduled, sort: scheduledSort, toggle: toggleScheduledSort } =
     useTableSort<ApplicantRecord, ScheduledSortKey>(filteredScheduled, scheduledSortAccessors, DEFAULT_QUALIFIED_SORT, SCHEDULED_DESC_FIRST);
 
-  // Picks survive searches so RSP can gather applicants across
+  const { sorted: sortedPending, sort: pendingSort, toggle: togglePendingSort } =
+    useTableSort<ApplicantRecord, PendingSortKey>(filteredPending, PENDING_SORT_ACCESSORS, DEFAULT_QUALIFIED_SORT, PENDING_DESC_FIRST);
+
+  const [pendingPage, setPendingPage] = useState(0);
+  // A new filter or sort starts from the first page.
+  useEffect(() => { setPendingPage(0); }, [search, departmentFilter, positionFilter, typeFilter, pendingSort]);
+  const pendingPageCount = Math.max(1, Math.ceil(sortedPending.length / PENDING_PAGE_SIZE));
+  const currentPendingPage = Math.min(pendingPage, pendingPageCount - 1);
+  const pagedPending = sortedPending.slice(currentPendingPage * PENDING_PAGE_SIZE, (currentPendingPage + 1) * PENDING_PAGE_SIZE);
+  // The header checkbox covers every row the filters match, on all pages.
+  const filteredPendingIds = useMemo(() => filteredPending.map((a) => a.id), [filteredPending]);
+
+  // Picks survive filters and paging so RSP can gather applicants across
   // departments; only ids that left the pending list (already assigned) drop.
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -353,71 +403,44 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   return (
     <div className="space-y-4">
 
-      {/* Sub-tab toggle */}
-      <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1" style={{ width: 'fit-content' }}>
-        <button
-          type="button"
-          onClick={() => setSubTab('pending')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'pending'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <Clock size={14} />
-          Pending Assignment
-          {pendingApplicants.length > 0 && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-bold"
-              style={subTab === 'pending'
-                ? { background: 'rgba(255,255,255,0.25)', color: '#ffffff' }
-                : { background: '#FEF3C7', color: '#92400E' }}
+      {/* Tabs on white pages (DESIGN_IDENTITY §9.2), the same row Job Posts
+          uses, so a subtab looks the same wherever it appears. */}
+      <div role="tablist" className="-mb-px flex gap-2 border-b border-slate-200">
+        {([
+          { id: 'pending', label: 'Pending Assignment', icon: Clock, count: pendingApplicants.length },
+          { id: 'scheduled', label: 'Scheduled', icon: CalendarCheck, count: scheduledApplicants.length },
+        ] as const).map((tab) => {
+          const selected = subTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setSubTab(tab.id)}
+              className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${selected ? 'border-[#363EE8] text-[#363EE8]' : 'border-transparent text-slate-500 hover:text-[#040E6B]'}`}
             >
-              {pendingApplicants.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('scheduled')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'scheduled'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <CalendarCheck size={14} />
-          Scheduled
-          {scheduledApplicants.length > 0 && (
-            <span
-              className="rounded-full px-2 py-0.5 text-xs font-bold"
-              style={subTab === 'scheduled'
-                ? { background: 'rgba(255,255,255,0.25)', color: '#ffffff' }
-                : { background: '#DCFCE7', color: '#15803D' }}
-            >
-              {scheduledApplicants.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('rater-management')}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all"
-          style={subTab === 'rater-management'
-            ? { background: '#363EE8', color: '#ffffff' }
-            : { background: 'transparent', color: '#64748b' }}
-        >
-          <Users size={14} />
-          Rater Management
-        </button>
+              <Icon size={16} />
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={`rounded-full px-2 py-px text-xs ${selected ? 'bg-[#EEF0FF] text-[#191FA8]' : 'bg-slate-100 text-slate-500'}`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── PENDING ASSIGNMENT VIEW ── */}
       {subTab === 'pending' && (
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-base font-bold" style={{ color: '#363EE8' }}>Qualified Applicants — Pending Assignment</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Open a department, check a position to select all of its applicants or expand it to pick them one
-              by one, then schedule their interview and oral exam. Scheduled applicants move to the{' '}
+            <h3 className="text-base font-bold text-[var(--color-primary)]">Qualified Applicants — Pending Assignment</h3>
+            <p className="mt-1 text-sm text-[var(--neutral-600)]">
+              Filter by department or position, check the applicants to schedule (the header checkbox selects every
+              match), then schedule their interview. Scheduled applicants move to the{' '}
               <span className="font-semibold">Scheduled</span> tab.
             </p>
           </section>
@@ -434,26 +457,22 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
             </div>
           ) : pendingApplicants.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
-              <CheckCircle2 size={40} className="mb-3 text-emerald-400" />
-              <p className="font-semibold text-slate-600">All qualified applicants have been assigned a schedule.</p>
-              <button
-                type="button"
-                onClick={() => setSubTab('scheduled')}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                style={{ background: '#363EE8' }}
-              >
-                <CalendarCheck size={14} /> View Scheduled Applicants
+              <CheckCircle2 size={40} strokeWidth={1.75} className="mb-3 text-[var(--success-500)]" />
+              <p className="font-semibold text-[var(--neutral-800)]">All qualified applicants have been assigned a schedule.</p>
+              <button type="button" onClick={() => setSubTab('scheduled')} className="btn btn-md btn-primary mt-3">
+                <CalendarCheck size={16} strokeWidth={1.75} aria-hidden="true" /> View Scheduled Applicants
               </button>
             </div>
           ) : (
             <>
+              {renderFilterBar(filteredPending.length, pendingApplicants.length, pendingSort.key === 'qualified')}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--neutral-200)] bg-[var(--bg-surface)] px-5 py-3">
                 <span className="text-[14px] font-medium leading-[18px] text-[var(--neutral-800)]" aria-live="polite">
                   {selectedIds.size} applicant{selectedIds.size === 1 ? '' : 's'} selected
                 </span>
                 <div className="flex items-center gap-3">
                   {selectedIds.size > 0 && (
-                    <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs font-medium text-[#363EE8] hover:underline">
+                    <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs font-medium text-[var(--color-primary)] hover:underline">
                       Clear all
                     </button>
                   )}
@@ -468,29 +487,123 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
                   </button>
                 </div>
               </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  aria-label="Search pending applicants"
-                  placeholder="Search name, email, position, or department…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-[#363EE8] focus:outline-none"
-                />
+              {/* §8.3: on small screens the table scrolls inside its card. */}
+              <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--neutral-200)] bg-[var(--bg-surface)]">
+                <table className="w-full min-w-[760px] table-fixed">
+                  <colgroup>
+                    <col className="w-12" />
+                    <col className="w-[32%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[13%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-[var(--neutral-200)] bg-[var(--bg-page)]">
+                      <th className="px-4 py-2.5 text-left">
+                        <TriStateCheckbox
+                          state={groupCheckState(filteredPendingIds, selectedIds)}
+                          label={`Select all ${filteredPendingIds.length} matching applicants`}
+                          onChange={() => setSelectedIds(toggleGroup(filteredPendingIds, selectedIds))}
+                        />
+                      </th>
+                      <SortHeader label="Applicant" sortKey="name" sort={pendingSort} onSort={togglePendingSort} className={SCHEDULED_TH} />
+                      <SortHeader label="Position" sortKey="position" sort={pendingSort} onSort={togglePendingSort} className={SCHEDULED_TH} />
+                      <SortHeader label="Department" sortKey="department" sort={pendingSort} onSort={togglePendingSort} className={SCHEDULED_TH} />
+                      <th className={SCHEDULED_TH}>Type</th>
+                      <SortHeader label="Shortlisted" sortKey="qualified" sort={pendingSort} onSort={togglePendingSort} className={SCHEDULED_TH} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedPending.length === 0 && noMatchRow(6)}
+                    {pagedPending.map((a) => {
+                      const checked = selectedIds.has(a.id);
+                      const type = normalizeType(a.application_type);
+                      return (
+                        <tr
+                          key={a.id}
+                          className={`border-b border-[var(--neutral-200)] transition-colors last:border-0 ${
+                            checked ? 'bg-[var(--color-primary-50)]' : 'hover:bg-[var(--bg-row-hover)]'
+                          }`}
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${a.full_name || 'applicant'}`}
+                              checked={checked}
+                              onChange={() => setSelectedIds(toggleId(a.id, selectedIds))}
+                              className={CHECKBOX_CLASS}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="truncate text-[14px] font-semibold leading-5 text-[var(--color-primary-900)]" title={a.full_name || undefined}>
+                              {a.full_name || '—'}
+                            </p>
+                            <p className="truncate text-[12px] font-medium leading-4 text-[var(--neutral-600)]" title={a.email || undefined}>
+                              {a.reference_no || 'No reference no.'}{a.email ? ` · ${a.email}` : ''}
+                            </p>
+                          </td>
+                          <td className="truncate px-4 py-3 text-[14px] font-medium text-[var(--neutral-800)]" title={a.position || undefined}>
+                            {a.position || '—'}
+                          </td>
+                          <td className="truncate px-4 py-3 text-[14px] font-medium text-[var(--neutral-800)]" title={a.office || undefined}>
+                            {a.office || '—'}
+                          </td>
+                          {/* §10: Type is a category, so a neutral or tint chip. */}
+                          <td className="px-4 py-3">
+                            <span className={`badge ${type === 'Promotional' ? 'badge-tint' : 'badge-neutral'}`}>{type}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-[14px] font-medium text-[var(--neutral-800)]">
+                            {formatDisplayDate(a.updated_at || a.created_at)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              {searchedPending.length === 0 ? (
-                <div className="rounded-2xl border border-slate-200 bg-white px-5 py-12 text-center text-slate-500">
-                  <Search className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                  <p className="font-medium">No applicants match your search.</p>
-                </div>
-              ) : (
-                <SchedulingTree
-                  applicants={searchedPending}
-                  selected={selectedIds}
-                  onSelectionChange={setSelectedIds}
-                  expandAll={search.trim() !== ''}
-                />
+
+              {sortedPending.length > 0 && (
+                <nav aria-label="Pending applicants pages" className="flex flex-wrap items-center justify-between gap-3 text-[12px] font-medium text-[var(--neutral-600)]">
+                  <span>
+                    Showing {currentPendingPage * PENDING_PAGE_SIZE + 1}–{Math.min((currentPendingPage + 1) * PENDING_PAGE_SIZE, sortedPending.length)} of {sortedPending.length} entries
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPendingPage(currentPendingPage - 1)}
+                      disabled={currentPendingPage === 0}
+                      className="rsp-pager inline-flex items-center gap-1 border px-4 text-[14px]"
+                    >
+                      <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Previous
+                    </button>
+                    {pageItems(currentPendingPage, pendingPageCount).map((p, i) =>
+                      p === null ? (
+                        <span key={`gap-${i}`} className="grid min-w-9 place-items-center text-[14px]">…</span>
+                      ) : (
+                        <button
+                          key={p}
+                          type="button"
+                          aria-current={p === currentPendingPage ? 'page' : undefined}
+                          onClick={() => setPendingPage(p)}
+                          className={`rsp-pager border text-[14px] ${
+                            p === currentPendingPage ? '!border-[var(--color-primary)] !bg-[var(--color-primary)] !text-white' : ''
+                          }`}
+                        >
+                          {p + 1}
+                        </button>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPendingPage(currentPendingPage + 1)}
+                      disabled={currentPendingPage >= pendingPageCount - 1}
+                      className="rsp-pager inline-flex items-center gap-1 border px-4 text-[14px]"
+                    >
+                      Next <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  </div>
+                </nav>
               )}
             </>
           )}
@@ -508,11 +621,6 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
             setToast(message);
           }}
         />
-      )}
-
-      {/* ── RATER MANAGEMENT TAB ── */}
-      {subTab === 'rater-management' && (
-        <RaterManagementSubsection onAccessChange={() => void fetchActiveInterviewers().then(setInterviewers)} />
       )}
 
       {/* ── SCHEDULED VIEW ── */}
@@ -752,10 +860,21 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
                 type="button"
                 onClick={() => void handleEditSave()}
                 disabled={editSaving}
-                style={{ padding: '0.55rem 1.5rem', background: editSaving ? '#C8D1FF' : 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: editSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: editSaving ? 'none' : '0 4px 14px rgba(54,62,232,0.35)' }}
+                aria-busy={editSaving || undefined}
+                style={{ padding: '0.55rem 1.5rem', background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: editSaving ? 'progress' : 'pointer', opacity: editSaving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: editSaving ? 'none' : '0 4px 14px rgba(54,62,232,0.35)' }}
               >
-                <Save size={14} />
-                {editSaving ? 'Saving…' : 'Save Changes'}
+                {/* Label stays while saving (§9.1); the icon slot carries the
+                    spinner, so the button neither reflows nor stops saying
+                    what it does. */}
+                {editSaving ? (
+                  <span
+                    aria-hidden
+                    className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none motion-reduce:opacity-60"
+                  />
+                ) : (
+                  <Save size={14} />
+                )}
+                Save Changes
               </button>
             </div>
           </div>

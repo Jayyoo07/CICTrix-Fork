@@ -60,6 +60,9 @@ const toSlot = (row: any): PlantillaSlot => ({
   status: (String(row?.status ?? 'open') as PlantillaSlotStatus),
   filledByApplicantId: row?.filled_by_applicant_id ? String(row.filled_by_applicant_id) : undefined,
   filledAt: row?.filled_at ? String(row.filled_at) : undefined,
+  reservedByApplicantId: row?.reserved_by_applicant_id ? String(row.reserved_by_applicant_id) : undefined,
+  reservedAt: row?.reserved_at ? String(row.reserved_at) : undefined,
+  signingDeadline: row?.signing_deadline ? String(row.signing_deadline) : undefined,
   division: row?.division ? String(row.division).trim() : undefined,
   summary: row?.summary ? String(row.summary).trim() : undefined,
   // text[] or jsonb depending on the environment; both arrive as arrays.
@@ -415,6 +418,48 @@ export const setSlotStatus = async (
     return { ok: true };
   } catch (err: any) {
     if (isMissingSlotSchema(err)) return { ok: true };
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+};
+
+// ─── Reservation (select → contract signing) ────────────────────────────────
+
+/**
+ * Reserve a plantilla for one selected applicant and move the application to
+ * For Contract Signing. The database function locks the slot, so a second
+ * admin selecting someone else gets "already reserved for <name>" back.
+ */
+export const reserveSlotForApplicant = async (
+  slotId: string,
+  applicantId: string,
+  deadline: string,
+  instructions: string,
+): Promise<SlotResult> => {
+  if (!slotId || !applicantId) return { ok: false, error: 'Missing plantilla or applicant.' };
+  try {
+    const { data, error } = await client.rpc('reserve_plantilla_slot', {
+      p_slot_id: slotId,
+      p_applicant_id: applicantId,
+      p_deadline: deadline,
+      p_instructions: instructions,
+    });
+    if (error) throw error;
+    return data ? { ok: false, error: String(data) } : { ok: true };
+  } catch (err: any) {
+    console.error('[plantillaSlots] reserveSlotForApplicant failed:', err);
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+};
+
+/** "Did not report": reopen the plantilla and put the application back. */
+export const revokeSlotReservation = async (applicantId: string): Promise<SlotResult> => {
+  if (!applicantId) return { ok: false, error: 'Missing applicant.' };
+  try {
+    const { data, error } = await client.rpc('revoke_plantilla_reservation', { p_applicant_id: applicantId });
+    if (error) throw error;
+    return data ? { ok: false, error: String(data) } : { ok: true };
+  } catch (err: any) {
+    console.error('[plantillaSlots] revokeSlotReservation failed:', err);
     return { ok: false, error: String(err?.message ?? err) };
   }
 };

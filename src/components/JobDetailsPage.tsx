@@ -9,7 +9,11 @@ import {
   ListChecks,
   Lock,
   Pencil,
+  XCircle,
 } from 'lucide-react';
+import { CloseVacancyDialog } from './CloseVacancyDialog';
+import { closeVacancy, type CloseReason } from '../lib/vacancies';
+import { isOpenVacancy } from '../lib/vacancySearch';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useHistoryBack } from '../hooks/useHistoryBack';
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
@@ -50,7 +54,6 @@ interface LandingJobData {
 const DISABLED_REASON: Record<string, string> = {
   filled: 'This item has been filled. Choose another item.',
   closed: 'This item is closed. Choose another item.',
-  applied: "You've already applied for this item. Choose another item.",
 };
 
 /** Shown on every public job details page, above Continue to Application. */
@@ -91,6 +94,22 @@ export const JobDetailsPage = () => {
   const [hireNamesBySlotId, setHireNamesBySlotId] = useState<Record<string, string>>({});
   /** Applicants per plantilla, for the admin view ("3 applicants"). */
   const [slotApplicantCounts, setSlotApplicantCounts] = useState<Map<string, number>>(new Map());
+  /** RSP: the Close Vacancy confirmation, and why the last attempt failed. */
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState('');
+
+  const confirmClose = async (reason: CloseReason, remarks: string) => {
+    if (!job) return false;
+    const result = await closeVacancy(job.id, reason, remarks);
+    if (!result.ok) {
+      setCloseError(result.error ?? 'We couldn\'t close this vacancy. Try again.');
+      return false;
+    }
+    const fresh = await loadJobPostings();
+    setJob((current) => fresh.find((j) => j.id === current?.id) ?? current);
+    setClosing(false);
+    return true;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -547,14 +566,22 @@ export const JobDetailsPage = () => {
             </div>
             {/* RSP only (docs/mockups/2026-10-18-job-edit-entry.html, option B). Opens the Job posts edit form. */}
             {isAdminView && job && (
-              <button
-                type="button"
-                className="btn btn-md btn-white"
-                onClick={() => navigate('/admin/rsp/jobs', { state: { editJobId: job.id } })}
-              >
-                <Pencil size={18} strokeWidth={1.75} aria-hidden="true" />
-                Edit Posting
-              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                {isOpenVacancy(job) && (
+                  <button type="button" className="btn btn-md btn-ghost-white" onClick={() => { setCloseError(''); setClosing(true); }}>
+                    <XCircle size={18} strokeWidth={1.75} aria-hidden="true" />
+                    Close Vacancy
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-md btn-white"
+                  onClick={() => navigate('/admin/rsp/jobs?tab=positions', { state: { editJobId: job.id } })}
+                >
+                  <Pencil size={18} strokeWidth={1.75} aria-hidden="true" />
+                  Edit Posting
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -579,6 +606,10 @@ export const JobDetailsPage = () => {
           </div>
         </div>
       </main>
+
+      {closing && job && (
+        <CloseVacancyDialog job={job} error={closeError} onCancel={() => setClosing(false)} onConfirm={confirmClose} />
+      )}
 
       {!isAdminView && canContinue && (
         <div className="af-actionbar af-mobile-only">

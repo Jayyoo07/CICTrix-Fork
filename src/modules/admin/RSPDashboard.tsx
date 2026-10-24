@@ -17,6 +17,8 @@ import {
   Lock,
   Mail,
   MapPin,
+  GitBranch,
+  ListChecks,
   Phone,
   Plus,
   Search,
@@ -25,6 +27,7 @@ import {
   Trash2,
   User,
   UserCheck,
+  UserMinus,
   UserPlus,
   Users,
   X,
@@ -33,6 +36,9 @@ import { QualifiedApplicantsSection } from '../../components/QualifiedApplicants
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { getAdminEmail } from '../../lib/adminSession';
 import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/applicantStatus';
+import { dashboardPostingStatus } from '../../lib/vacancySearch';
+import { fetchArchivedApplicants, type ArchivedApplicant } from '../../lib/hiringFlow';
+import { NotSelectedArchive } from '../../components/NotSelectedArchive';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
 import { RspDashboardOverview } from './RspDashboardOverview';
 import { EligibilityPointsPanel } from '../../components/EligibilityPointsPanel';
@@ -323,6 +329,14 @@ const ALL_EMPLOYEE_POSITIONS = Array.from(
   ])
 ).sort();
 
+type SuccessionView = 'plan' | 'eligibility-points';
+
+/** Succession Planning sub-tabs (DESIGN_IDENTITY §9.2, as in Job Posts). */
+const SUCCESSION_TABS = [
+  { id: 'plan', label: 'Succession Plan', icon: GitBranch },
+  { id: 'eligibility-points', label: 'Eligibility Points', icon: ListChecks },
+] as const;
+
 const resolveSection = (pathname: string, search: string): Section => {
   if (pathname === '/admin/rsp/jobs' || pathname === '/admin/rsp/applications') return 'jobs';
   if (pathname === '/admin/rsp/qualified') return 'qualified';
@@ -410,7 +424,7 @@ const mapRecruitmentPostingsToDashboardJobs = (rows: JobPosting[]): JobRecord[] 
     item_number: String(item.jobCode ?? ''),
     department: String(item.department ?? 'Unassigned'),
     status:
-      item.status === 'Closed' || item.status === 'Filled'
+      item.status === 'Closed'
         ? 'Closed'
         : item.status === 'Draft'
           ? 'Reviewing'
@@ -841,9 +855,13 @@ export const RSPDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const section = resolveSection(location.pathname, location.search);
-  // Which succession view is showing: the ranked plan, or the points that
-  // produce its Eligibility column.
-  const [successionView, setSuccessionView] = useState<'plan' | 'eligibility-points'>('plan');
+  // Which succession view is showing: the ranked plan (default), or the points
+  // that produce its Eligibility column (?view=eligibility-points). Kept in the
+  // URL like Job Posts' tab, so refresh and Back keep it.
+  const successionView: SuccessionView =
+    new URLSearchParams(location.search).get('view') === 'eligibility-points' ? 'eligibility-points' : 'plan';
+  const setSuccessionView = (view: SuccessionView) =>
+    navigate({ pathname: location.pathname, search: view === 'plan' ? '' : `?view=${view}` });
 
   // Departments come from the canonical Supabase table, shared system-wide.
   const employeeDirectoryDepartments = useDepartmentNames();
@@ -867,7 +885,21 @@ export const RSPDashboard = () => {
   const [qualifiedSearch, setQualifiedSearch] = useState('');
   const [qualifiedPosition, setQualifiedPosition] = useState('all');
   const [qualifiedOffice, setQualifiedOffice] = useState('all');
-  const [reportsView, setReportsView] = useState<'overview' | 'ranking' | 'assessment' | 'documents' | 'closed' | 'temp'>('overview');
+  const [reportsView, setReportsView] = useState<'overview' | 'ranking' | 'assessment' | 'documents' | 'closed' | 'temp' | 'notSelected'>('overview');
+  // Applicants archived when the plantilla they applied for was filled.
+  const [notSelectedRows, setNotSelectedRows] = useState<ArchivedApplicant[]>([]);
+  const [notSelectedLoading, setNotSelectedLoading] = useState(false);
+  useEffect(() => {
+    if (section !== 'reports') return;
+    let cancelled = false;
+    setNotSelectedLoading(true);
+    void fetchArchivedApplicants().then((rows) => {
+      if (cancelled) return;
+      setNotSelectedRows(rows);
+      setNotSelectedLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [section]);
   const [activeRankingPosition, setActiveRankingPosition] = useState<string | null>(null);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showHireApplicantsModal, setShowHireApplicantsModal] = useState(false);
@@ -3332,21 +3364,28 @@ export const RSPDashboard = () => {
           {section === 'dashboard' && (
             <div className="dash-lg">
             <RspDashboardOverview
-              jobs={jobsWithCounts.map((job) => ({ ...job, applicationDeadline: job.posting?.applicationDeadline }))}
+              // Open = accepting applications now (status and Manila deadline),
+              // the rule the Job Vacancies tab counts with.
+              jobs={jobsWithCounts.map((job) => ({
+                ...job,
+                status: dashboardPostingStatus(job.status, job.posting),
+                applicationDeadline: job.posting?.applicationDeadline,
+              }))}
               applicants={applicants}
               evaluatedApplicantIds={evaluatedApplicantIds}
               stageOf={funnelStageOf}
               onOpenJobs={() => goToSection('jobs')}
-              onOpenApplicants={() => navigate('/interviewer/dashboard')}
+              onOpenApplicants={() => navigate('/admin/rsp/applications')}
               onOpenQualified={() => goToSection('qualified')}
               onOpenSuccession={() => goToSection('succession')}
+              onOpenNewHired={() => goToSection('new-hired')}
             />
             </div>
           )}
           {section !== 'dashboard' && (
-          <div className="border-b border-[var(--border-color)] bg-white px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+          <div className={`border-b border-[var(--border-color)] bg-white px-4 sm:px-6 lg:px-8 ${section === 'succession' ? 'pt-5 lg:pt-6' : 'py-5 lg:py-6'}`}>
             <h1 className="!mb-1 !text-xl font-bold sm:!text-2xl">{sectionTitle}</h1>
-            <p className="!mb-0 text-sm text-[var(--text-secondary)] sm:text-base">
+            <p className={`${section === 'succession' ? '!mb-4' : '!mb-0'} text-sm text-[var(--text-secondary)] sm:text-base`}>
               {section === 'jobs' && 'Manage and monitor all job positions and their applicants'}
               {section === 'qualified' && 'List of applicants who passed the evaluation and are eligible for further processing'}
               {section === 'applicant-score' && 'View and update applicant evaluation scores for original and promotional applicants'}
@@ -3357,6 +3396,31 @@ export const RSPDashboard = () => {
               {section === 'succession' && 'Build and manage the pipeline for critical roles and leadership continuity'}
               {section === 'settings' && 'Manage your personal information and account details'}
             </p>
+            {/* Tabs on white pages (DESIGN_IDENTITY §9.2), as in Job Posts. The
+                points behind the Eligibility column live here rather than in
+                Settings: they are part of the succession model, and an admin
+                reading a ranking is the one who needs to change them. */}
+            {section === 'succession' && (
+              <div role="tablist" aria-label="Succession Planning views" className="-mb-px flex gap-2">
+                {SUCCESSION_TABS.map((tab) => {
+                  const selected = successionView === tab.id;
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setSuccessionView(tab.id)}
+                      className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${selected ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-slate-500 hover:text-[var(--color-primary-900)]'}`}
+                    >
+                      <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           )}
 
@@ -3684,21 +3748,11 @@ export const RSPDashboard = () => {
               <>
                 {accountsView === 'directory' ? (
                   <>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
                       <p className="text-sm text-slate-500">{officeDirectoryTotalEmployees} total employees</p>
-                      <Button type="button" onClick={openBulkRequestDialog}>
-                        <FileText size={16} /> Bulk Document Request
-                      </Button>
                     </div>
-
 
                     <ErrorBanner error={officeDirectoryError} context="server" />
-
-                    <div className="flex items-center justify-center text-lg font-semibold text-slate-700">
-                      {filteredOfficeDirectoryRows.length === 0
-                        ? 'Office 0 to 0 of 0'
-                        : `Office ${safeEmployeeDirectoryPage * EMPLOYEE_DIRECTORY_OFFICES_PER_PAGE + 1} to ${Math.min((safeEmployeeDirectoryPage + 1) * EMPLOYEE_DIRECTORY_OFFICES_PER_PAGE, filteredOfficeDirectoryRows.length)} of ${filteredOfficeDirectoryRows.length}`}
-                    </div>
 
 {showPositionChangeModal && selectedEmployeeDetails && (
                     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPositionChangeModal(false)}>
@@ -4350,7 +4404,27 @@ export const RSPDashboard = () => {
                       <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-purple-600 transition-colors" />
                     </button>
 
+                    {/* ── Row 5: Not Selected Applicants (archived when a plantilla is filled) ── */}
+                    <button
+                      type="button"
+                      onClick={() => setReportsView('notSelected')}
+                      className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-[var(--color-primary-200)] hover:shadow-md"
+                    >
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-50)]">
+                        <UserMinus size={20} className="text-[var(--color-primary)]" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-900">Not Selected Applicants</p>
+                        <p className="text-xs text-slate-500">Applicants archived when their plantilla was filled</p>
+                      </div>
+                      <span className="badge badge-tint">{notSelectedRows.length}</span>
+                      <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-[var(--color-primary)] transition-colors" />
+                    </button>
+
                   </div>
+
+                ) : reportsView === 'notSelected' ? (
+                  <NotSelectedArchive rows={notSelectedRows} loading={notSelectedLoading} />
 
                 ) : reportsView === 'closed' ? (
                   <section className="space-y-4">
@@ -5010,29 +5084,6 @@ export const RSPDashboard = () => {
 
             {section === 'succession' && (
               <div className="space-y-5">
-                {/* The points behind the Eligibility column live here rather
-                    than in Settings: they are part of the succession model, and
-                    an admin reading a ranking is the one who needs to change
-                    them. */}
-                <div className="flex gap-2">
-                  {([
-                    { id: 'plan', label: 'Succession Plan' },
-                    { id: 'eligibility-points', label: 'Eligibility Points' },
-                  ] as const).map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setSuccessionView(t.id)}
-                      className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${
-                        successionView === t.id
-                          ? 'bg-[#363EE8] text-white'
-                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
                 {successionView === 'plan' ? <SuccessionPlanningPage /> : <EligibilityPointsPanel />}
               </div>
             )}

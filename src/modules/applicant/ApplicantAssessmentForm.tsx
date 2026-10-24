@@ -31,6 +31,8 @@ interface ApplicantAssessmentFormProps {
   plantillaName?: string;
   /** Makes element ids unique per plantilla form (one form per tab). */
   idPrefix?: string;
+  /** Step 2 page to show (flow/formPages.ts). Omitted shows every section. */
+  page?: number;
 }
 
 const icon = (Icon: typeof UserRound) => <Icon size={20} strokeWidth={1.75} />;
@@ -47,7 +49,9 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
   afterEducation,
   idPrefix = 'af',
   plantillaName = '',
+  page,
 }) => {
+  const onPage = (n: number) => page === undefined || page === n;
   // Departments come from the canonical Supabase table, shared with every other
   // screen — never a list local to this form.
   const departmentOptions = useDepartmentOptions();
@@ -205,6 +209,7 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
 
   return (
     <>
+      {onPage(1) && (<>
       {/* Application Type — radio group for both Original and Promotional. */}
       <FormSection icon={icon(ClipboardList)} title="Application type" headingId={`${idPrefix}-type`}>
         <div role="radiogroup" aria-required aria-labelledby={`${idPrefix}-type`} className="af-options">
@@ -339,7 +344,9 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
           </fieldset>
         </div>
       </FormSection>
+      </>)}
 
+      {onPage(2) && (<>
       <FormSection icon={icon(Mail)} title="Contact and address" headingId={`${idPrefix}-contact`}>
         <div className="af-fields">
           <Input
@@ -446,7 +453,9 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
           )}
         </div>
       </FormSection>
+      </>)}
 
+      {onPage(3) && (<>
       {/* Educational Background */}
       <FormSection icon={icon(GraduationCap)} title="Educational background" headingId={`${idPrefix}-education`}>
         <div className="af-fields">
@@ -537,8 +546,10 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
       </FormSection>
 
       {afterEducation}
+      </>)}
 
       {/* Work Experience — wide: five fields plus a free-text description */}
+      {onPage(4) && (
       <FormSection
         icon={icon(BriefcaseBusiness)}
         title="Relevant work experience"
@@ -603,6 +614,7 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
           </div>
         </div>
       </FormSection>
+      )}
     </>
   );
 };

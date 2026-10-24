@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { PendingAssignmentList } from './PendingAssignmentList';
 import { ScheduleApplicantsModal } from './ScheduleApplicantsModal';
-import { SchedulingTree } from './SchedulingTree';
 import type { ApplicantRecord } from './QualifiedApplicantsSection';
 
 const scheduleApplicantsBatch = vi.fn();
-vi.mock('../lib/applicantSchedule', () => ({
+vi.mock('../lib/applicantSchedule', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/applicantSchedule')>()),
+  fetchActiveInterviewers: async () => [],
   scheduleApplicantsBatch: (...args: unknown[]) => scheduleApplicantsBatch(...args),
 }));
 
@@ -29,45 +30,50 @@ const applicants = [
   applicant('3', 'Cara Dee', 'Budget Officer', 'City Budget Office'),
 ];
 
-const Harness = () => {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  return (
-    <>
-      <p data-testid="count">{selected.size}</p>
-      <SchedulingTree applicants={applicants} selected={selected} onSelectionChange={setSelected} />
-    </>
-  );
-};
+const renderPending = (rows: ApplicantRecord[] = applicants, completed: string[] = []) =>
+  render(<PendingAssignmentList applicants={rows} completedEvaluationIds={new Set(completed)} />);
 
-describe('SchedulingTree', () => {
-  it('shows only departments until one is opened', () => {
-    render(<Harness />);
-    expect(screen.queryByRole('checkbox')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /City Engineer's Office/ }));
-    expect(screen.getByRole('checkbox', { name: 'Select all 2 applicants for Engineer I' })).toBeTruthy();
-    expect(screen.queryByRole('checkbox', { name: /Budget Officer/ })).toBeNull();
+const selectedCount = () => screen.getByText(/applicants? selected/).textContent;
+const filterDepartment = (value: string) =>
+  fireEvent.change(screen.getByDisplayValue('All Departments'), { target: { value } });
+
+describe('PendingAssignmentList', () => {
+  it('lists every pending applicant in one table, with no levels to open', () => {
+    renderPending();
+    expect(screen.getAllByRole('row')).toHaveLength(applicants.length + 1);
+    expect(screen.getByText('Cara Dee')).toBeTruthy();
   });
 
-  it('selects a whole position, and shows it as partial when one applicant is unchecked', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: /City Engineer's Office/ }));
-    const engineer = screen.getByRole('checkbox', { name: 'Select all 2 applicants for Engineer I' }) as HTMLInputElement;
-
-    fireEvent.click(engineer);
-    expect(screen.getByTestId('count').textContent).toBe('2');
-    expect(engineer.checked).toBe(true);
-
-    fireEvent.click(screen.getByRole('button', { name: /Engineer I/ }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /Ana Cruz/ }));
-    expect(screen.getByTestId('count').textContent).toBe('1');
-    expect(engineer.checked).toBe(false);
-    expect(engineer.indeterminate).toBe(true);
+  it('leaves out Disqualified and Not Qualified applicants, even with a completed evaluation', () => {
+    renderPending(
+      [
+        ...applicants,
+        { ...applicant('4', 'Dan Out', 'Engineer I', "City Engineer's Office"), status: 'Disqualified' },
+        { ...applicant('5', 'Eve Out', 'Engineer I', "City Engineer's Office"), status: 'Not Qualified' },
+      ],
+      ['4'],
+    );
+    expect(screen.queryByText('Dan Out')).toBeNull();
+    expect(screen.queryByText('Eve Out')).toBeNull();
+    expect(screen.getByText('Ana Cruz')).toBeTruthy();
   });
 
-  it('has no department checkbox', () => {
-    render(<Harness />);
-    expect(screen.getByRole('button', { name: /City Engineer's Office/ })).toBeTruthy();
-    expect(screen.queryByRole('checkbox', { name: /City Engineer's Office/ })).toBeNull();
+  it('selects only the filtered rows from the header checkbox', () => {
+    renderPending();
+    filterDepartment("City Engineer's Office");
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all 2 matching applicants' }));
+    expect(selectedCount()).toBe('2 applicants selected');
+  });
+
+  it('keeps a selection when the filters change', () => {
+    renderPending();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Cara Dee' }));
+    filterDepartment("City Engineer's Office");
+    expect(screen.queryByText('Cara Dee')).toBeNull();
+    expect(selectedCount()).toBe('1 applicant selected');
+    const header = screen.getByRole('checkbox', { name: 'Select all 2 matching applicants' }) as HTMLInputElement;
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(false);
   });
 });
 

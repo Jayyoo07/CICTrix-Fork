@@ -25,6 +25,7 @@ import {
   actionForGate,
   compareRank,
   isDownwardMove,
+  isDownwardTitleMove,
   positionLevelRatio,
   educationBeyondMinimumRatio,
   eligibilityScore,
@@ -2042,7 +2043,14 @@ export async function listAutoSuccessors(
       // position for a lower-ranked target. Applied to auto-discovered
       // candidates only — a manually added candidate is HR's deliberate choice,
       // not a recommendation, so the rule has no business overriding it.
-      if (isDownwardMove(rankForEmployee(e), targetRank)) {
+      const candidateRank = rankForEmployee(e);
+      // The SRP grade decides when both sides have one; titles only fill in
+      // when it cannot (see compareTitleRank).
+      const downward =
+        compareRank(candidateRank, targetRank) === 'unknown'
+          ? isDownwardTitleMove(e.position, positionTitle)
+          : isDownwardMove(candidateRank, targetRank);
+      if (downward) {
         downwardSkipped += 1;
         continue;
       }

@@ -1330,16 +1330,20 @@ const ProbationaryPanel = ({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              {/* divide-slate-100 was too faint to tell one employee's row from
+                  the next, and two employees can share a name (see the two
+                  "Magiting Jimenez Cayabo" rows), so the separation has to
+                  carry real weight. */}
+              <tbody className="divide-y divide-slate-200">
                 {filtered.map((emp) => (
                   <tr
                     key={emp.id}
                     onClick={() => onSelectEmployee(emp)}
-                    className="hover:bg-blue-50/30 cursor-pointer transition"
+                    className="cursor-pointer transition odd:bg-white even:bg-slate-50/70 hover:bg-blue-50"
                   >
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-800">{emp.full_name}</div>
-                      <div className="text-xs text-slate-400">{emp.employee_id}</div>
+                      <div className="text-xs text-slate-500">{emp.employee_id}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{emp.department ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{emp.current_position ?? '—'}</td>

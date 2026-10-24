@@ -61,8 +61,21 @@ const SOURCE_BADGE: Record<RecommendedFrom, string> = {
   'LND Planning': 'bg-gray-100 text-gray-600',
 };
 
-const inputClass =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
+/**
+ * Shared look for inputs and selects, with no width of its own.
+ *
+ * It used to start with `w-full`, and a `w-56` added at a call site never won:
+ * Tailwind emits `.w-full` after the fixed widths, so the filter selects each
+ * took a whole row. Width now comes from the caller.
+ */
+const controlClass =
+  'rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
+
+/** Form fields inside the modals, which do fill their column. */
+const inputClass = `w-full ${controlClass}`;
+
+/** Toolbar filters: compact (§5.4, 36px) and only as wide as their labels. */
+const filterSelectClass = `${controlClass} h-9 py-0 text-xs`;
 const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5';
 
 // ── Date helpers (local-time grid over UTC timestamps) ───────────────────────
@@ -964,15 +977,15 @@ export const TrainingPlan = () => {
 
       {/* Filters + legend */}
       <div className="flex flex-wrap items-center gap-3">
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={`${inputClass} w-56`}>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={`${filterSelectClass} w-44`}>
           <option value="All">All categories</option>
           {TRAINING_CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
         </select>
-        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className={`${inputClass} w-56`}>
+        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className={`${filterSelectClass} w-48`}>
           <option value="All">All departments</option>
           {departments.map((d) => (<option key={d.value} value={d.value}>{d.label}</option>))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'All' | PlanStatus)} className={`${inputClass} w-48`}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'All' | PlanStatus)} className={`${filterSelectClass} w-40`}>
           <option value="All">All statuses</option>
           {PLAN_STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
         </select>

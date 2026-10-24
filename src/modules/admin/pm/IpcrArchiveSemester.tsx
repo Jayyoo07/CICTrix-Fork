@@ -7,6 +7,7 @@
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { useState } from 'react';
 import type { ArchiveSemester } from '../../../lib/api/ipcrArchive';
+import { periodSemesterLabel } from '../../../lib/ipcrPeriods';
 import { getAdjectival } from './SummaryOfRatings';
 
 const FUNCTION_BADGE: Record<string, string> = {
@@ -37,9 +38,12 @@ export const IpcrArchiveSemester = ({
         <span className="flex min-w-0 items-center gap-2">
           {open ? <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
           <span className="min-w-0">
-            <span className="block font-bold text-slate-900">{semester.period}</span>
+            {/* The semester leads, since the year is now the group heading
+                above; the full period stays as the second line's first item so
+                the exact dates are still on the card. */}
+            <span className="block font-bold text-slate-900">{periodSemesterLabel(semester.period)}</span>
             <span className="block text-xs text-slate-400">
-              {semester.rows.length} target{semester.rows.length === 1 ? '' : 's'}
+              {semester.period} · {semester.rows.length} target{semester.rows.length === 1 ? '' : 's'}
               {semester.position ? ` · ${semester.position}` : ''}
               {semester.ipcrId ? ` · ${semester.ipcrId}` : ''}
             </span>

@@ -4,10 +4,11 @@ import {
   UserPlus,
   ShieldCheck,
   ShieldOff,
+  Trash2,
   X,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
 import { mockDatabase } from '../lib/mockDatabase';
@@ -220,6 +221,14 @@ export const RaterManagementPage = () => {
   const [toast, setToast] = useState('');
   /** Email of the rater whose access change is in flight, for the button label. */
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
+  /** The rater the "Are you sure?" dialog is open for. */
+  const [pendingRemoval, setPendingRemoval] = useState<RaterSourceRow | null>(null);
+  /**
+   * A removal waiting out its undo window. The row is already hidden, but
+   * nothing has been deleted yet — see scheduleRemoval.
+   */
+  const [undoRemoval, setUndoRemoval] = useState<{ rater: RaterSourceRow; secondsLeft: number } | null>(null);
+  const removalTimer = useRef<number | null>(null);
 
   const loadRaters = async () => {
     // Assignments come from Supabase raters.assigned_positions only.
@@ -374,9 +383,16 @@ export const RaterManagementPage = () => {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // The table shows every rater: the search box and status filter were dropped
-  // with the rest of the page's extra chrome.
-  const filteredRaters = ratersData;
+  /**
+   * The table shows every rater except one waiting out its undo window. It is
+   * hidden here rather than removed from ratersData, because loadRaters runs on
+   * focus, visibility and route changes — mutating the list would let the row
+   * reappear mid-countdown.
+   */
+  const filteredRaters = useMemo(
+    () => (undoRemoval ? ratersData.filter((item) => item.id !== undoRemoval.rater.id) : ratersData),
+    [ratersData, undoRemoval],
+  );
 
   useEffect(() => {
     if (!showAddForm || candidates.length > 0) return;
@@ -457,6 +473,74 @@ export const RaterManagementPage = () => {
       setAdding(false);
     }
   };
+
+  /**
+   * Remove a rater, with ten seconds to take it back.
+   *
+   * Nothing is deleted until the window closes: the row is hidden locally and
+   * the delete runs on the timer. Deleting first and re-inserting on undo would
+   * mean a failed re-insert loses the rater for good, and the restored row
+   * would carry a new id. Not deleting is recoverable; deleting wrongly is not.
+   *
+   * The cost of that choice: leaving the page inside the window cancels the
+   * removal, and the rater is still there on return.
+   */
+  const UNDO_SECONDS = 10;
+
+  const finalizeRemoval = async (rater: RaterSourceRow) => {
+    try {
+      const client = getAccessClient();
+      const { error } = await client.from('raters').delete().eq('id', rater.id);
+      if (error) throw error;
+      window.dispatchEvent(new CustomEvent('cictrix:raters-updated'));
+      setToast(`${rater.name} removed.`);
+    } catch (err) {
+      console.error('[RaterManagementPage] remove failed', err);
+      setToast(`Could not remove ${rater.name}.`);
+    } finally {
+      await loadRaters();
+    }
+  };
+
+  const scheduleRemoval = (rater: RaterSourceRow) => {
+    // One pending removal at a time: a second one commits the first, so an
+    // earlier rater cannot be silently kept by starting another removal.
+    if (removalTimer.current !== null) {
+      window.clearInterval(removalTimer.current);
+      removalTimer.current = null;
+      if (undoRemoval) void finalizeRemoval(undoRemoval.rater);
+    }
+
+    setUndoRemoval({ rater, secondsLeft: UNDO_SECONDS });
+
+    removalTimer.current = window.setInterval(() => {
+      setUndoRemoval((current) => {
+        if (!current) return null;
+        if (current.secondsLeft > 1) return { ...current, secondsLeft: current.secondsLeft - 1 };
+        if (removalTimer.current !== null) {
+          window.clearInterval(removalTimer.current);
+          removalTimer.current = null;
+        }
+        void finalizeRemoval(current.rater);
+        return null;
+      });
+    }, 1000);
+  };
+
+  const undoScheduledRemoval = () => {
+    if (removalTimer.current !== null) {
+      window.clearInterval(removalTimer.current);
+      removalTimer.current = null;
+    }
+    const restored = undoRemoval?.rater;
+    setUndoRemoval(null);
+    if (restored) setToast(`${restored.name} kept.`);
+  };
+
+  // Leaving the page cancels a pending removal rather than committing it.
+  useEffect(() => () => {
+    if (removalTimer.current !== null) window.clearInterval(removalTimer.current);
+  }, []);
 
   const handleToggleRaterAccess = async (rater: RaterSourceRow) => {
     const nextIsActive = rater.status !== 'Active';
@@ -668,7 +752,7 @@ export const RaterManagementPage = () => {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-center">{statusBadge(rater.status)}</td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-2">
                         {/* Labelled rather than a bare tick or cross. This
                             control grants or removes access to the interviewer
                             portal, and an unlabelled icon leaves the admin to
@@ -699,6 +783,14 @@ export const RaterManagementPage = () => {
                             </button>
                           );
                         })()}
+                        <button
+                          type="button"
+                          onClick={() => setPendingRemoval(rater)}
+                          aria-label={`Remove ${rater.name}`}
+                          className="inline-flex items-center gap-1.5 rounded-xl border-[1.5px] border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 active:bg-rose-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -719,7 +811,68 @@ export const RaterManagementPage = () => {
 
       <RaterManagementNavigationGuide open={showGuide} onClose={() => setShowGuide(false)} />
 
-      {toast && (
+      {/* Are you sure? (§9.10, destructive) */}
+      {pendingRemoval && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          style={{ background: 'rgba(4, 14, 107, .45)' }}
+          onClick={() => setPendingRemoval(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-rater-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-[420px] rounded-2xl bg-white p-6"
+            style={{ boxShadow: 'var(--shadow-3)' }}
+          >
+            <h3 id="remove-rater-title" className="!mb-1 text-lg font-bold text-[#040E6B]">Are you sure?</h3>
+            <p className="!mb-0 text-sm text-slate-600">
+              Remove <span className="font-semibold text-slate-900">{pendingRemoval.name}</span> from the rater
+              list. You will have {UNDO_SECONDS} seconds to undo this.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setPendingRemoval(null)}
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { const target = pendingRemoval; setPendingRemoval(null); scheduleRemoval(target); }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 active:bg-rose-800"
+              >
+                <Trash2 className="h-4 w-4" /> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo window. It counts down so the ten seconds are visible rather
+          than something the admin has to race. */}
+      {undoRemoval && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+        >
+          <span>
+            {undoRemoval.rater.name} removed · {undoRemoval.secondsLeft}s
+          </span>
+          <button
+            type="button"
+            onClick={undoScheduledRemoval}
+            className="rounded-full border border-white/40 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/15"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
+      {toast && !undoRemoval && (
         <div className="fixed bottom-6 right-6 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">
           {toast}
         </div>

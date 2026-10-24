@@ -3,10 +3,30 @@
 // tree, deriving position checkbox state from the selected-id set, and
 // deciding whose status a schedule may advance.
 
-import { canTransition, normalizeStatus } from './api/applicantStatus';
+import { canTransition, isTerminal, normalizeStatus, type ApplicantWorkflowStatus } from './api/applicantStatus';
 
 /** Status an applicant moves to once an interview is scheduled. */
 export const SCHEDULED_STATUS = 'Interview/Exam Scheduled' as const;
+
+/** Statuses listed on Qualified Applicants: waiting for, or past, an interview schedule. */
+const SCHEDULABLE_STATUSES: readonly ApplicantWorkflowStatus[] = [
+  'Shortlisted',
+  SCHEDULED_STATUS,
+  'For Evaluation',
+  'Qualified',
+];
+
+/**
+ * Whether an applicant belongs on Qualified Applicants. Matches exact
+ * workflow statuses, never substrings ("Disqualified" contains "qualified").
+ * A closed application never shows, even with a completed evaluation;
+ * an unrecognised status never shows.
+ */
+export function isSchedulableApplicant(status: string | null | undefined, hasCompletedEvaluation: boolean): boolean {
+  const current = normalizeStatus(status);
+  if (!current || isTerminal(current)) return false;
+  return SCHEDULABLE_STATUSES.includes(current) || hasCompletedEvaluation;
+}
 
 /** Start times for the two fixed interview sessions (24-hour, HH:mm). */
 export const SESSION_TIMES = {

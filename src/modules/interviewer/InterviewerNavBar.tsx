@@ -2,6 +2,7 @@
 // with its logout confirmation. Render it inside an `.abyan-ds.ivd` wrapper.
 
 import { LogOut, UserCircle2 } from 'lucide-react';
+import { ConfirmLogoutDialog } from '../../components/ConfirmLogoutDialog';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import abyanLogo from '../../assets/abyan-logo.png';
@@ -58,33 +59,13 @@ export function InterviewerNavBar({
         </div>
       </nav>
 
-      {/* Logout confirmation (§9.10) */}
-      {logoutConfirmOpen && (
-        <div className="ivd-modal-overlay" onClick={() => setLogoutConfirmOpen(false)}>
-          <div
-            className="ivd-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ivd-logout-title"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => { if (e.key === 'Escape') setLogoutConfirmOpen(false); }}
-          >
-            <div className="ivd-modal-icon" aria-hidden="true">
-              <LogOut size={22} strokeWidth={1.75} />
-            </div>
-            <h3 id="ivd-logout-title" className="text-title-s">Confirm Logout</h3>
-            <p className="text-body-m">Are you sure you want to log out of your Interviewer Portal session?</p>
-            <div className="ivd-modal-actions">
-              <button type="button" className="btn btn-md btn-secondary" onClick={() => setLogoutConfirmOpen(false)} autoFocus>
-                Cancel
-              </button>
-              <button type="button" className="btn btn-md btn-primary" onClick={() => { setLogoutConfirmOpen(false); onLogout?.(); }}>
-                Yes, Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* One shared confirmation across every portal (§9.10). */}
+      <ConfirmLogoutDialog
+        open={logoutConfirmOpen}
+        sessionLabel="Interviewer Portal"
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => { setLogoutConfirmOpen(false); onLogout?.(); }}
+      />
     </>
   );
 }

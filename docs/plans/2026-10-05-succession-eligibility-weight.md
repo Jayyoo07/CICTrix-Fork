@@ -94,7 +94,7 @@ they were wrong. The spec table gives:
 | Criterion | Weight |
 |---|---|
 | Performance / IPCR | 30 |
-| Experience + Tenure | 20 |
+| Experience | 20 |
 | Training | 20 |
 | Education | 15 |
 | Eligibility | 15 |

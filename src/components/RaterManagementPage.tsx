@@ -859,13 +859,16 @@ export const RaterManagementPage = () => {
           role="status"
           className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
         >
-          <span>
+          {/* Colour set on the span itself: globals.css colours every <span>
+              directly, so it would not inherit the toast's white (§17 item 8). */}
+          <span style={{ color: '#FFFFFF' }}>
             {undoRemoval.rater.name} removed · {undoRemoval.secondsLeft}s
           </span>
           <button
             type="button"
             onClick={undoScheduledRemoval}
-            className="rounded-full border border-white/40 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/15"
+            style={{ color: '#FFFFFF' }}
+            className="rounded-full border border-white/40 px-3 py-1 text-xs font-semibold transition hover:bg-white/15"
           >
             Undo
           </button>

@@ -1,5 +1,5 @@
 import { useBackClosesView } from '../../hooks/useHistoryBack';
-import { ArrowUpDown, Building2, ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpDown, Building2, ChevronDown, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { EmptyState } from '../../components/EmptyState';
@@ -17,6 +17,9 @@ import { RefreshBar, SkeletonList, tableBodyClass, useTableLoading } from '../..
 // needing improvement — the same absolute threshold the department landing counts.
 const NEEDS_IMPROVEMENT_THRESHOLD = 3;
 
+/** Departments shown per page on the landing table. */
+const DEPTS_PER_PAGE = 5;
+
 const fmtDate = (d: Date) =>
   d.toLocaleString('en-US', {
     month: 'short',
@@ -33,6 +36,7 @@ export const LndSummaryOfRatings = () => {
   const recordsLoad = useTableLoading(loading, records.length > 0);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
+  const [deptPage, setDeptPage] = useState(1);
   const [deptSortAsc, setDeptSortAsc] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   // null → department landing view; a department name → drilled-in employee view
@@ -86,6 +90,11 @@ export const LndSummaryOfRatings = () => {
     () => buildDeptCompletionRows(records, headcount, deptSortAsc),
     [records, headcount, deptSortAsc],
   );
+  const deptPageCount = Math.max(1, Math.ceil(deptRows.length / DEPTS_PER_PAGE));
+  const deptPageSafe = Math.min(deptPage, deptPageCount);
+  const deptStart = (deptPageSafe - 1) * DEPTS_PER_PAGE;
+  const deptPageRows = deptRows.slice(deptStart, deptStart + DEPTS_PER_PAGE);
+
   const totalEmployees = deptRows.reduce((sum, d) => sum + d.total, 0);
   const totalCompleted = deptRows.reduce((sum, d) => sum + d.completed, 0);
 
@@ -133,21 +142,15 @@ export const LndSummaryOfRatings = () => {
                 : `Employee ratings · sorted lowest-first · ${REPORT_PERIOD}`}
             </p>
           </div>
+          {/* No Refresh button: useRealtimeRefresh below subscribes to the
+              rating tables, so the page updates itself. "Last synced" stays,
+              as the proof that it did. */}
           <div className="flex items-center gap-3">
             {lastSynced && (
               <span className="text-xs text-gray-400">
                 Last synced {fmtDate(lastSynced)}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => void fetchRecords()}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
           </div>
         </div>
       </section>
@@ -163,7 +166,7 @@ export const LndSummaryOfRatings = () => {
           </span>
           <button
             type="button"
-            onClick={() => setDeptSortAsc(v => !v)}
+            onClick={() => { setDeptSortAsc(v => !v); setDeptPage(1); }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-blue-400 hover:text-blue-600 transition"
           >
             <ArrowUpDown className="h-3.5 w-3.5" />
@@ -190,7 +193,7 @@ export const LndSummaryOfRatings = () => {
           </div>
         ) : (
           <div className={`divide-y divide-gray-100 ${tableBodyClass(recordsLoad.refreshing)}`}>
-            {deptRows.map(d => {
+            {deptPageRows.map(d => {
               return (
                 <button
                   key={d.department}
@@ -214,6 +217,35 @@ export const LndSummaryOfRatings = () => {
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {deptRows.length > DEPTS_PER_PAGE && (
+          <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+            <span>
+              Showing {deptStart + 1} to {Math.min(deptStart + DEPTS_PER_PAGE, deptRows.length)} of {deptRows.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={deptPageSafe <= 1}
+                onClick={() => setDeptPage(p => Math.max(1, p - 1))}
+                aria-label="Previous page"
+                className="rounded-md border border-gray-300 p-1 text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-1">{deptPageSafe} / {deptPageCount}</span>
+              <button
+                type="button"
+                disabled={deptPageSafe >= deptPageCount}
+                onClick={() => setDeptPage(p => Math.min(deptPageCount, p + 1))}
+                aria-label="Next page"
+                className="rounded-md border border-gray-300 p-1 text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

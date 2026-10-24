@@ -23,6 +23,12 @@ interface ApplicantsTabBarProps {
 /**
  * Applicants pages' header: title, subtitle and the DESIGN_IDENTITY §9.2 tab
  * row in one white block, the same pattern as Job Posts.
+ *
+ * It sticks while the page scrolls, so the title and the tabs stay readable
+ * down a long table. `top-14 sm:top-16` is the height of the AdminHeader bar
+ * above it (§8.2), which is itself sticky, and z-30 sits under that bar's
+ * z-40 so the two never overlap. Nothing in .admin-layout or .admin-content
+ * sets overflow, so the window stays the scroll container and this works.
  */
 export const ApplicantsTabBar = ({ title, subtitle, breadcrumb, actions }: ApplicantsTabBarProps) => {
   const { pathname } = useLocation();
@@ -32,7 +38,7 @@ export const ApplicantsTabBar = ({ title, subtitle, breadcrumb, actions }: Appli
     (path === '/admin/rsp/applications' && pathname === '/admin/rsp/jobs');
 
   return (
-    <div className="border-b border-slate-200 bg-white px-8 pt-6">
+    <div className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 pt-6">
       {title !== undefined && (
         <div className="mb-4 flex flex-wrap items-start gap-4">
           <div className="min-w-0">

@@ -1137,7 +1137,7 @@ export const JobPostingsPage = () => {
     <div className="admin-layout">
       <Sidebar activeModule="RSP" userRole="rsp" />
       <main className="admin-content bg-slate-50 !p-0">
-        <div className="border-b border-slate-200 bg-white px-8 pt-6">
+        <div className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 pt-6">
           <h1 className="!mb-1 !text-2xl font-bold">Job Posts</h1>
           <p className="!mb-4 text-base text-slate-500">Define positions once, then open them as vacancies with an application deadline. Vacancies close automatically at the deadline, or you can close them early.</p>
           {/* Tabs on white pages (DESIGN_IDENTITY §9.2) */}
@@ -1220,10 +1220,21 @@ export const JobPostingsPage = () => {
         </section>
 
         <section className="mt-5">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {/* No overflow-hidden here: it would make this div the sticky
+              scroll container, and the header would pin to the top of the
+              table instead of the viewport, i.e. look like it does nothing.
+              The corners are clipped on the header cells and the last row
+              instead. */}
+          <div className="rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
+                {/* Sticky under the page header, which is itself sticky under
+                    the §8.2 bar. The cells stick, not the row: a sticky <tr>
+                    leaves its own background behind. The bottom rule is an
+                    inset shadow rather than a border, because a border on a
+                    sticky cell in a border-collapse table detaches from it
+                    while scrolling. */}
+                <tr className="bg-slate-50 [&>th]:sticky [&>th]:top-[168px] [&>th]:z-20 [&>th]:bg-slate-50 [&>th]:shadow-[inset_0_-1px_0_#e2e8f0] sm:[&>th]:top-[180px] [&>th:first-child]:rounded-tl-2xl [&>th:last-child]:rounded-tr-2xl">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position Title</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plantillas</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Office / Department</th>

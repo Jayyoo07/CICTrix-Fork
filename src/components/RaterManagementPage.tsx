@@ -493,7 +493,7 @@ export const RaterManagementPage = () => {
     <div className="admin-layout">
       <Sidebar activeModule="RSP" userRole="rsp" />
       <main className="admin-content bg-slate-50 !p-0">
-        <div className="border-b border-slate-200 bg-white px-8 py-6 flex items-center justify-between gap-4">
+        <div className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 py-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="!mb-1 !text-2xl font-bold">Rater Management</h1>
             <p className="!mb-0 text-base text-slate-500">Assign raters and define their evaluation access for specific job positions.</p>

@@ -721,10 +721,21 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
                 type="button"
                 onClick={() => void handleEditSave()}
                 disabled={editSaving}
-                style={{ padding: '0.55rem 1.5rem', background: editSaving ? '#C8D1FF' : 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: editSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: editSaving ? 'none' : '0 4px 14px rgba(54,62,232,0.35)' }}
+                aria-busy={editSaving || undefined}
+                style={{ padding: '0.55rem 1.5rem', background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: editSaving ? 'progress' : 'pointer', opacity: editSaving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: editSaving ? 'none' : '0 4px 14px rgba(54,62,232,0.35)' }}
               >
-                <Save size={14} />
-                {editSaving ? 'Saving…' : 'Save Changes'}
+                {/* Label stays while saving (§9.1); the icon slot carries the
+                    spinner, so the button neither reflows nor stops saying
+                    what it does. */}
+                {editSaving ? (
+                  <span
+                    aria-hidden
+                    className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none motion-reduce:opacity-60"
+                  />
+                ) : (
+                  <Save size={14} />
+                )}
+                Save Changes
               </button>
             </div>
           </div>

@@ -99,6 +99,18 @@ const formatLastLogin = (value: unknown) => {
   });
 };
 
+/**
+ * The busy marker for this page's buttons (§9.1). Tailwind here rather than
+ * .btn.is-loading, because these buttons are plain Tailwind like the rest of
+ * the page; converting them to the .btn system is its own change.
+ */
+const Spinner = () => (
+  <span
+    aria-hidden
+    className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none motion-reduce:opacity-60"
+  />
+);
+
 const statusBadge = (status: RaterStatus) => {
   if (status === 'Active') {
     return (
@@ -611,10 +623,11 @@ export const RaterManagementPage = () => {
                   type="button"
                   onClick={() => void addRater()}
                   disabled={adding}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-busy={adding || undefined}
+                  className={`inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 ${adding ? 'cursor-progress opacity-70' : ''}`}
                 >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  {adding ? 'Adding…' : 'Add Rater'}
+                  {adding ? <Spinner /> : <UserPlus className="h-3.5 w-3.5" />}
+                  Add Rater
                 </button>
               </div>
             </div>
@@ -669,22 +682,20 @@ export const RaterManagementPage = () => {
                               type="button"
                               onClick={() => void handleToggleRaterAccess(rater)}
                               disabled={isPending}
+                              aria-busy={isPending || undefined}
                               aria-label={`${isActive ? 'Revoke' : 'Grant'} access for ${rater.name}`}
                               className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                                 isActive
-                                  ? 'bg-rose-600 text-white hover:bg-rose-700'
-                                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                              }`}
+                                  ? 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                              } ${isPending ? 'cursor-progress opacity-70' : ''}`}
                             >
-                              {isActive ? (
-                                <>
-                                  <ShieldOff className="h-3.5 w-3.5" /> {isPending ? 'Revoking…' : 'Revoke Access'}
-                                </>
+                              {isPending ? <Spinner /> : isActive ? (
+                                <ShieldOff className="h-3.5 w-3.5" />
                               ) : (
-                                <>
-                                  <ShieldCheck className="h-3.5 w-3.5" /> {isPending ? 'Granting…' : 'Grant Access'}
-                                </>
+                                <ShieldCheck className="h-3.5 w-3.5" />
                               )}
+                              {isActive ? 'Revoke Access' : 'Grant Access'}
                             </button>
                           );
                         })()}

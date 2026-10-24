@@ -156,6 +156,31 @@
 :is(.abyan-ds, .rsp-ds) .btn-destructive-outline:hover { background: var(--error-100); }
 :is(.abyan-ds, .rsp-ds) .btn-destructive-outline:focus-visible { box-shadow: 0 0 0 3px var(--error-300); }
 
+/* Loading (§9.1): the action label stays put and a spinner joins it, so the
+   user can still read what they clicked while they wait. Swapping the label
+   for "Saving…" takes that away at the one moment it is wanted, and changes
+   the button's width mid-click. Pointer events are off as well as `disabled`,
+   since a `disabled` attribute alone is easy to forget at the call site. */
+:is(.abyan-ds, .rsp-ds) .btn.is-loading {
+  opacity: .7;
+  cursor: progress;
+  pointer-events: none;
+}
+:is(.abyan-ds, .rsp-ds) .btn.is-loading::before {
+  content: '';
+  width: 16px; height: 16px; flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: abyan-btn-spin .75s linear infinite;
+}
+/* Reduced motion still needs a "busy" signal, so the ring holds still rather
+   than disappearing (§13). */
+@media (prefers-reduced-motion: reduce) {
+  :is(.abyan-ds, .rsp-ds) .btn.is-loading::before { animation: none; opacity: .6; }
+}
+@keyframes abyan-btn-spin { to { transform: rotate(360deg); } }
+
 /* Status badges, soft style (§9.8) */
 :is(.abyan-ds, .rsp-ds) .badge {
   display: inline-flex; align-items: center; gap: 6px;

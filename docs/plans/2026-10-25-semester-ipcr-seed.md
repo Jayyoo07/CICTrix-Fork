@@ -1,7 +1,7 @@
 ---
 title: Semester IPCRs for succession planning
 date: 2026-10-25
-status: In Progress
+status: Done
 summary: Seed completed semester IPCRs tailored to each employee's position, and fix the succession pool so the incumbent, same-title peers and other departments are never ranked as successors.
 ---
 

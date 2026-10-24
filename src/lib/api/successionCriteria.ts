@@ -701,3 +701,63 @@ export function positionLevelRatio(candidate: PositionRank, target: PositionRank
     usable(a) && usable(b) && b > 0 ? Math.min(a / b, 1) : null;
   return pair(candidate.salaryGrade, target.salaryGrade) ?? pair(candidate.levelOrder, target.levelOrder);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C (fallback). Relative rank read from the position title
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// employees.position holds long plantilla-style strings ("Accountant III
+// (Division Chief)") that match no `positions` row, so the salary-grade / level
+// comparison above has nothing to work with. Titles still carry a reliable,
+// narrow signal, used only when that comparison comes back 'unknown':
+//
+//   department head  >  Assistant City ...  >  everything else
+//
+// and, within one title family, a higher roman numeral (or digit) outranks a
+// lower one, with "Chief" breaking a tie. Titles from different families are
+// 'unknown' — Nurse V against Midwife II says nothing — so they stay in the pool.
+
+const DEPARTMENT_HEAD_TITLE =
+  /^(city (accountant|engineer|health officer|general services officer|social welfare (&|and) dev(\.|elopment)? officer)|head of .+)$/;
+const ASSISTANT_HEAD_TITLE = /^assistant city /;
+const CHIEF_TITLE = /\bchief\b/;
+const TITLE_SERIES_SUFFIX = /^(.*?)\s+(i{1,3}|iv|vi{0,3}|ix|x|\d{1,2})$/;
+const ROMAN_VALUES: Record<string, number> = {
+  i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10,
+};
+
+interface TitleRank {
+  /** 3 department head, 2 assistant head, 0 everything else. */
+  tier: number;
+  chief: boolean;
+  family: string;
+  numeral: number | null;
+}
+
+function parseTitleRank(title: string | null | undefined): TitleRank | null {
+  const full = String(title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!full) return null;
+  const base = full.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+  const tier = DEPARTMENT_HEAD_TITLE.test(base) ? 3 : ASSISTANT_HEAD_TITLE.test(base) ? 2 : 0;
+  const series = TITLE_SERIES_SUFFIX.exec(base);
+  const numeral = series ? ROMAN_VALUES[series[2]] ?? Number(series[2]) : null;
+  return { tier, chief: CHIEF_TITLE.test(full), family: series ? series[1] : base, numeral };
+}
+
+/** Compares two position titles; 'unknown' unless the title alone settles it. */
+export function compareTitleRank(candidateTitle: string | null | undefined, targetTitle: string | null | undefined): RankComparison {
+  const c = parseTitleRank(candidateTitle);
+  const t = parseTitleRank(targetTitle);
+  if (!c || !t) return 'unknown';
+  if (c.tier !== t.tier && (c.tier >= 2 || t.tier >= 2)) return c.tier > t.tier ? 'higher' : 'lower';
+  if (c.tier >= 2) return 'equal';
+  if (c.family !== t.family || c.numeral == null || t.numeral == null) return 'unknown';
+  if (c.numeral !== t.numeral) return c.numeral > t.numeral ? 'higher' : 'lower';
+  if (c.chief !== t.chief) return c.chief ? 'higher' : 'lower';
+  return 'equal';
+}
+
+/** True only when the titles alone show the candidate sits above the target. */
+export function isDownwardTitleMove(candidateTitle: string | null | undefined, targetTitle: string | null | undefined): boolean {
+  return compareTitleRank(candidateTitle, targetTitle) === 'higher';
+}

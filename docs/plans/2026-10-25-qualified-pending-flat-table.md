@@ -1,7 +1,7 @@
 ---
 title: Qualified Applicants — status fix and flat Pending Assignment table
 date: 2026-10-25
-status: In Progress
+status: Done
 summary: Stop Disqualified / Not Qualified / closed applicants from appearing on Qualified Applicants, and replace the department → position dropdown tree on Pending Assignment with one flat, filterable, sortable table.
 ---
 

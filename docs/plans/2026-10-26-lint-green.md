@@ -1,7 +1,7 @@
 ---
 title: Make npm run lint green on current main
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Restore the missing ESLint config, land the deferred cleanup on current main, and clear the remaining warnings so npm run lint exits 0 with zero warnings.
 ---
 
@@ -40,3 +40,12 @@ The config and a first cleanup pass already exist on the local-only branch `chor
 - `npm run lint`
 - `npm test`
 - `npx vite build --minify false --target esnext` (Windows workaround for the esbuild temp-file bug)
+
+## Outcome
+
+- `npm run lint` exits 0 with zero warnings. `npm run lint` now targets `src` and `vite.config.ts`, so worktree copies and `dist` can never be scanned twice.
+- Fourteen `react-hooks/exhaustive-deps` warnings were fixed by adding stable dependencies or memoizing helpers. The rest are one-line disables with a reason, mostly loaders that are re-created every render.
+- Two hook warnings were cache invalidators rather than missing inputs: `getEmployeePortalAccounts()` in RSPDashboard and the one-shot profile seed in SettingsPage. Both carry a comment.
+- `react-refresh/only-export-components` is off; it only affects dev hot reload.
+- The cherry-pick of `a471c79` removed the unrendered SystemAdministrationPage subtabs and other dead code it had already identified on 2026-10-20. `tsc` and the suite confirm nothing live referenced it.
+- Tests need a local `.env` (Supabase URL and anon key); it is gitignored and was copied from the main worktree for the run.

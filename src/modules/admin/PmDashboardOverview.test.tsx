@@ -47,6 +47,13 @@ vi.mock('../../lib/api/competencyGapAnalysis', async (importOriginal) => {
           ['office of the city engineer', { name: 'Office of the City Engineer', count: 2 }],
         ]),
       ),
+    getActiveOfficeKeys: () =>
+      Promise.resolve(
+        new Map([
+          ['city health office', 'City Health Office'],
+          ['office of the city engineer', 'Office of the City Engineer'],
+        ]),
+      ),
   };
 });
 

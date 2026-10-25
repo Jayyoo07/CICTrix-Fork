@@ -1,5 +1,6 @@
 import { IPCRRatingRecord } from '../../modules/admin/pm/SummaryOfRatings';
 import { supabase } from '../supabase';
+import { listDepartments } from './departments';
 import { PROFICIENCY_NUMERIC, type ProficiencyLevel } from './pmCompetency';
 
 // Raw row shape mirroring the view
@@ -85,6 +86,16 @@ export async function getActiveHeadcountByDepartment(): Promise<Map<string, { na
     map.set(key, entry);
   });
   return map;
+}
+
+// 1d. active offices — the offices Summary of Ratings may list. Deactivated
+// offices (e.g. Legal, IT) still have employees and IPCR rows tagged to them,
+// so the headcount and records alone would keep showing them. Keyed by
+// `normDeptKey`, valued by the canonical office name.
+export async function getActiveOfficeKeys(): Promise<Map<string, string>> {
+  const result = await listDepartments();
+  if (!result.success) throw new Error(result.error);
+  return new Map(result.data.map(d => [normDeptKey(d.name), d.name]));
 }
 
 // 2. aggregator — one IPCRRatingRecord per employee, ready for SoR

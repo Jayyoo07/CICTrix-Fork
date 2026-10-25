@@ -1,0 +1,81 @@
+<h2>Tracker: "Your applications" list with expandable rows (chosen 2026-10-26)</h2>
+<p class="subtitle">Click a row to expand that position's status in place; click it again to collapse. One row is open at a time. The expanded area holds the existing sections, unchanged. The list only appears when the search finds 2 or more applications.</p>
+
+<style>
+  .t2{font-family:Poppins,system-ui,sans-serif;color:#28343D;font-size:14px;max-width:880px;margin:0 auto}
+  .t2 .card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:20px 24px;margin-top:16px}
+  .t2 h3{margin:0;color:#040E6B;font-size:18px}
+  .t2 .cap{color:#515F69;font-size:13px;margin-top:2px}
+  .t2 .search{display:flex;gap:12px;margin-top:12px}
+  .t2 .search input{flex:1;height:40px;border:1px solid #E2E8F0;border-radius:8px;padding:0 12px;font:inherit}
+  .t2 .btn{height:40px;border-radius:999px;background:#363EE8;color:#fff;border:0;padding:0 20px;font:600 14px Poppins}
+  .t2 .list{border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;margin-top:14px}
+  .t2 .row{display:grid;grid-template-columns:4px 1fr 120px 130px;gap:14px;align-items:center;padding:12px 16px 12px 0;border-top:1px solid #E2E8F0;cursor:pointer}
+  .t2 .row:first-child{border-top:0}
+  .t2 .row:hover{background:#F8FAFF}
+  .t2 .row .bar{align-self:stretch;background:transparent}
+  .t2 .row.sel{background:#EEF0FF}.t2 .row.sel .bar{background:#363EE8}
+  .t2 .pos{color:#040E6B;font-weight:600}.t2 .sub{color:#515F69;font-size:12px}
+  .t2 .badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;justify-self:start}
+  .t2 .b-info{background:#E0E5FF;color:#191FA8}.t2 .b-warn{background:#FCE8C8;color:#A8590A}.t2 .b-err{background:#FDE2E2;color:#B42323}
+  .t2 .flag{color:#A8590A;font-size:12px;font-weight:600}
+  .t2 .ghost{opacity:.55}
+  .t2 .ph{border:1.5px dashed #C8D1FF;border-radius:12px;padding:16px;color:#515F69;margin-top:16px;text-align:center}
+  .t2 .ph b{color:#040E6B}
+</style>
+
+<div class="t2">
+  <div class="card ghost">
+    <h3>Search Application</h3><div class="cap">Enter your Reference No. to view detailed status</div>
+    <div class="search"><input value="ABYAN-584-392" readonly><button class="btn">Search</button></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div><h3>Your applications</h3><div class="cap">Patricia Ann Cordero · 3 applications under this Reference No.</div></div>
+    </div>
+    <div class="list" id="t2list">
+      <div class="row" onclick="t2pick(this,'Engineer I','Under Review')">
+        <span class="bar"></span>
+        <div><div class="pos">Engineer I</div><div class="sub">Office of the City Engineer · Submitted Oct 20, 2026</div></div>
+        <span class="flag">● Action required</span>
+        <span class="badge b-warn">Under Review</span>
+      </div>
+      <div class="row sel" onclick="t2pick(this,'Engineer II (Drainage / Flood Control)','New')">
+        <span class="bar"></span>
+        <div><div class="pos">Engineer II (Drainage / Flood Control)</div><div class="sub">Office of the City Engineer · Submitted Oct 23, 2026</div></div>
+        <span></span>
+        <span class="badge b-info">New</span>
+      </div>
+      <div class="row" onclick="t2pick(this,'Draftsman II','Not Selected')">
+        <span class="bar"></span>
+        <div><div class="pos">Draftsman II</div><div class="sub">City Planning and Development Office · Submitted Oct 2, 2026</div></div>
+        <span></span>
+        <span class="badge b-err">Not Selected</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ph" id="t2ph">
+    <b>Existing page, unchanged</b>, now showing <b id="t2name">Engineer II (Drainage / Flood Control)</b> · <span id="t2st">New</span><br>
+    Action Required banner · Application Details · Notices from RSP Admin · Current Status · Submitted Documents
+  </div>
+</div>
+
+<script>
+// Saved decision: the open row expands in place. Its existing status sections
+// render directly under it; clicking the open row again collapses it.
+function t2pick(el,name,st){
+  var ph=document.getElementById('t2ph');
+  var wasOpen=el.classList.contains('sel');
+  document.querySelectorAll('#t2list .row').forEach(r=>r.classList.remove('sel'));
+  if(wasOpen){ph.style.display='none';return;}
+  el.classList.add('sel');
+  el.after(ph);ph.style.display='';ph.style.margin='0 16px 12px';
+  document.getElementById('t2name').textContent=name;
+  document.getElementById('t2st').textContent=st;
+}
+// Default open row: the first one needing action (Engineer I here).
+document.querySelector('#t2list .row.sel').classList.remove('sel');
+t2pick(document.querySelector('#t2list .row'),'Engineer I','Under Review');
+</script>

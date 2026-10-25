@@ -33,7 +33,7 @@ The person is identified by normalised email, since the public portal has no acc
 1. Migration `20261021200000_one_reference_per_applicant.sql` (written as 20261015, renumbered on 2026-10-21 to clear the migration guard): the D1 table, generator and trigger changes, D2 index swap, D3 backfill, D5/D6 columns and trigger, recreated `applicant_tracker_view` with the new columns and the plantilla label. Write a rollback in `supabase/rollbacks/`. Before writing, check whether `applicants.status` has a CHECK constraint and extend it if it does.
 2. `src/lib/api/applicantStatus.ts` (+ test): add the D4 status, message and funnel bucket.
 3. `ApplicantWizard.tsx`: after submitting, show the reference the server returned, worded "Your Reference No. for all your applications". When the email already has applications, add a note that the new one was added under the same reference.
-4. `ApplicationStatusPage.tsx`: resolve aliases, fetch all rows, build the D9 list and selected-application state, and scope polling to the set.
+4. `ApplicationStatusPage.tsx`: resolve aliases, fetch all rows, build the D9 list and selected-application state, and scope polling to the set. **Done 2026-10-26** (`docs/plans/2026-10-26-tracker-application-list.md`; rows expand in place, `docs/mockups/2026-10-26-tracker-application-list.html`).
 5. RSP lists (`QualifiedApplicantsRSPPage`, `QualifiedApplicantsPage`, `ApplicationsListPage`, `RSPDashboard` plantilla applicant tables, `ForHiringPage`): D8 row treatment, apps chip and popover, promotion tag, and leaving these rows out of counts and bulk select.
 6. Run the checks below and write the session summary.
 

@@ -84,6 +84,7 @@ The seed migration wrote 1 and 2 (without accomplishments) and none of 3 to 7.
 13. Order — accomplishments must land before the mirror's backfill, or mirrored rows carry null text.
 14. `performance_evaluations` conflict — `on conflict (employee_id, cycle_id) do nothing`, so a legacy row is never overwritten.
 15. `locked_targets` shape — `[{function_type, target_text, competency_id, mapped_competency_standard}]`, the shape `fetchTargetRowsForEmployee` produces.
+16. Trigger syntax — `EXECUTE FUNCTION` takes no arguments, so `execute function f(new.id)` is a syntax error (42601). A trigger function must be `returns trigger`, take no parameters, and read `NEW`/`OLD` itself. Wrap any argument-taking function in a thin `returns trigger` function.
 
 ## Verified against production (2026-10-26)
 

@@ -238,6 +238,23 @@ comment on function public.finalize_ipcr_surfaces(uuid) is
   'Fan one finalized Phase 1/2 IPCR out to ipcr_performance, performance_evaluations, ipcr_submissions and locked_targets. Idempotent; called by trigger and by the app at Phase 2 finalization.';
 
 -- ── Triggers ────────────────────────────────────────────────────────────────
+-- A trigger function takes no arguments and reads NEW/OLD itself; `new.id`
+-- cannot be passed as a trigger argument. This thin wrapper exists only to turn
+-- the row into the uuid the real function expects.
+create or replace function public.finalize_ipcr_surfaces_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  perform public.finalize_ipcr_surfaces(new.id);
+  return null;  -- AFTER trigger: the return value is ignored
+end;
+$$;
+
+revoke all on function public.finalize_ipcr_surfaces_trigger() from public;
+
 -- Two triggers rather than one, because an INSERT trigger cannot reference OLD
 -- in its WHEN clause. Both paths are guarded on the record actually being final,
 -- and the function is idempotent, so a double fire is harmless.
@@ -247,14 +264,14 @@ create trigger target_settings_finalize_ipcr_upd
   after update of phase2_status on public.target_settings
   for each row
   when (new.phase2_status = 'completed' and old.phase2_status is distinct from 'completed')
-  execute function public.finalize_ipcr_surfaces(new.id);
+  execute function public.finalize_ipcr_surfaces_trigger();
 
 drop trigger if exists target_settings_finalize_ipcr_ins on public.target_settings;
 create trigger target_settings_finalize_ipcr_ins
   after insert on public.target_settings
   for each row
   when (new.phase2_status = 'completed')
-  execute function public.finalize_ipcr_surfaces(new.id);
+  execute function public.finalize_ipcr_surfaces_trigger();
 
 -- ── Backfill the 272 already-finalized records ──────────────────────────────
 do $$

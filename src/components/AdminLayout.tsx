@@ -17,13 +17,13 @@ interface AdminLayoutProps {
   onNotificationClick?: (item: any) => void;
 }
 
-export const AdminLayout = ({ children, customSidebar, userName = 'Admin', divisionLabel = 'HRIS Admin', onNotificationClick }: AdminLayoutProps) => {
-  const location = useLocation();
-  
+export const AdminLayout = ({ children, customSidebar, userName = 'Admin', divisionLabel = 'HRIS Admin' }: AdminLayoutProps) => {
+  // Subscribes to navigation so the session-derived header below re-reads on every route change.
+  useLocation();
+
   // Try to determine user role and name from session for the header
   let sessionName = userName;
   let sessionDivision = divisionLabel;
-  let division: any = undefined;
   
   try {
     const parsed = readAdminSession();
@@ -36,16 +36,12 @@ export const AdminLayout = ({ children, customSidebar, userName = 'Admin', divis
         if (parsed.role === 'super-admin') {
           sessionDivision = 'System Administrator';
           sessionName = 'Super Admin';
-          division = 'super';
         } else if (parsed.role === 'rsp') {
           sessionDivision = 'RSP Admin';
-          division = 'rsp';
         } else if (parsed.role === 'lnd') {
           sessionDivision = 'L&D Admin';
-          division = 'lnd';
         } else if (parsed.role === 'pm') {
           sessionDivision = 'PM Admin';
-          division = 'pm';
         }
       }
     }

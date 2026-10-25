@@ -98,7 +98,7 @@ export const syncNewlyHiredToEmployees = async (): Promise<void> => {
 
     const hires = (newlyHired ?? []) as any[];
     if (hires.length === 0) {
-      try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch {}
+      try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch { /* Storage unavailable (private mode or quota); this flag is only an optimization. */ }
       return;
     }
 
@@ -123,7 +123,7 @@ export const syncNewlyHiredToEmployees = async (): Promise<void> => {
     });
 
     if (missingHires.length === 0) {
-      try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch {}
+      try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch { /* Storage unavailable (private mode or quota); this flag is only an optimization. */ }
       return;
     }
 
@@ -203,7 +203,7 @@ export const syncNewlyHiredToEmployees = async (): Promise<void> => {
       }
     }
 
-    try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch {}
+    try { sessionStorage.setItem(EMPLOYEE_SYNC_FLAG_KEY, '1'); } catch { /* Storage unavailable (private mode or quota); this flag is only an optimization. */ }
   } catch (err) {
     console.warn('[hiredApplicantSync] unexpected newly hired sync error:', err);
   }
@@ -245,7 +245,7 @@ export const repairDefaultedEmployeeRecords = async (): Promise<void> => {
 
     const rows = (defaulted ?? []) as any[];
     if (rows.length === 0) {
-      try { sessionStorage.setItem(EMPLOYEE_REPAIR_FLAG_KEY, '1'); } catch {}
+      try { sessionStorage.setItem(EMPLOYEE_REPAIR_FLAG_KEY, '1'); } catch { /* Storage unavailable (private mode or quota); this flag is only an optimization. */ }
       return;
     }
 
@@ -298,7 +298,7 @@ export const repairDefaultedEmployeeRecords = async (): Promise<void> => {
       }
     }
 
-    try { sessionStorage.setItem(EMPLOYEE_REPAIR_FLAG_KEY, '1'); } catch {}
+    try { sessionStorage.setItem(EMPLOYEE_REPAIR_FLAG_KEY, '1'); } catch { /* Storage unavailable (private mode or quota); this flag is only an optimization. */ }
   } catch (err) {
     console.warn('[hiredApplicantSync] unexpected repair error:', err);
   }

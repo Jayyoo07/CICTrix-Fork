@@ -293,11 +293,15 @@ export function InterviewerDashboard({
         window.removeEventListener('storage', onStorage);
       };
     }
+    // Loader is re-created each render and is not an input; run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRealtimeRefresh({
     channel: 'interviewer-dashboard',
     tables: ['applicants', 'evaluations', 'job_postings'],
+    // The realtime hook keeps the latest callback in a ref; the loader is not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     onChange: useCallback(() => { void fetchJobsAndApplicants(true); }, []),
   });
 

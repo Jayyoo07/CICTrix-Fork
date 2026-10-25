@@ -655,6 +655,9 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
         finalScore: oralRaw === null ? (current.oralExam?.finalScore ?? null) : oralRawToConvertedScore(oralRaw),
       },
     }));
+    // Keyed by applicant id; the object itself changes identity on parent re-renders
+    // and would reset scores the interviewer is still editing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicant.id, liveEvaluation?.applicantId, liveEvaluation?.pcptRawScore, liveEvaluation?.writtenExamRawScore, liveEvaluation?.oralRawScore, savedScores]);
 
   // Load attachments for this applicant

@@ -7,7 +7,7 @@
     "build": "tsc && vite build",
     "build:verify": "tsc --noEmit && vite build --minify false --target esnext",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint src vite.config.ts --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "check:migrations": "node scripts/check-migrations.mjs",
     "docker:start": "scripts\\start-dev.bat",

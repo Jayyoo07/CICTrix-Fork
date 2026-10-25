@@ -14,7 +14,6 @@ export type AccentColor = 'Blue' | 'Green' | 'Purple' | 'Orange';
 const THEME_KEY = 'cictrix_theme';
 const ACCENT_KEY = 'cictrix_accent';
 
-let currentThemeMode: ThemeMode = 'Light';
 let mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
 
 const isThemeMode = (v: unknown): v is ThemeMode =>
@@ -100,7 +99,6 @@ export const setTheme = (mode: ThemeMode): void => {
   try { localStorage.setItem(THEME_KEY, mode); } catch {
     // ignore quota errors
   }
-  currentThemeMode = mode;
   if (isThemeScopedRoute()) {
     applyTheme(mode);
   }
@@ -153,7 +151,6 @@ export const setAccent = (color: AccentColor): void => {
  */
 export const initTheme = (): void => {
   const storedMode = getStoredTheme();
-  currentThemeMode = storedMode;
 
   // Theme only applies to the RSP scope; other areas stay light.
   if (isThemeScopedRoute()) {
@@ -178,7 +175,7 @@ function setupAutoModeListener(): void {
   
   const mql = window.matchMedia('(prefers-color-scheme: dark)');
   
-  mediaQueryListener = (e: MediaQueryListEvent) => {
+  mediaQueryListener = () => {
     // Only apply change if user is still in 'Auto' mode
     if (getStoredTheme() === 'Auto') {
       applyTheme('Auto');

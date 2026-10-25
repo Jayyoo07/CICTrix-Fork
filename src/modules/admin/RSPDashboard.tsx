@@ -1,10 +1,8 @@
 import {
   AlertCircle,
-  BarChart2,
   Bell,
   Briefcase,
   Building2,
-  Calculator,
   Calendar,
   Check,
   ChevronLeft,
@@ -19,7 +17,6 @@ import {
   MapPin,
   GitBranch,
   ListChecks,
-  Phone,
   Plus,
   Search,
   Settings,
@@ -27,7 +24,6 @@ import {
   Trash2,
   User,
   UserCheck,
-  UserMinus,
   UserPlus,
   Users,
   X,
@@ -551,8 +547,7 @@ const saveRaterAccessState = (email: string, isActive: boolean) => {
     const next = current && typeof current === 'object' ? { ...current } : {};
     next[normalizedEmail] = isActive;
     localStorage.setItem(RATER_ACCESS_STATE_KEY, JSON.stringify(next));
-  } catch {
-  }
+  } catch { /* localStorage unavailable (private mode or quota); persisting here is best-effort. */ }
 };
 
 const runRaterEmailUpdate = async (
@@ -636,99 +631,13 @@ const deriveEvaluationTotalScore = (row: any): number => {
 };
 
 // Scoring conversion tables
-const convertEducationScore = (level: string): number => {
-  const levels: Record<string, number> = {
-    'Elementary Level': 10,
-    'Elementary Graduate': 11,
-    'High School Level': 12,
-    'High School Graduate': 13,
-    'College Level': 14,
-    'College Graduate': 16,
-    'Masteral Units': 18,
-    'Graduate School': 20,
-  };
-  return levels[level] || 16;
-};
 
-const convertExperienceScore = (years: number): number => {
-  if (years >= 21) return 20;
-  if (years >= 16) return 18;
-  if (years >= 11) return 16;
-  if (years >= 6) return 14;
-  if (years >= 1) return 12;
-  return 0;
-};
 
-const convertPerformanceScore = (rating: string): number => {
-  const ratings: Record<string, number> = {
-    'Very Satisfactory': 12,
-    'Outstanding': 14,
-  };
-  return ratings[rating] || 12;
-};
 
-const convertPcptScore = (rawScore: number): number => {
-  if (rawScore >= 35) return 20;
-  if (rawScore >= 32) return 18;
-  if (rawScore >= 29) return 16;
-  if (rawScore >= 26) return 14;
-  if (rawScore >= 23) return 12;
-  if (rawScore >= 20) return 10;
-  return 0;
-};
 
-const convertPotentialScore = (rawScore: number): number => {
-  if (rawScore >= 91) return 20;
-  if (rawScore >= 81) return 18;
-  if (rawScore >= 71) return 16;
-  if (rawScore >= 61) return 14;
-  if (rawScore >= 51) return 12;
-  return 0;
-};
 
-const convertWrittenExamScore = (rawScore: number, positionType: 'rank-and-file' | 'executive' = 'rank-and-file'): number => {
-  if (positionType === 'executive') {
-    if (rawScore >= 30) return 20;
-    if (rawScore >= 25) return 18;
-    if (rawScore >= 20) return 16;
-    if (rawScore >= 15) return 14;
-    if (rawScore >= 10) return 12;
-    return 10;
-  } else {
-    if (rawScore >= 26) return 20;
-    if (rawScore >= 21) return 18;
-    if (rawScore >= 16) return 16;
-    if (rawScore >= 11) return 14;
-    if (rawScore >= 10) return 12;
-    return 0;
-  }
-};
 
-const convertOralExamScore = (rawScore: number): number => {
-  if (rawScore >= 96) return 20;
-  if (rawScore >= 91) return 18;
-  if (rawScore >= 86) return 16;
-  if (rawScore >= 81) return 14;
-  if (rawScore >= 76) return 12;
-  return 10;
-};
 
-const calculateTotalScore = (scores: {
-  education: number;
-  experience: number;
-  performance?: number;
-  pcpt: number;
-  potential?: number;
-  writtenExam?: number;
-  oralExam?: number;
-  appointmentType: 'original' | 'promotional';
-}): number => {
-  if (scores.appointmentType === 'original') {
-    return (scores.education + scores.experience + (scores.writtenExam || 0) + (scores.oralExam || 0) + scores.pcpt);
-  } else {
-    return (scores.education + scores.experience + (scores.performance || 0) + scores.pcpt + (scores.potential || 0));
-  }
-};
 
 const loadStoredCategoryScores = (): Record<string, StoredApplicantCategoryScores> => {
   try {
@@ -741,50 +650,7 @@ const loadStoredCategoryScores = (): Record<string, StoredApplicantCategoryScore
   }
 };
 
-const generateDemoEvaluationScores = (applicants: ApplicantRecord[]): Record<string, number> => {
-  // Generate realistic demo scores for applicants using the conversion tables
-  const demoScores = new Map<string, number>();
 
-  applicants.slice(0, 4).forEach((applicant, index) => {
-    const appointmentType = index % 2 === 0 ? 'original' : 'promotional';
-
-    // Generate diverse scores for demo purposes
-    const education = convertEducationScore(['College Graduate', 'Masteral Units', 'Graduate School', 'College Graduate'][index] || 'College Graduate');
-    const experience = convertExperienceScore([3, 8, 12, 6][index] || 5);
-    const pcpt = convertPcptScore([28, 34, 30, 25][index] || 28);
-
-    let total = 0;
-    if (appointmentType === 'original') {
-      const writtenExam = convertWrittenExamScore([22, 28, 24, 20][index] || 22, 'rank-and-file');
-      const oralExam = convertOralExamScore([85, 92, 88, 82][index] || 85);
-      total = calculateTotalScore({
-        education,
-        experience,
-        writtenExam,
-        oralExam,
-        pcpt,
-        appointmentType,
-      });
-    } else {
-      const performance = convertPerformanceScore(['Outstanding', 'Very Satisfactory', 'Outstanding', 'Very Satisfactory'][index] || 'Outstanding');
-      const potential = convertPotentialScore([75, 88, 82, 70][index] || 75);
-      total = calculateTotalScore({
-        education,
-        experience,
-        performance,
-        potential,
-        pcpt,
-        appointmentType,
-      });
-    }
-
-    demoScores.set(applicant.id, Math.round(total * 100) / 100);
-  });
-
-  return Object.fromEntries(demoScores);
-};
-
-const DEMO_EVALUATION_SCORES_KEY = 'cictrix_demo_evaluation_scores';
 
 const hasFinalizedCategoryScores = (entry?: StoredApplicantCategoryScores): boolean => {
   if (!entry) return false;
@@ -841,7 +707,7 @@ const normalizeWrittenScore = (value: number): number => {
 
 export const RSPDashboard = () => {
   // Plantilla names for posting/application rows (never their internal keys).
-  const { nameFor: plantillaNameFor, summaryForPosting } = usePlantillaNames();
+  const { summaryForPosting } = usePlantillaNames();
 
   // Live updates: both events feed the dashboard's existing syncJobs reload.
   useRealtimeRefresh({
@@ -882,10 +748,6 @@ export const RSPDashboard = () => {
   const [jobsOffice, setJobsOffice] = useState('all');
   const [jobsPage, setJobsPage] = useState(0);
 
-  const [qualifiedTab, setQualifiedTab] = useState<'all' | 'completed' | 'pending'>('all');
-  const [qualifiedSearch, setQualifiedSearch] = useState('');
-  const [qualifiedPosition, setQualifiedPosition] = useState('all');
-  const [qualifiedOffice, setQualifiedOffice] = useState('all');
   const [reportsView, setReportsView] = useState<'overview' | 'documents'>('overview');
   const [activeRankingPosition, setActiveRankingPosition] = useState<string | null>(null);
   const [showRankingModal, setShowRankingModal] = useState(false);
@@ -895,7 +757,7 @@ export const RSPDashboard = () => {
   const [showAssessmentFormsModal, setShowAssessmentFormsModal] = useState(false);
   const [assessmentStatusFilter, setAssessmentStatusFilter] = useState<AssessmentStatusFilter>('all');
   const [assessmentSearch, setAssessmentSearch] = useState('');
-  const [rankingPositionFilter, setRankingPositionFilter] = useState<string>('all');
+  const [, setRankingPositionFilter] = useState<string>('all');
   const [activeDocumentTemplateId, setActiveDocumentTemplateId] = useState<EmployeeDocumentTemplateId | null>(null);
   const [expandedDocumentOffices, setExpandedDocumentOffices] = useState<Record<string, boolean>>({});
   const [selectedDocumentSubmissionIds, setSelectedDocumentSubmissionIds] = useState<string[]>([]);
@@ -1610,7 +1472,6 @@ export const RSPDashboard = () => {
     ];
     return Array.from(new Set([...officeOptions, ...defaults].filter(Boolean)));
   }, [officeOptions]);
-  const positionOptions = useMemo(() => Array.from(new Set(applicants.map((a) => a.position).filter(Boolean))), [applicants]);
   const assignableJobPositions = useMemo(() => {
     return Array.from(
       new Set(
@@ -1640,41 +1501,7 @@ export const RSPDashboard = () => {
   const safePage = Math.min(jobsPage, pageCount - 1);
   const pagedJobs = filteredJobs.slice(safePage * jobsPerPage, safePage * jobsPerPage + jobsPerPage);
 
-  const qualifiedApplicants = useMemo(() => {
-    const base = applicants.filter((applicant) => {
-      const normalized = applicant.status.toLowerCase();
-      return normalized.includes('qualified') || normalized.includes('shortlist') || completedEvaluationIds.has(applicant.id);
-    });
 
-    const withEvaluationState = base.map((applicant) => ({
-      ...applicant,
-      evaluation_state: completedEvaluationIds.has(applicant.id) ? 'completed' : 'pending',
-    }));
-
-    return withEvaluationState.filter((applicant) => {
-      if (qualifiedTab !== 'all' && applicant.evaluation_state !== qualifiedTab) return false;
-      if (qualifiedPosition !== 'all' && applicant.position !== qualifiedPosition) return false;
-      if (qualifiedOffice !== 'all' && applicant.office !== qualifiedOffice) return false;
-
-      const term = qualifiedSearch.toLowerCase();
-      if (!term) return true;
-
-      return (
-        applicant.full_name.toLowerCase().includes(term) ||
-        applicant.position.toLowerCase().includes(term) ||
-        applicant.office.toLowerCase().includes(term)
-      );
-    });
-  }, [applicants, completedEvaluationIds, qualifiedTab, qualifiedPosition, qualifiedOffice, qualifiedSearch]);
-
-  const avgQualifiedScore = useMemo(() => {
-    if (qualifiedApplicants.length === 0) return 0;
-    const scored = qualifiedApplicants.filter((applicant) => typeof applicant.total_score === 'number') as Array<
-      ApplicantRecord & { total_score: number }
-    >;
-    if (scored.length === 0) return 0;
-    return scored.reduce((sum, applicant) => sum + applicant.total_score, 0) / scored.length;
-  }, [qualifiedApplicants]);
 
   // Loaded from Supabase newly_hired table; refreshed when saveNewlyHired
   // dispatches 'cictrix:newly-hired-updated'. Used by both
@@ -2146,6 +1973,8 @@ export const RSPDashboard = () => {
     return map;
   }, [credentialedNewlyHiredRows]);
 
+  // getEmployeePortalAccounts reads module storage; these deps intentionally invalidate the cache.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const portalAccounts = useMemo(() => getEmployeePortalAccounts(), [credentialedNewlyHiredRows, section]);
 
   const portalAccountByEmployeeId = useMemo(
@@ -2161,7 +1990,7 @@ export const RSPDashboard = () => {
       if (account) map.set(String(row.applicantId), account);
     });
     return map;
-  }, [credentialedNewlyHiredRows, portalAccountByEmployeeId, portalAccounts]);
+  }, [credentialedNewlyHiredRows, portalAccountByEmployeeId]);
 
   // Real hire dates, keyed by BOTH applicant id and employee number so any
   // directory source can resolve one. newly_hired.dateHired is set at the
@@ -2514,7 +2343,7 @@ export const RSPDashboard = () => {
         ? formatDate(rec.date_hired)
         : (selectedEmployeeDetails?.created_at ? formatDate(selectedEmployeeDetails.created_at) : null),
     };
-  }, [selectedEmployeeId, selectedEmployeeDetails, selectedEmployeeDbRecord, employeeNumberById, employeeNumberFromNewlyHired, portalAccountByApplicantId, portalAccountByEmployeeId, employeePersonalByNumber]);
+  }, [selectedEmployeeId, selectedEmployeeDetails, selectedEmployeeDbRecord, employeeNumberById, employeeNumberFromNewlyHired, portalAccountByApplicantId, portalAccountByEmployeeId]);
 
   const selectedEmployeeDocuments = useMemo(() => {
     if (!selectedEmployeeDetails) return [] as Array<{
@@ -2570,7 +2399,7 @@ export const RSPDashboard = () => {
         : 'IT Department',
       newPosition: currentPosition,
     }));
-  }, [selectedEmployeeDetails]);
+  }, [selectedEmployeeDetails, employeeDirectoryDepartments]);
 
   const bulkRequestEmployees = useMemo<BulkRequestEmployee[]>(() => {
     return directoryEmployeesSource.map((employee) => ({
@@ -2748,8 +2577,7 @@ export const RSPDashboard = () => {
         supabase.from('job_postings').delete().eq('title', job.title).eq('item_number', job.item_number),
         supabase.from('jobs').delete().eq('title', job.title).eq('item_number', job.item_number),
       ]);
-    } catch {
-    }
+    } catch { /* Best-effort Supabase sync; the local state is already updated and a failure is not surfaced. */ }
   };
 
   const handleToggleJobStatus = async (job: JobRecord) => {
@@ -2766,8 +2594,7 @@ export const RSPDashboard = () => {
         (supabase as any).from('job_postings').update({ status: updatedStatus }).eq('title', job.title).eq('item_number', job.item_number),
         (supabase as any).from('jobs').update({ status: updatedStatus }).eq('title', job.title).eq('item_number', job.item_number),
       ]);
-    } catch {
-    }
+    } catch { /* Best-effort Supabase sync; the local state is already updated and a failure is not surfaced. */ }
   };
 
   const handleCreateRater = async () => {
@@ -2885,8 +2712,7 @@ export const RSPDashboard = () => {
     try {
       const client = getPreferredClient();
       await client.from('raters').delete().eq('id', id);
-    } catch {
-    }
+    } catch { /* Best-effort Supabase sync; the local state is already updated and a failure is not surfaced. */ }
   };
 
   const handleToggleRaterAccess = async (rater: RaterRecord) => {
@@ -2984,12 +2810,6 @@ export const RSPDashboard = () => {
     return out;
   }, [deletedJobReports, rankingHistoricalData]);
 
-  const openRankingReport = (position: string) => {
-    setActiveRankingPosition(position);
-    setSelectedHireApplicantIds([]);
-    setShowRankingModal(true);
-  };
-
   const closeRankingReport = () => {
     setShowRankingModal(false);
     setShowHireApplicantsModal(false);
@@ -3011,12 +2831,6 @@ export const RSPDashboard = () => {
     setAssessmentSearch('');
   };
 
-  const openDocumentTemplate = (templateId: EmployeeDocumentTemplateId) => {
-    setActiveDocumentTemplateId(templateId);
-    setReportsView('documents');
-    setSelectedDocumentSubmissionIds([]);
-    setExpandedDocumentOffices({});
-  };
 
   useEffect(() => {
     if (reportsView !== 'documents') return;
@@ -3253,10 +3067,6 @@ export const RSPDashboard = () => {
   const closeBulkRequestDialog = () => {
     setShowBulkRequestDialog(false);
     resetBulkRequestForm();
-  };
-
-  const openBulkRequestDialog = () => {
-    setShowBulkRequestDialog(true);
   };
 
   const openOfficeEmployees = (office: string) => {
@@ -4881,7 +4691,7 @@ export const RSPDashboard = () => {
                             }
 
                             // Try direct ID match first
-                            let result = map.get(String(applicant.id).trim()) ?? null;
+                            const result = map.get(String(applicant.id).trim()) ?? null;
                             if (result) {
                               console.log('[EVAL LOOKUP] ✓ Found by direct ID for:', applicant.full_name, 'personality_score:', result.personality_score);
                               return result;
@@ -4975,14 +4785,14 @@ export const RSPDashboard = () => {
 
                           // --- Education ---
                           // Assume educationLevel is a number 0-20 (or use mapping if needed)
-                          let educationRaw = resolveScoreValue(stored?.education);
+                          const educationRaw = resolveScoreValue(stored?.education);
                           let educationScore = 0;
                           if (appointmentType === 'original' || appointmentType === 'promotional') {
                             educationScore = clamp20(educationRaw);
                           }
 
                           // --- Experience ---
-                          let experienceRaw = resolveScoreValue(stored?.experience);
+                          const experienceRaw = resolveScoreValue(stored?.experience);
                           let experienceScore = 0;
                           if (appointmentType === 'original' || appointmentType === 'promotional') {
                             experienceScore = clamp20(experienceRaw);

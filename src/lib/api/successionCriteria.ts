@@ -156,8 +156,6 @@ export interface QualificationResult {
   reasons: string[];
 }
 
-/** Top of the CSC scale: Professional, or an RA 1080 equivalent. */
-const PROFESSIONAL_LEVEL = 2;
 
 function eligibilityLevel(label: string | null | undefined): number {
   const s = String(label ?? '').trim().toLowerCase();

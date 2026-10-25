@@ -111,11 +111,6 @@ const createMockEvaluationPeriods = (): EvaluationPeriod[] => [
   },
 ];
 
-const isLikelySeededDemoJob = (job: JobPosting) => {
-  const normalizedId = String(job.id ?? '').trim();
-  const normalizedPostedBy = String(job.postedBy ?? '').trim().toLowerCase();
-  return /^job-\d+$/i.test(normalizedId) && normalizedPostedBy === 'hr admin';
-};
 
 const buildInitialData = () => {
   const jobs: JobPosting[] = [];
@@ -896,11 +891,9 @@ export const saveNewlyHired = async (rows: NewlyHired[]) => {
       }
 
       if (result.error) {
-        // eslint-disable-next-line no-console
         console.error('Supabase upsert newly_hired failed:', result.error);
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('Supabase upsert newly_hired exception:', err);
     }
   }
@@ -1027,14 +1020,12 @@ export const createEmployeeNumberAllocator = async (
     const empRes = await (supabase as any).from('employees_with_department').select('employee_id');
     for (const row of (empRes?.data ?? []) as any[]) addIfPresent(row?.employee_id);
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('createEmployeeNumberAllocator: employees fetch failed', error);
   }
   try {
     const nhRes = await (supabase as any).from('newly_hired').select('employee_id');
     for (const row of (nhRes?.data ?? []) as any[]) addIfPresent(row?.employee_id);
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('createEmployeeNumberAllocator: newly_hired fetch failed', error);
   }
 
@@ -1044,7 +1035,6 @@ export const createEmployeeNumberAllocator = async (
     const empRes = await (supabase as any).from('employees_with_department').select('employee_id');
     for (const row of (empRes?.data ?? []) as any[]) addIfPresent(row?.employee_id);
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('createEmployeeNumberAllocator: employees fetch failed', error);
   }
   try {
@@ -1059,7 +1049,7 @@ export const createEmployeeNumberAllocator = async (
 
   let sequence = 1;
   const allocate = (): string => {
-    while (true) {
+    for (;;) {
       const candidate = generateEmployeeId(sequence++);
       if (!reserved.has(candidate)) {
         reserved.add(candidate);

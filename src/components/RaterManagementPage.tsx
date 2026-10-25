@@ -75,8 +75,7 @@ const saveRaterAccessState = (email: string, isActive: boolean) => {
     const next = current && typeof current === 'object' ? { ...current } : {};
     next[normalizedEmail] = isActive;
     localStorage.setItem(RATER_ACCESS_STATE_KEY, JSON.stringify(next));
-  } catch {
-  }
+  } catch { /* localStorage unavailable (private mode or quota); persisting here is best-effort. */ }
 };
 
 const toInitials = (name: string) => {
@@ -129,10 +128,6 @@ const statusBadge = (status: RaterStatus) => {
       Inactive
     </div>
   );
-};
-
-const roleBadge = (role: string) => {
-  return <span className="rounded-md bg-purple-50 px-3 py-1 text-xs font-medium text-purple-600">{role}</span>;
 };
 
 const runRaterEmailUpdate = async (
@@ -210,7 +205,7 @@ export const RaterManagementPage = () => {
   // First load only; focus and storage-event refetches stay silent.
   const [initialLoad, setInitialLoad] = useState(true);
   const ratersLoad = useTableLoading(initialLoad, ratersData.length > 0);
-  const [profileAccounts, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
+  const [, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
   const [showGuide, setShowGuide] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
@@ -314,7 +309,7 @@ export const RaterManagementPage = () => {
             department: String(row?.department ?? 'Unassigned'),
             assignedPositions,
             lastLogin: formatLastLogin(row?.last_login ?? row?.updated_at),
-            status: Boolean(row?.is_active) ? 'Active' : 'Inactive',
+            status: row?.is_active ? 'Active' : 'Inactive',
             source,
           };
 

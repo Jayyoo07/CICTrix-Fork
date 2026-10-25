@@ -46,7 +46,7 @@ export const validateApplicantForm = (
   // Contact number validation
   if (!data.contact_number.trim()) {
     errors.contact_number = 'Contact number is required';
-  } else if (!/^[\d\s\-\+\(\)]+$/.test(data.contact_number)) {
+  } else if (!/^[\d\s\-+()]+$/.test(data.contact_number)) {
     errors.contact_number = 'Invalid contact number format';
   }
 

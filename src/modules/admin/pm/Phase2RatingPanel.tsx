@@ -1,6 +1,6 @@
 import { useBackClosesView } from '../../../hooks/useHistoryBack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Lock, Loader2, Star, ChevronDown, ChevronRight, Edit3, X, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
 import { type OfficeScope } from '../../../lib/api/officeScope';
 import {
@@ -11,7 +11,6 @@ import {
   openSelfRatingPeriod,
   closeSelfRatingPeriod,
   type RatingSheet,
-  type Phase2Status,
 } from '../../../lib/api/ipcrRatings';
 import { createNotifications } from '../../../lib/api/employeeNotifications';
 import { SkeletonList, useTableLoading } from '../../../components/table-loading';
@@ -55,7 +54,6 @@ export const Phase2RatingPanel: React.FC<{
   const [returnDraftId, setReturnDraftId] = useState<string | null>(null);
   const [returnComment, setReturnComment] = useState('');
 
-  const [saving, setSaving] = useState(false);
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const [closing, setClosing] = useState(false);

@@ -1,6 +1,4 @@
 import {
-  Activity as ActivityIcon,
-  ArrowLeft,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -12,7 +10,6 @@ import {
   Mail,
   Pencil,
   MessageSquare,
-  RefreshCw,
   RotateCcw,
   Send,
   Star,
@@ -638,7 +635,7 @@ const saveStoredExperienceYears = (applicantId: string, years: string) => {
     const parsed = raw ? (JSON.parse(raw) as Record<string, string>) : {};
     parsed[applicantId] = years;
     localStorage.setItem(SCORE_EXPERIENCE_STORAGE_KEY, JSON.stringify(parsed));
-  } catch { }
+  } catch { /* localStorage unavailable (private mode or quota); persisting here is best-effort. */ }
 };
 
 const isPromotionalSource = (
@@ -668,7 +665,7 @@ const saveStoredWrittenScore = (applicantId: string, written: string) => {
     const parsed = raw ? (JSON.parse(raw) as Record<string, string>) : {};
     parsed[applicantId] = written;
     localStorage.setItem(SCORE_WRITTEN_STORAGE_KEY, JSON.stringify(parsed));
-  } catch { }
+  } catch { /* localStorage unavailable (private mode or quota); persisting here is best-effort. */ }
 };
 
 const getStoredFinalizedState = (applicantId: string): boolean => {
@@ -805,7 +802,7 @@ function ApplicantDetailsPageView() {
   const [emailBody, setEmailBody] = useState('');
   const [emailNotes, setEmailNotes] = useState('');
 
-  const [applicantStatus, setApplicantStatus] = useState<null | 'shortlist' | 'qualified' | 'disqualify'>(null);
+  const [, setApplicantStatus] = useState<null | 'shortlist' | 'qualified' | 'disqualify'>(null);
   const [confirmAction, setConfirmAction] = useState<null | 'qualified' | 'disqualify'>(null);
   const [confirmReasonCategory, setConfirmReasonCategory] = useState('');
   const [confirmReason, setConfirmReason] = useState('');
@@ -826,7 +823,7 @@ function ApplicantDetailsPageView() {
   const [reviewComplete, setReviewComplete] = useState(false);
   const pendingDecision = usePendingDecision();
   const [docReviews, setDocReviews] = useState<Record<string, DocReview>>(loadDocReviews);
-  const [openedDocFilePaths, setOpenedDocFilePaths] = useState<Set<string>>(new Set());
+  const [, setOpenedDocFilePaths] = useState<Set<string>>(new Set());
   const [docsValidated, setDocsValidated] = useState(false);
   const [docEvents, setDocEvents] = useState<DocumentEvent[]>([]);
   const [docEventsLoaded, setDocEventsLoaded] = useState(false);
@@ -1248,9 +1245,7 @@ function ApplicantDetailsPageView() {
   const selectedEducationOption = EDUCATION_ATTAINMENT_OPTIONS.find((option) => option.value === educationAttainment);
   const modalEducationScore = selectedEducationOption?.points ?? (isScoreFinalized ? score.education : 0);
   const isPromotionalAppointment = appointmentType === 'promotional';
-  const thirdScoreLabel = isPromotionalAppointment ? 'III Performance Rating (20%)' : 'III Written Examination (20%)';
   const thirdScoreValue = isPromotionalAppointment ? score.performance : score.written;
-  const thirdScorePlaceholder = isPromotionalAppointment ? 'Select Performance Rating' : 'Enter score (0-30)';
   const fourthScoreValue = score.oral;
   const experienceYearsNum = parseInt(experienceYears, 10);
   const modalExperienceScore = experienceYears !== '' && !Number.isNaN(experienceYearsNum)
@@ -1351,13 +1346,6 @@ function ApplicantDetailsPageView() {
     }
   };
 
-  const handleSendMessage = () => {
-    setEmailTemplate('');
-    setEmailSubject('');
-    setEmailBody('');
-    setEmailNotes('');
-    setShowSendEmailModal(true);
-  };
 
   const handleSendEmail = async () => {
     if (!emailSubject.trim() || !emailBody.trim()) return;
@@ -1685,16 +1673,6 @@ function ApplicantDetailsPageView() {
     openQueueEntry(undone.applicantId, restoredQueue);
   };
 
-  const handleSubmitStatusEvaluation = async () => {
-    if (!applicantStatus) return;
-    const saved = await persistStatus(applicantStatus);
-    if (saved === false) {
-      notifyError(
-        "We couldn't update the application status",
-        'Nothing was saved. Check your connection, then try again.',
-      );
-    }
-  };
 
   // ── Doc review helpers ────────────────────────────────────────────────────────
   const getDocReviewKey = (fileUrl: string) => `${id}::${fileUrl}`;
@@ -1935,12 +1913,6 @@ function ApplicantDetailsPageView() {
     return s.includes('disqualif') || s.includes('not qualified') || s.includes('failed');
   };
 
-  const getDocReadiness = () => {
-    if (attachments.length === 0) return { ready: false, reason: 'No documents uploaded yet' };
-    const hasRejected = attachments.some((a) => (docReviews[getDocReviewKey(a.file_path)]?.status ?? 'pending') === 'resubmission_requested');
-    if (hasRejected) return { ready: false, reason: 'Some documents require resubmission before proceeding' };
-    return { ready: true, reason: '' };
-  };
 
   const handleSaveScoreSetup = async () => {
     if (!applicant?.id) return;
@@ -2134,11 +2106,6 @@ function ApplicantDetailsPageView() {
                 )}
 
                 {showJobPostActionButtons && (() => {
-                  const submittedFilePaths = DOCUMENT_SLOTS
-                    .map((s) => attachments.find((a) => (a.document_type || FILE_NAME_TO_TYPE[a.file_name] || 'other') === s.type))
-                    .filter(Boolean)
-                    .map((a) => a!.file_path);
-                  const allDocsOpened = submittedFilePaths.length > 0 && submittedFilePaths.every((fp) => openedDocFilePaths.has(fp));
                   const hasResubmissionPending = attachments.some((a) => (docReviews[getDocReviewKey(a.file_path)]?.status ?? 'pending') === 'resubmission_requested');
 
                   // Spec (Qualification Verification Requirement → Document

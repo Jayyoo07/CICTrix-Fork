@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useHistoryBack } from '../../hooks/useHistoryBack';
 import iloiloCitySeal from '../../assets/iloilo-city-seal.png';
 import { Button } from '../../components/Button';
@@ -157,7 +157,6 @@ export function EvaluationForm() {
   // Plantilla name for the applicant (never its internal key).
   const { nameFor: plantillaNameFor } = usePlantillaNames();
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   // Back returns to where the evaluation was opened from (the applicants list
   // or the dashboard), falling back to the dashboard on a direct visit.
   const goBack = useHistoryBack('/interviewer/dashboard');
@@ -244,6 +243,8 @@ export function EvaluationForm() {
       setActiveTab(type === 'promotional' ? 'pcpt' : 'oral');
       fetchApplicantData();
     }
+    // Loader is re-created each render and is not an input; refetch only when the id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const hasOralEvaluation = appointmentType === 'original';

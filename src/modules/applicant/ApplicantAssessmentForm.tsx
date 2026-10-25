@@ -42,7 +42,6 @@ export const ApplicantAssessmentForm: React.FC<ApplicantAssessmentFormProps> = (
   errors,
   onChange,
   applicationType = 'job',
-  isEmployee = false,
   isLoadingPrefill = false,
   onApplicationTypeChange,
   lockedPosition = false,

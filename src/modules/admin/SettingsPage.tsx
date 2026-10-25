@@ -107,6 +107,8 @@ export const SettingsPage = () => {
     } catch (err) {
       console.error('Error loading profile:', err);
     }
+    // Seeds the form once from the signed-in user; `profile` is initial state, not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleProfileFieldChange = (field: keyof UserProfile, value: string) => {

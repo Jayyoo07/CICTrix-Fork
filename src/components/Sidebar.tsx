@@ -35,7 +35,7 @@ interface MenuItem {
 
 export const Sidebar = ({ activeModule, userRole }: SidebarProps) => {
   const location = useLocation();
-  const [qualifiedCount, setQualifiedCount] = useState(0);
+  const [, setQualifiedCount] = useState(0);
 
   const updateQualifiedCount = async () => {
     try {

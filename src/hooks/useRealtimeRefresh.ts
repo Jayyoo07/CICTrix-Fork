@@ -65,5 +65,7 @@ export function useRealtimeRefresh(options: RealtimeRefreshOptions): void {
       void (supabase as any).removeChannel(subscriptionChannel);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+    // `tables` is read through `tablesKey`; callers pass a fresh array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel, tablesKey, debounceMs, enabled]);
 }

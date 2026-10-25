@@ -7,8 +7,6 @@ import {
     FileText,
     Loader2,
     Plane,
-    Search,
-    Star,
     User,
     Users,
     X,
@@ -203,15 +201,6 @@ const buildEvaluationStatusMap = (evaluations: any[] = []) => {
   return evaluationMap;
 };
 
-const statusIndicatesEvaluated = (status: string): boolean => {
-  const value = String(status || '').toLowerCase();
-  return (
-    value.includes('review') ||
-    value.includes('interview completed') ||
-    value.includes('recommend') ||
-    value.includes('hired')
-  );
-};
 
 const getFullName = (applicant: Applicant): string => {
   const parts = [applicant.first_name];
@@ -469,7 +458,7 @@ export function InterviewerApplicantsList({
     }
   };
   const [internalNotesByApplicant, setInternalNotesByApplicant] = useState<Record<string, string>>({});
-  const [assignedPositions, setAssignedPositions] = useState<string[]>([]);
+  const [, setAssignedPositions] = useState<string[]>([]);
   const [evaluationsByApplicant, setEvaluationsByApplicant] = useState<Record<string, InterviewerEvaluationFields[]>>({});
 
   useEffect(() => {
@@ -505,11 +494,15 @@ export function InterviewerApplicantsList({
       window.removeEventListener('cictrix:job-postings-updated', handleFocus as EventListener);
       window.removeEventListener('storage', onStorage);
     };
+    // Loader is re-created each render and is not an input; refetch only when the job changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobTitle]);
 
   useRealtimeRefresh({
     channel: `interviewer-applicants-${jobTitle}`,
     tables: ['applicants', 'evaluations'],
+    // The realtime hook keeps the latest callback in a ref; the loader is not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     onChange: useCallback(() => { void fetchApplicantsAndJob(true); }, [jobTitle]),
   });
 
@@ -697,8 +690,7 @@ export function InterviewerApplicantsList({
     } catch {
       try {
         await persist(secondaryClient);
-      } catch {
-      }
+      } catch { /* Both data sources failed; the status change stays local and is not surfaced. */ }
     }
   };
 

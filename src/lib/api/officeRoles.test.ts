@@ -7,7 +7,6 @@ import {
   getActiveOfficeRoles,
   getActiveOfficeRole,
   isDeptHeadOfOffice,
-  getOfficeDeptHead,
   type OfficeRoleAssignment,
 } from './officeRoles';
 
@@ -26,11 +25,11 @@ const db = {
 vi.mock('../supabase', () => {
   const fakeSupabase = {
     from: vi.fn((table: string) => {
-      let currentTable = table;
+      const currentTable = table;
       let lastAction: string | null = null;
       let lastPayload: any = null;
-      let eqFilters: Record<string, any> = {};
-      let inFilters: Record<string, any[]> = {};
+      const eqFilters: Record<string, any> = {};
+      const inFilters: Record<string, any[]> = {};
 
       const builder: any = {
         select: vi.fn((_cols?: string) => {

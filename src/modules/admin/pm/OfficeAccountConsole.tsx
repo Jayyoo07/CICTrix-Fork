@@ -4,11 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   Sliders,
-  FolderSymlink,
   ClipboardCheck,
   TrendingUp,
   UserCheck,
-  Edit3,
   CheckCircle,
   Clock,
   ArrowRight,
@@ -20,14 +18,10 @@ import {
   FileSpreadsheet,
   Send,
   AlertTriangle,
-  Info,
-  User,
   GraduationCap,
   BookOpen,
   ChevronDown,
   ChevronRight,
-  Search,
-  Check,
   Target,
   GitCompare,
   LogOut
@@ -39,7 +33,6 @@ import { supabase } from '../../../lib/supabase';
 import {
   getActiveOfficeRole,
   resolveEmployeeId,
-  ROLE_LABELS,
   type ActiveOfficeRole,
 } from '../../../lib/api/officeRoles';
 import {
@@ -49,7 +42,6 @@ import {
   adminEditTargets,
   type PendingApproval,
 } from '../../../lib/api/ipcrApproval';
-import { type OfficeScope } from '../../../lib/api/officeScope';
 import { listNotifications, type IpcrNotification } from '../../../lib/api/ipcrSubmissions';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
 import {
@@ -147,14 +139,6 @@ const outcomeDetail = (outcome: RequestOutcome): string => {
   }
 };
 
-interface EmployeeTarget {
-  id: string;
-  name: string;
-  position: string;
-  targetMetric: string;
-  status: 'Pending Verification' | 'Verified' | 'Transmitted';
-  lastEditedBy?: string;
-}
 
 interface EmployeeRating {
   id: string;
@@ -174,12 +158,6 @@ interface TransmittalRecord {
   status: 'In PM Vault' | 'Processing';
 }
 
-const INITIAL_TARGETS: EmployeeTarget[] = [
-  { id: '101', name: 'Alice Vance', position: 'HR Assistant', targetMetric: 'Process 90% of recruitment requests within 10 days', status: 'Pending Verification' },
-  { id: '102', name: 'Bob Miller', position: 'IT Support Specialist', targetMetric: 'Ensure 99% uptime on internal web portals', status: 'Pending Verification' },
-  { id: '103', name: 'Charlie Green', position: 'Treasury Clerk', targetMetric: 'Process tax clearance certificates in under 5 minutes', status: 'Verified' },
-  { id: '104', name: 'Diana Prince', position: 'Senior Planner', targetMetric: 'Submit monthly development blueprints by 25th', status: 'Verified' }
-];
 
 const INITIAL_RATINGS: EmployeeRating[] = [
   { id: '101', name: 'Alice Vance', position: 'HR Assistant', selfRating: 4.8, supervisorRating: 4.8, status: 'Draft' },
@@ -257,6 +235,9 @@ export const OfficeAccountConsole: React.FC = () => {
     onChange: useCallback(() => {
       void loadBellNotifications();
       void refreshPendingApprovals();
+      // refreshPendingApprovals is declared below with its own state; the realtime
+      // hook keeps the latest callback in a ref, so identity does not matter here.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loadBellNotifications]),
     enabled: !!officeRole,
   });
@@ -382,9 +363,8 @@ export const OfficeAccountConsole: React.FC = () => {
   const [ratingsSubtab, setRatingsSubtab] = useState<'review' | 'dpcr' | 'opcr'>('review');
 
   // State arrays
-  const [targets, setTargets] = useState<EmployeeTarget[]>(INITIAL_TARGETS);
   const [ratings, setRatings] = useState<EmployeeRating[]>(INITIAL_RATINGS);
-  const [transmittals, setTransmittals] = useState<TransmittalRecord[]>(INITIAL_TRANSMITTALS);
+  const [transmittals] = useState<TransmittalRecord[]>(INITIAL_TRANSMITTALS);
 
   // New Training Requests States
   const [detailedRequests, setDetailedRequests] = useState<OfficeTrainingRequest[]>([]);
@@ -449,6 +429,8 @@ export const OfficeAccountConsole: React.FC = () => {
       }
     }
     void loadUserSession();
+    // Mount-only session bootstrap; the role resolution refreshes approvals itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Requests and recommendations are both office-scoped, so they can only load
@@ -540,8 +522,6 @@ export const OfficeAccountConsole: React.FC = () => {
   const recsAwaitingLnd = officeRecs.filter((r) => r.status === 'OFFICE_FINALIZED');
 
   // Edit Mode state
-  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
-  const [editTargetValue, setEditTargetValue] = useState('');
 
   // Rationale state for Override Controls
   const [activeOverrideId, setActiveOverrideId] = useState<string | null>(null);
@@ -554,51 +534,9 @@ export const OfficeAccountConsole: React.FC = () => {
   const [consoleMessage, setConsoleMessage] = useState<string | null>(null);
 
   // Direct Edit Handlers
-  const startEditing = (target: EmployeeTarget) => {
-    setEditingTargetId(target.id);
-    setEditTargetValue(target.targetMetric);
-  };
 
-  const saveTargetEdit = (id: string) => {
-    setTargets(prev => prev.map(t => {
-      if (t.id === id) {
-        return { ...t, targetMetric: editTargetValue, status: 'Verified', lastEditedBy: 'Supervisor' };
-      }
-      return t;
-    }));
-    setEditingTargetId(null);
-    setConsoleMessage('Employee target successfully updated and verified.');
-    setTimeout(() => setConsoleMessage(null), 4000);
-  };
 
   // Push Verified Targets to PM Storage (Transmittal)
-  const transmitTargetsToPM = () => {
-    const verifiedTargets = targets.filter(t => t.status === 'Verified');
-    if (verifiedTargets.length === 0) {
-      alert('No verified targets are ready for transmittal.');
-      return;
-    }
-
-    // Mark as Transmitted
-    setTargets(prev => prev.map(t => {
-      if (t.status === 'Verified') {
-        return { ...t, status: 'Transmitted' };
-      }
-      return t;
-    }));
-
-    // Add to Transmittal Log
-    const newTx: TransmittalRecord = {
-      id: `TX-00${transmittals.length + 1}`,
-      batchId: `BATCH-2025-0${transmittals.length + 1}`,
-      verifiedCount: verifiedTargets.length,
-      transmittedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      status: 'In PM Vault'
-    };
-    setTransmittals([newTx, ...transmittals]);
-    setConsoleMessage(`Successfully transmitted ${verifiedTargets.length} targets to the PM database vault.`);
-    setTimeout(() => setConsoleMessage(null), 4000);
-  };
 
   // Override Controls Handlers
   const handleOpenOverride = (rating: EmployeeRating) => {

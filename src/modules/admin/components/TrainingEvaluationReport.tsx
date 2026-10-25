@@ -28,9 +28,9 @@ export const TrainingEvaluationReport = ({ employee, seminar, onBack }: Props) =
       const qSeed = seed + i;
       const rowTotal = totalRespondents - Math.floor(generateRandom(qSeed + 10) * 2); 
       
-      let s5 = Math.floor(rowTotal * (0.4 + generateRandom(qSeed + 20) * 0.5)); 
-      let s4 = Math.floor((rowTotal - s5) * (0.6 + generateRandom(qSeed + 30) * 0.4));
-      let s3 = Math.floor((rowTotal - s5 - s4) * generateRandom(qSeed + 40));
+      const s5 = Math.floor(rowTotal * (0.4 + generateRandom(qSeed + 20) * 0.5)); 
+      const s4 = Math.floor((rowTotal - s5) * (0.6 + generateRandom(qSeed + 30) * 0.4));
+      const s3 = Math.floor((rowTotal - s5 - s4) * generateRandom(qSeed + 40));
       let s1 = rowTotal - s5 - s4 - s3;
       let s2 = 0;
       if (s1 > 1) {

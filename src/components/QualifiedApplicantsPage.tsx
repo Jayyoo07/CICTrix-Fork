@@ -23,19 +23,16 @@ import { mockDatabase } from '../lib/mockDatabase';
 import {
   ensureRecruitmentSeedData,
   formatPHDate,
-  createEmployeeNumberAllocator,
-  formatPHDateTime,
   getApplicants,
   getAuthoritativeJobPostings,
   saveApplicants,
-  saveNewlyHired,
 } from '../lib/recruitmentData';
 import { sendEmail } from '../lib/email';
 import { createPassword, upsertEmployeePortalAccount } from '../lib/employeePortalData';
 import { runSingleFlight } from '../lib/singleFlight';
 import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../lib/supabase';
 import { buildDisqualificationActivityDescription, DISQUALIFICATION_REASON_OPTIONS } from '../lib/applicationActivity';
-import { Applicant, ApplicantStatus, JobPosting, NewlyHired } from '../types/recruitment.types';
+import { Applicant, ApplicantStatus, JobPosting } from '../types/recruitment.types';
 import { RecruitmentNavigationGuide } from './RecruitmentNavigationGuide';
 import { Sidebar } from './Sidebar';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
@@ -249,29 +246,8 @@ const STATUS_COLORS: Record<ApplicantStatus, string> = {
 
 const normalizeText = (value: string) => String(value ?? '').trim().toLowerCase();
 
-const normalizeUsername = (value: string) => String(value ?? '').trim().toLowerCase();
 
-const createUniqueUsername = (
-  applicant: Applicant,
-  occupiedUsernames: Set<string>
-) => {
-  const emailBase = String(applicant.personalInfo.email ?? '').split('@')[0]?.trim();
-  const nameBase = `${normalizeText(applicant.personalInfo.firstName)}.${normalizeText(applicant.personalInfo.lastName)}`.replace(/\.+/g, '.');
-  const sanitizedBase = (emailBase || nameBase || 'employee').replace(/[^a-z0-9.]/g, '');
 
-  let candidate = sanitizeUsername(`${sanitizedBase}.emp`);
-  let counter = 1;
-
-  while (occupiedUsernames.has(candidate)) {
-    counter += 1;
-    candidate = sanitizeUsername(`${sanitizedBase}.emp${counter}`);
-  }
-
-  occupiedUsernames.add(candidate);
-  return candidate;
-};
-
-const sanitizeUsername = (value: string) => normalizeUsername(value).replace(/\.{2,}/g, '.').replace(/^\.|\.$/g, '');
 
 const toStatusDisplayLabel = (status: ApplicantStatus | string) => {
   const normalized = normalizeText(String(status ?? ''));
@@ -397,23 +373,6 @@ const hasCompletedInterview = (applicant: Applicant) => {
   });
 };
 
-const toBackendStatusFormat = (status: ApplicantStatus): 'shortlisted' | 'qualified' | 'disqualified' | 'hired' => {
-  const normalized = normalizeText(status);
-  if (normalized.includes('recommend') || normalized === 'qualified' || normalized.includes('accepted')) {
-    return 'qualified';
-  }
-  if (normalized.includes('shortlist')) {
-    return 'shortlisted';
-  }
-  if (normalized.includes('not qualified') || normalized.includes('disqualif')) {
-    return 'disqualified';
-  }
-  if (normalized === 'hired') {
-    return 'hired';
-  }
-  // Fallback for edge cases
-  return 'disqualified';
-};
 
 const toJobPostsStatusBucket = (status: ApplicantStatus): Exclude<JobPostsStatusFilter, 'all'> => {
   const normalized = normalizeText(status);
@@ -1362,7 +1321,7 @@ export const QualifiedApplicantsPage = () => {
       normalizedStatus.includes('hired');
 
     setStatusDecisionLocked(shouldLock);
-  }, [activeApplicant?.status]);
+  }, [activeApplicant]);
 
   const handleDisqualifyAction = (applicantId: string) => {
     // Prevent disqualifying if already disqualified

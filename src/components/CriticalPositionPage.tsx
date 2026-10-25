@@ -404,11 +404,6 @@ export const CriticalPositionPage = ({ officeId, officeName, currentUserName }: 
   };
 
 
-  const addTraining = () => {
-    const value = form.trainingDraft.trim();
-    if (!value || form.trainingDrafts.some((t) => t.trim().toLowerCase() === value.toLowerCase())) return;
-    setForm((f) => ({ ...f, trainingDrafts: [...f.trainingDrafts, value], trainingDraft: '' }));
-  };
 
   const addCompetencyRow = () => {
     const available = competencyCatalog.find((c) => !form.competencyDrafts.some((d) => d.competencyId === c.id));

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBanner } from './ErrorBanner';
 import { useBackClosesView } from '../hooks/useHistoryBack';
 import {
-  Building2,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -21,9 +20,7 @@ interface OfficeDirectorySectionProps {
 
 const OFFICE_DIRECTORY_PER_PAGE = 6;
 
-export const OfficeDirectorySection: React.FC<OfficeDirectorySectionProps> = ({
-  showBulkRequest = false,
-}) => {
+export const OfficeDirectorySection: React.FC<OfficeDirectorySectionProps> = () => {
   const [officeDirectoryRows, setOfficeDirectoryRows] = useState<OfficeDirectoryRow[]>([]);
   // Starts true: the directory loads on mount, so the first paint is the skeleton, not "No offices found."
   const [officeDirectoryLoading, setOfficeDirectoryLoading] = useState(true);

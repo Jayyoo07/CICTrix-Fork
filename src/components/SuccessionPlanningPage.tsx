@@ -161,7 +161,7 @@ const departmentStatus = (dept: DepartmentSummary): { label: string; tone: strin
   return { label: 'No critical positions', tone: 'bg-slate-100 text-slate-700' };
 };
 
-const OcboTableView = ({ admin }: { admin: string }) => {
+const OcboTableView = (_props: { admin: string }) => {
   const [departments, setDepartments] = useState<DepartmentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const departmentsLoad = useTableLoading(loading, departments.length > 0);

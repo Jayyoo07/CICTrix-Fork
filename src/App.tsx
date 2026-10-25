@@ -6,7 +6,6 @@ import { FeedbackProvider } from './components/action-feedback';
 import { JobDetailsPage } from './components/JobDetailsPage';
 import { JobPostingsPage } from './components/JobPostingsPage';
 import { NewlyHiredPage } from './components/NewlyHiredPage';
-import { QualifiedApplicantsPage } from './components/QualifiedApplicantsPage';
 import { ForHiringPage } from './components/ForHiringPage';
 import { GenerateCredentialsPage } from './components/GenerateCredentialsPage';
 import { ApplicationsListPage } from './components/ApplicationsListPage';
@@ -322,7 +321,6 @@ function AppContent() {
         setEmployeeSession(healed);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

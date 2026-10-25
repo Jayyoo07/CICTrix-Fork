@@ -457,7 +457,6 @@ export const PersonalDataSheetSection: React.FC<Props> = ({ employeeId, profile,
     setResidential(profile.residential || emptyAddress());
     setPermanent(profile.permanent || emptyAddress());
     markSaved(...getInitiallySavedSections(profile, {}));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- markSaved is a stable-enough state updater wrapper
   }, [profile]);
 
   useEffect(() => {

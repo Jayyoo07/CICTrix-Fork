@@ -1,52 +1,35 @@
 import {
-  AlertCircle,
-  AlertTriangle,
   Archive as ArchiveIcon,
   BarChart3,
   Bell,
   BookOpen,
-  Briefcase,
   Building2,
-  CalendarCheck2,
-  CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   ClipboardList,
-  Clock,
   Database,
-  Download,
   Edit2,
   Eye,
-  FileCheck2,
   FileText,
   Globe,
-  HelpCircle,
   Info,
   LayoutDashboard,
-  Lock,
   Mail,
-  MapPin,
-  MoreHorizontal,
   Palette,
   Plus,
   Search,
   Send,
   Settings,
   Shield,
-  SlidersHorizontal,
   Trash2,
-  TrendingUp,
   Upload,
   User,
   UserCircle2,
   Users,
   UsersRound,
-  X,
-  XCircle
-} from 'lucide-react';
+  X} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { Button } from '../../components/Button';
@@ -62,8 +45,6 @@ import {
 } from '../../lib/api/competencies';
 import {
   getDocumentRequests,
-  groupRequestsByDepartment,
-  summarizeRequests,
   updateDocumentRequestStatus,
   type DocumentRequest,
 } from '../../lib/api/documentRequests';
@@ -71,7 +52,6 @@ import { DocumentPreviewModal } from '../../components/DocumentPreviewModal';
 import { getAllEmployees, type Employee } from '../../lib/api/employees';
 import { createDocumentRequest } from '../../lib/employeeDocuments';
 import {
-  bucketForScore,
   getEvaluationStatusCounts,
   getEvaluationsWithEmployee,
   getPerformanceDistribution,
@@ -155,7 +135,7 @@ export const PMDashboard = ({
   isDashboardView = true,
   viewOnly = false,
 }: { isDashboardView?: boolean; viewOnly?: boolean }) => {
-  const [stats, setStats] = useState<PerformanceStats>({
+  const [, setStats] = useState<PerformanceStats>({
     activeCycle: 'None',
     pendingReviews: 0
   });
@@ -203,13 +183,6 @@ export const PMDashboard = ({
     'Updated Resume/CV',
   ];
 
-  const openRequestModal = (employee?: { id?: string; name: string; role: string; dept: string; initials: string }) => {
-    setRequestEmployee(employee || null);
-    setRequestDocType('');
-    setRequestDescription('');
-    setRequestDueDate('');
-    setShowRequestModal(true);
-  };
 
   const closeRequestModal = () => {
     setShowRequestModal(false);
@@ -254,7 +227,7 @@ export const PMDashboard = ({
   const [bulkCalendarYear, setBulkCalendarYear] = useState(new Date().getFullYear());
   const [bulkSendTo, setBulkSendTo] = useState<'all' | 'department' | 'selected'>('all');
   const [activeEmployees, setActiveEmployees] = useState<EmployeeOption[]>([]);
-  const [bulkSelectedDepartment, setBulkSelectedDepartment] = useState<string>('');
+  const [bulkSelectedDepartment] = useState<string>('');
   const [bulkSelectedEmployees, setBulkSelectedEmployees] = useState<string[]>([]);
   const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
 
@@ -304,17 +277,6 @@ export const PMDashboard = ({
 
   const totalEmployees = activeEmployees.length;
 
-  const openBulkRequestModal = () => {
-    setBulkDocName('');
-    setBulkDescription('');
-    setBulkDueDate(null);
-    setBulkSendTo('all');
-    setBulkCalendarMonth(new Date().getMonth());
-    setBulkCalendarYear(new Date().getFullYear());
-    setBulkSelectedEmployees([]);
-    setEmployeeSearchTerm('');
-    setShowBulkRequestModal(true);
-  };
 
   const closeBulkRequestModal = () => {
     setShowBulkRequestModal(false);
@@ -413,8 +375,6 @@ export const PMDashboard = ({
   };
 
   // Pagination state for Performance Reviews table
-  const [reviewPage, setReviewPage] = useState(1);
-  const [reviewRowsPerPage, setReviewRowsPerPage] = useState(20);
 
   // â”€â”€ Live PM data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Per Phase 2 of the data-migration plan: every dashboard widget reads from
@@ -423,36 +383,36 @@ export const PMDashboard = ({
   const [evaluations, setEvaluations] = useState<PerformanceEvaluation[]>([]);
   // Start true: the dashboard section fetches on mount, so the first paint is the skeleton, not an empty table.
   const [evaluationsLoading, setEvaluationsLoading] = useState(true);
-  const [statusCounts, setStatusCounts] = useState<Record<EvaluationStatus, number>>({
+  const [, setStatusCounts] = useState<Record<EvaluationStatus, number>>({
     'Planning': 0,
     'Self Evaluation': 0,
     'Supervisor Review': 0,
     'Approved': 0,
     'Rejected': 0,
   });
-  const [evaluationTotal, setEvaluationTotal] = useState(0);
-  const [performanceDistribution, setPerformanceDistribution] = useState<Record<DistributionBucket, number>>({
+  const [, setEvaluationTotal] = useState(0);
+  const [, setPerformanceDistribution] = useState<Record<DistributionBucket, number>>({
     'Outstanding': 0,
     'Very Satisfactory': 0,
     'Satisfactory': 0,
     'Unsatisfactory': 0,
     'Poor': 0,
   });
-  const [distributionEvaluated, setDistributionEvaluated] = useState(0);
+  const [, setDistributionEvaluated] = useState(0);
   const [skillGaps, setSkillGaps] = useState<Array<{ dept: string; value: number }>>([]);
   const [retirements, setRetirements] = useState<Array<{ name: string; role: string; date: string; monthsAway: number }>>([]);
   const [documentRequests, setDocumentRequests] = useState<DocumentRequest[]>([]);
-  const [documentRequestsLoading, setDocumentRequestsLoading] = useState(false);
+  const [, setDocumentRequestsLoading] = useState(false);
   const [reviewingRequest, setReviewingRequest] = useState<DocumentRequest | null>(null);
   const [reviewDecisionPending, setReviewDecisionPending] = useState<'Approved' | 'Rejected' | null>(null);
 
   // States for Pending IPCR Submissions and Probationary Metrics
-  const [probationarySubmissionsCount, setProbationarySubmissionsCount] = useState(0);
-  const [regularSubmissionsCount, setRegularSubmissionsCount] = useState(0);
+  const [, setProbationarySubmissionsCount] = useState(0);
+  const [, setRegularSubmissionsCount] = useState(0);
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   // Every Active employee's current IPCR status, for the overview's submission card. null = failed to load.
   const [ipcrStatuses, setIpcrStatuses] = useState<IpcrStatus[] | null>([]);
-  const [probationaryMetrics, setProbationaryMetrics] = useState({
+  const [, setProbationaryMetrics] = useState({
     total: 0,
     due: 0,
     nextDue: '—'
@@ -480,10 +440,6 @@ export const PMDashboard = ({
     await refreshDocumentRequests();
   };
 
-  const reviewsData = evaluations.filter(e => e.status === 'Approved');
-  const reviewTotalPages = Math.max(1, Math.ceil(reviewsData.length / reviewRowsPerPage));
-  const reviewStartIdx = (reviewPage - 1) * reviewRowsPerPage;
-  const reviewPageData = reviewsData.slice(reviewStartIdx, reviewStartIdx + reviewRowsPerPage);
 
   // Action-required queue: pending document requests + evaluations awaiting review.
   // Oldest first, so the longest-waiting items lead the collapsed preview.
@@ -550,14 +506,18 @@ export const PMDashboard = ({
     }));
 
   // Department-grouped employees from the central employees table.
-  const [dbEvaluationGroups, setDbEvaluationGroups] = useState<EvaluationGroup[]>([]);
+  const [, setDbEvaluationGroups] = useState<EvaluationGroup[]>([]);
 
   useEffect(() => {
     fetchCycles();
   }, []);
 
   useEffect(() => {
-    calculateStats();
+    const activeCycle = cycles.find(c => c.status === 'Active');
+    setStats({
+      activeCycle: activeCycle?.title || 'None',
+      pendingReviews: 12 // Dummy for now
+    });
   }, [cycles]);
 
   // Group active employees by department + merge live evaluation status per row.
@@ -795,7 +755,7 @@ export const PMDashboard = ({
         const hireDateToUse = emp.hire_date || emp.created_at || new Date().toISOString();
         const months = getMonthsOfService(hireDateToUse);
         const isProb = months < 6;
-        const { stage, phase, dueDate, periodLabel } = computeStageInfoLocal(hireDateToUse, schedules);
+        const { phase, dueDate, periodLabel } = computeStageInfoLocal(hireDateToUse, schedules);
 
         const calPeriod = toCalendarPeriod(periodLabel);
         let actualStage = subMap.get(`${emp.id}::${periodLabel}::${phase}`);
@@ -950,14 +910,6 @@ export const PMDashboard = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateStats = () => {
-    const activeCycle = cycles.find(c => c.status === 'Active');
-    setStats({
-      activeCycle: activeCycle?.title || 'None',
-      pendingReviews: 12 // Dummy for now
-    });
   };
 
   const handleAddCycle = async () => {

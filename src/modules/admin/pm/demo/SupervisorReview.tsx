@@ -19,7 +19,6 @@ import {
   verifyTargets,
   verifyAccomplishments,
   officialMfo,
-  officialIndicator,
   type TargetRevision,
   type AccomplishmentRevision,
 } from './workflow';

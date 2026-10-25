@@ -82,6 +82,8 @@ export default function EmployeeDetailPage({ employee, onRefresh }: Props) {
       fetchEmployeeDetails();
     }
     fetchDocuments();
+    // Loaders are re-created each render and are not inputs; refetch only when the employee changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee.id]);
 
   const fetchEmployeeDetails = async () => {

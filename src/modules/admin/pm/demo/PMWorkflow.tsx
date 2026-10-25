@@ -28,8 +28,6 @@ import {
   closeCycle,
   listVault,
   isPhase2Eligible,
-  officialMfo,
-  officialIndicator,
 } from './workflow';
 import { RevisedField } from './EmployeeIPCR';
 import type { DemoAccount, Schedule, CycleState, VaultRow, TargetRow, AccomplishmentRow, ScheduleStatus } from './types';
@@ -69,7 +67,6 @@ function useWorkflowData(tick: number) {
     refresh();
     const t = setInterval(refresh, 5000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
 
   const schedById = useMemo(() => new Map(schedules.map((s) => [s.employee_id, s])), [schedules]);

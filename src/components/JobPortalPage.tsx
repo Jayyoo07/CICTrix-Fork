@@ -13,7 +13,6 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Banknote
 } from 'lucide-react';
 import abyanLogo from '../assets/abyan-logo.png';

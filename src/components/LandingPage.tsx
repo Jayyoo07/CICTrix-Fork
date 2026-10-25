@@ -6,9 +6,6 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Search,
-  TrendingUp,
-  GraduationCap,
-  Network,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -62,28 +59,6 @@ const localIsoDate = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 
-const FEATURES = [
-  {
-    icon: Search,
-    title: 'Recruitment & Selection',
-    description: 'Publish job postings, screen applicants, and track every stage of hiring.',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Performance Management',
-    description: 'Run IPCR/DPCR evaluation cycles and monitor employee performance.',
-  },
-  {
-    icon: GraduationCap,
-    title: 'Learning & Development',
-    description: 'Manage training courses, seminar enrollment, and competency growth.',
-  },
-  {
-    icon: Network,
-    title: 'Succession Planning',
-    description: 'Identify critical positions and prepare ready-now successors.',
-  },
-];
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -183,9 +158,6 @@ export const LandingPage = () => {
     setReloadKey((key) => key + 1);
   };
 
-  const handleScrollToJobs = () => {
-    jobsTableRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   // Real-time Search and Sorting logic
   const filteredAndSortedJobs = useMemo(() => {

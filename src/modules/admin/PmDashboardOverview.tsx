@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, ChevronDown, ClipboardCheck } from 'lucide-react';
 import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../lib/api/competencyGapAnalysis';
 import {
@@ -277,14 +277,17 @@ export const PmDashboardOverview = ({ statuses, statusesLoading, onOpenSummary }
     return [...names.values()].sort((a, b) => a.localeCompare(b));
   }, [allRows, allSubmission]);
 
-  const inDept = (name: string | null | undefined) => department === 'all' || normDeptKey(name) === normDeptKey(department);
+  const inDept = useCallback(
+    (name: string | null | undefined) => department === 'all' || normDeptKey(name) === normDeptKey(department),
+    [department],
+  );
 
   const submission = useMemo(
     () => (department === 'all' ? allSubmission : summarizeSubmission((statuses ?? []).filter((s) => inDept(s.dept)), activeOffices, today)),
-    [allSubmission, statuses, activeOffices, department, today],
+    [allSubmission, statuses, activeOffices, department, inDept, today],
   );
   const submissionLoading = statusesLoading || loading;
-  const results = useMemo(() => summarizeResults(records.filter((r) => inDept(r.department))), [records, department]);
+  const results = useMemo(() => summarizeResults(records.filter((r) => inDept(r.department))), [records, inDept]);
 
   const dueBadge = (overdue: number, soon: number) =>
     overdue > 0 ? (

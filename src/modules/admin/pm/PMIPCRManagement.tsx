@@ -1003,7 +1003,12 @@ const ScheduleCycleModal = ({
 // ── Probationary Panel ────────────────────────────────────────────────────────
 
 /** Two-way Open | Closed switch for a phase window. The active segment shows
- *  the current state; clicking the other one asks for confirmation upstream. */
+ *  the current state; clicking the other one asks for confirmation upstream.
+ *
+ *  Both active states carry a status colour (§10: green open, red closed). The
+ *  closed segment used to be plain white, which read the same as the inactive
+ *  segment beside it, so the switch gave no colour cue at all when a phase was
+ *  shut — the state that actually blocks employees from working. */
 const PhaseWindowSwitch = ({
   isOpen,
   onOpen,
@@ -1031,7 +1036,7 @@ const PhaseWindowSwitch = ({
         aria-pressed={!isOpen}
         disabled={!isOpen}
         onClick={onClose}
-        className={`${base} ${!isOpen ? 'bg-white text-slate-900 shadow-xs cursor-default' : idle}`}
+        className={`${base} ${!isOpen ? 'bg-[#E05252] text-white shadow-xs cursor-default' : idle}`}
       >
         Closed
       </button>

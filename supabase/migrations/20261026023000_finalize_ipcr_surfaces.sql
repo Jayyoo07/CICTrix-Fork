@@ -264,6 +264,10 @@ begin
     v_records := v_records + 1;
   end loop;
 
+  -- Every count below is scoped to the finalized records being backfilled. The
+  -- tracker, vault and evaluations tables also hold rows the running app created
+  -- for other cycles, so counting them globally would fail this migration for a
+  -- reason that has nothing to do with the backfill.
   select count(*)
     into v_expected
     from public.target_settings t
@@ -275,21 +279,34 @@ begin
   select count(distinct (p.employee_num, p.rating_period))
     into v_mirrored
     from public.ipcr_performance p
-   where p.ipcr_id like 'IPCR-TS-%';
+    join public.employees e on e.employee_number = p.employee_num
+    join public.target_settings t on t.employee_id = e.id
+   where p.ipcr_id like 'IPCR-TS-%'
+     and t.status = 'approved'
+     and t.phase2_status = 'completed';
 
   select count(distinct (s.employee_id, s.period, s.phase))
     into v_subs
-    from public.ipcr_submissions s;
+    from public.ipcr_submissions s
+    join public.target_settings t on t.employee_id = s.employee_id
+    join public.performance_cycles c on c.id = t.cycle_id and c.title = s.period
+   where t.status = 'approved'
+     and t.phase2_status = 'completed';
 
   select count(*)
     into v_locked
     from public.locked_targets lt
-   where lt.period in (select title from public.performance_cycles);
+    join public.performance_cycles c on c.title = lt.period
+    join public.target_settings t on t.employee_id = lt.employee_id and t.cycle_id = c.id
+   where t.status = 'approved'
+     and t.phase2_status = 'completed';
 
   select count(*)
     into v_evals
     from public.performance_evaluations pe
-   where pe.cycle_id is not null;
+    join public.target_settings t on t.employee_id = pe.employee_id and t.cycle_id = pe.cycle_id
+   where t.status = 'approved'
+     and t.phase2_status = 'completed';
 
   -- Every finalized record must be mirrored once per (employee, period), and
   -- every store must hold one row per finalized record (two for the tracker).

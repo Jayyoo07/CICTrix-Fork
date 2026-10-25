@@ -2957,30 +2957,26 @@ export const RSPDashboard = () => {
         ref: report.job.jobCode || '', position: report.job.title, department: report.job.department || '—',
         date: report.deletedAt,
         facts: [{ label: 'Deleted by', value: report.deletedBy || '—' }],
-        peopleTitle: 'Preserved applicants',
         people: report.applicants.map((applicant) => ({
           name: `${applicant.personalInfo.firstName} ${applicant.personalInfo.lastName}`.trim() || 'Unnamed',
-          detail: `${applicant.status} · ${applicant.documents.length} document${applicant.documents.length === 1 ? '' : 's'}`,
+          status: applicant.status,
+          detail: `${applicant.documents.length} document${applicant.documents.length === 1 ? '' : 's'}`,
         })),
         action: { kind: 'purge', applicants: report.applicants.length, documents },
       });
     });
+    // One record per position: the ranking, with its assessment forms one click away.
     rankingHistoricalData.forEach((posMap, dept) => posMap.forEach((rows, pos) => {
       const latest = rows.reduce((max, row) => (row.created_at > max ? row.created_at : max), '');
       const ranked = rows.slice().sort((a, b) => (b.total_score ?? -1) - (a.total_score ?? -1));
-      const applicantsFact = { label: 'Applicants', value: String(rows.length) };
       out.push({
-        key: `rank:${dept}:${pos}`, group: 'evaluations', type: 'Ranking', name: pos, ref: '',
-        position: pos, department: dept, date: latest, facts: [applicantsFact],
-        peopleTitle: 'Ranking',
-        people: ranked.map((row, i) => ({
-          name: `${i + 1}. ${row.full_name}`,
-          detail: `${normalizeStatus(row.status) ?? row.status} · ${row.total_score != null ? row.total_score.toFixed(2) : '—'}`,
+        key: `eval:${dept}:${pos}`, group: 'evaluations', type: 'Ranking', name: pos, ref: '',
+        position: pos, department: dept, date: latest,
+        people: ranked.map((row) => ({
+          name: row.full_name,
+          status: normalizeStatus(row.status) ?? row.status,
+          score: row.total_score != null ? row.total_score.toFixed(2) : '',
         })),
-      });
-      out.push({
-        key: `forms:${dept}:${pos}`, group: 'evaluations', type: 'Assessment forms', name: pos, ref: '',
-        position: pos, department: dept, date: latest, facts: [applicantsFact],
         action: { kind: 'assessment', position: pos },
       });
     }));

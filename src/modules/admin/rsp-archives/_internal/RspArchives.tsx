@@ -7,18 +7,18 @@ import {
 } from '../../../../lib/api/rspArchives';
 import type { ApplicantWorkflowStatus } from '../../../../lib/api/applicantStatus';
 import {
-  EMPTY_FILTERS, GROUPS, countFor, filterRecords, formatDate, pageList, toCsv,
-  type ArchiveFilters, type ArchiveGroup, type ArchiveRecord,
+  EMPTY_FILTERS, GROUPS, countFor, countRows, filterRecords, formatDate, pageList, toCsv, toPositionRows,
+  type ArchiveFilters, type ArchiveGroup, type ArchiveRecord, type ArchiveSort,
 } from './model';
 import { StatusBadge } from './StatusBadge';
-import { ArchiveDrawer } from './ArchiveDrawer';
+import { ArchiveListModal } from './ArchiveListModal';
 import { PurgeDialog, RestoreDialog } from './ArchiveDialogs';
 
 const PAGE_SIZES = [10, 25, 50];
 const TOAST_MS = 5000;
 
 export interface RspArchivesProps {
-  /** Records the dashboard already holds: job posts and evaluation records. */
+  /** Records the dashboard already holds: deleted job posts and evaluation records. */
   records: ArchiveRecord[];
   /** Permanently remove a deleted job post's preserved data. */
   onPurge: (key: string) => void;
@@ -40,7 +40,7 @@ const useFetchedRecords = () => {
       ...former.map((e): ArchiveRecord => ({
         key: `emp:${e.id}`, group: 'employees', type: e.status, name: e.fullName, ref: e.employeeId,
         position: e.position, department: e.department, date: e.date,
-        facts: e.hireDate ? [{ label: 'Hired', value: formatDate(e.hireDate) }] : undefined,
+        reason: e.hireDate ? `Hired ${formatDate(e.hireDate)}` : undefined,
       })),
       ...moves.map((m): ArchiveRecord => ({
         key: `move:${m.id}`, group: 'employees', type: m.action, name: m.fullName, ref: m.employeeId,
@@ -50,7 +50,6 @@ const useFetchedRecords = () => {
       ...closed.map((a): ArchiveRecord => ({
         key: `app:${a.id}`, group: 'applicants', type: a.status, name: a.fullName, ref: a.referenceNo,
         position: a.position, department: a.department, date: a.date, reason: a.reason,
-        facts: a.email ? [{ label: 'Email', value: a.email }] : undefined,
         action: a.status === 'Disqualified' ? { kind: 'restore', previousReason: a.reason } : undefined,
       })),
     ]);
@@ -58,8 +57,14 @@ const useFetchedRecords = () => {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-  return { rows, loading, reload: load, setRows };
+  return { rows, loading, setRows };
 };
+
+const SORTS: { value: ArchiveSort; label: string }[] = [
+  { value: 'dept', label: 'Department A–Z' },
+  { value: 'new', label: 'Newest first' },
+  { value: 'old', label: 'Oldest first' },
+];
 
 export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesProps) => {
   const fetched = useFetchedRecords();
@@ -70,26 +75,31 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
   const [page, setPage] = useState(0);
   const [perPage, setPerPage] = useState(PAGE_SIZES[0]);
   const [popover, setPopover] = useState<'' | 'filters' | 'export'>('');
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<'' | 'restore' | 'purge'>('');
+  const [openRowKey, setOpenRowKey] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{ kind: 'restore' | 'purge'; record: ArchiveRecord } | null>(null);
   const [toast, setToast] = useState('');
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const lastRow = useRef<HTMLElement | null>(null);
 
   const def = GROUPS.find((g) => g.id === group)!;
-  const rows = useMemo(() => filterRecords(all, group, filters), [all, group, filters]);
+  const matched = useMemo(() => filterRecords(all, group, filters), [all, group, filters]);
+  const rows = useMemo(() => toPositionRows(matched, filters.sort), [matched, filters.sort]);
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const current = Math.min(page, pages - 1);
   const slice = rows.slice(current * perPage, (current + 1) * perPage);
-  const open = all.find((r) => r.key === openKey) ?? null;
+  const openRow = rows.find((r) => r.key === openRowKey) ?? null;
   const departments = useMemo(
     () => [...new Set(all.filter((r) => r.group === group).map((r) => r.department))].filter((d) => d && d !== '—').sort(),
     [all, group],
   );
   const activeFilterCount = [filters.department, filters.from, filters.to].filter(Boolean).length;
+  const loadingGroup = fetched.loading && (group === 'employees' || group === 'applicants');
 
-  const closeDrawer = useCallback(() => { setOpenKey(null); setDialog(''); lastRow.current?.focus(); }, []);
-  useBackClosesView(openKey !== null, closeDrawer, 'archive-record');
+  const closeModal = useCallback(() => { setOpenRowKey(null); setDialog(null); lastRow.current?.focus(); }, []);
+  useBackClosesView(openRowKey !== null, closeModal, 'archive-position');
+
+  // A row whose last record was restored or purged disappears; close its modal.
+  useEffect(() => { if (openRowKey && !openRow) setOpenRowKey(null); }, [openRowKey, openRow]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -117,34 +127,38 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
     const next = { ArrowRight: (i + 1) % ids.length, ArrowLeft: (i - 1 + ids.length) % ids.length, Home: 0, End: ids.length - 1 }[e.key];
     if (next !== undefined) { e.preventDefault(); selectGroup(ids[next], true); }
   };
-  const openRow = (r: ArchiveRecord, el: HTMLElement) => { lastRow.current = el; setOpenKey(r.key); };
+  const open = (key: string, el: HTMLElement) => { lastRow.current = el; setOpenRowKey(key); };
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(def, rows)], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([toCsv(matched)], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), { href: url, download: `archives-${group}-${new Date().toISOString().slice(0, 10)}.csv` });
     a.click();
     URL.revokeObjectURL(url);
     setPopover('');
-    setToast(`Exported ${rows.length} ${rows.length === 1 ? 'record' : 'records'}`);
+    setToast(`Exported ${matched.length} ${matched.length === 1 ? 'record' : 'records'}`);
   };
 
   const doRestore = async (status: ApplicantWorkflowStatus, reason: string) => {
-    if (!open || open.action?.kind !== 'restore') return false;
-    const id = open.key.replace(/^app:/, '');
-    const res = await restoreApplication({ id, status, reason, previousReason: open.action.previousReason, restoredBy: getAdminEmail('RSP') });
+    const record = dialog?.record;
+    if (!record || record.action?.kind !== 'restore') return false;
+    const res = await restoreApplication({
+      id: record.key.replace(/^app:/, ''), status, reason,
+      previousReason: record.action.previousReason, restoredBy: getAdminEmail('RSP'),
+    });
     if (!res.ok) return false;
-    fetched.setRows((prev) => prev.filter((r) => r.key !== open.key));
-    setToast(`${open.name} restored to ${status}. They're back in Applications.`);
-    setDialog(''); setOpenKey(null);
+    fetched.setRows((prev) => prev.filter((r) => r.key !== record.key));
+    setToast(`${record.name} restored to ${status}. They're back in Applications.`);
+    setDialog(null);
     return true;
   };
 
   const doPurge = () => {
-    if (!open) return;
-    onPurge(open.key);
-    setToast(`${open.name} permanently deleted`);
-    setDialog(''); setOpenKey(null);
+    const record = dialog?.record;
+    if (!record) return;
+    onPurge(record.key);
+    setToast(`${record.name} permanently deleted`);
+    setDialog(null);
   };
 
   const clearAll = () => { setFilters((f) => ({ ...EMPTY_FILTERS, sort: f.sort })); setPage(0); };
@@ -171,7 +185,7 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
               >
                 {g.label}
                 <span className={`text-[13px] tabular-nums ${selected ? 'text-[var(--color-primary)]' : 'text-[var(--neutral-500)]'}`}>
-                  {fetched.loading && (g.id === 'employees' || g.id === 'applicants') ? '…' : countFor(all, g.id, filters.query)}
+                  {fetched.loading && (g.id === 'employees' || g.id === 'applicants') ? '…' : countRows(all, g.id, filters.query)}
                 </span>
               </button>
             );
@@ -193,20 +207,22 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
       <div role="tabpanel" id="archive-panel" aria-labelledby={`archive-tab-${group}`}>
         {/* One-line toolbar (§9.4) */}
         <div className="flex flex-wrap items-center gap-3 pb-3 pt-4">
-          <select
-            aria-label="Type"
-            value={filters.type}
-            onChange={(e) => update({ type: e.target.value })}
-            className="h-9 max-w-[240px] rounded-lg border border-[var(--neutral-200)] bg-white px-2.5 text-sm font-medium text-[var(--color-primary-900)] hover:border-[var(--color-primary-200)]"
-          >
-            <option value="">All types · {countFor(all, group, filters.query)}</option>
-            {[...new Set(def.types.map((t) => t.section ?? ''))].map((section) => {
-              const opts = def.types.filter((t) => (t.section ?? '') === section).map((t) => (
-                <option key={t.value} value={t.value}>{t.value.replace(' - ', ' – ')} · {countFor(all, group, filters.query, t.value)}</option>
-              ));
-              return section ? <optgroup key={section} label={section}>{opts}</optgroup> : opts;
-            })}
-          </select>
+          {def.types.length > 1 && (
+            <select
+              aria-label="Type"
+              value={filters.type}
+              onChange={(e) => update({ type: e.target.value })}
+              className="h-9 max-w-[240px] rounded-lg border border-[var(--neutral-200)] bg-white px-2.5 text-sm font-medium text-[var(--color-primary-900)] hover:border-[var(--color-primary-200)]"
+            >
+              <option value="">All types · {countFor(all, group, filters.query)}</option>
+              {[...new Set(def.types.map((t) => t.section ?? ''))].map((section) => {
+                const opts = def.types.filter((t) => (t.section ?? '') === section).map((t) => (
+                  <option key={t.value} value={t.value}>{t.value.replace(' - ', ' – ')} · {countFor(all, group, filters.query, t.value)}</option>
+                ));
+                return section ? <optgroup key={section} label={section}>{opts}</optgroup> : opts;
+              })}
+            </select>
+          )}
 
           <div className="relative" data-archive-pop>
             <button type="button" className="btn btn-secondary btn-md" aria-expanded={popover === 'filters'} onClick={() => setPopover(popover === 'filters' ? '' : 'filters')}>
@@ -246,12 +262,10 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
           <select
             aria-label="Sort"
             value={filters.sort}
-            onChange={(e) => update({ sort: e.target.value as ArchiveFilters['sort'] })}
+            onChange={(e) => update({ sort: e.target.value as ArchiveSort })}
             className="h-9 rounded-lg border border-[var(--neutral-200)] bg-white px-2.5 text-sm font-medium text-[var(--color-primary-900)] hover:border-[var(--color-primary-200)]"
           >
-            <option value="new">Newest first</option>
-            <option value="old">Oldest first</option>
-            <option value="az">Name A–Z</option>
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
 
           <div className="relative" data-archive-pop>
@@ -287,23 +301,23 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
           </div>
         )}
 
-        {/* Table (§9.5) */}
+        {/* Flat table (§9.5): one row per department + position */}
         <div className="relative overflow-x-auto rounded-xl border border-[var(--neutral-200)]">
-          <table className="w-full min-w-[640px] border-collapse">
-            <caption className="sr-only">{def.label}</caption>
+          <table className="w-full min-w-[720px] border-collapse">
+            <caption className="sr-only">{def.label}, one row per department and position</caption>
             <thead>
               <tr className="bg-[var(--bg-page)]">
-                {[def.who, def.where, 'Status', 'Date'].map((h) => (
-                  <th key={h} scope="col" className="whitespace-nowrap px-4 py-2.5 text-left text-[13px] font-semibold text-[var(--color-primary-900)]">{h}</th>
+                {['Department', 'Position', def.countLabel, 'Status', 'Date'].map((h) => (
+                  <th key={h} scope="col" className={`whitespace-nowrap px-4 py-2.5 text-[13px] font-semibold text-[var(--color-primary-900)] ${h === def.countLabel ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
                 <th scope="col" className="w-10 px-4 py-2.5"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             <tbody>
-              {fetched.loading && (group === 'employees' || group === 'applicants') ? (
+              {loadingGroup ? (
                 Array.from({ length: 4 }, (_, i) => (
                   <tr key={i} className="border-t border-[var(--neutral-200)]">
-                    {Array.from({ length: 4 }, (__, j) => (
+                    {Array.from({ length: 5 }, (__, j) => (
                       <td key={j} className="px-4 py-3"><span className="block h-4 w-3/4 animate-pulse rounded bg-[var(--neutral-100)]" /></td>
                     ))}
                     <td />
@@ -311,7 +325,7 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
                 ))
               ) : slice.length === 0 ? (
                 <tr className="border-t border-[var(--neutral-200)]">
-                  <td colSpan={5} className="px-4 py-10 text-center">
+                  <td colSpan={6} className="px-4 py-10 text-center">
                     {filters.query || filters.type || activeFilterCount ? (
                       <>
                         <p className="!mb-1 text-base font-semibold text-[var(--color-primary-900)]">No records match</p>
@@ -326,25 +340,32 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
                     )}
                   </td>
                 </tr>
-              ) : slice.map((r) => (
+              ) : slice.map((row) => (
                 <tr
-                  key={r.key}
+                  key={row.key}
                   tabIndex={0}
-                  aria-label={`Open ${r.name}`}
-                  onClick={(e) => openRow(r, e.currentTarget)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRow(r, e.currentTarget); } }}
+                  aria-haspopup="dialog"
+                  aria-label={`Open ${row.position}, ${row.department}`}
+                  onClick={(e) => open(row.key, e.currentTarget)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(row.key, e.currentTarget); } }}
                   className="cursor-pointer border-t border-[var(--neutral-200)] hover:bg-[var(--bg-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)]"
                 >
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--neutral-800)]">{row.department}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--color-primary-900)]">{row.position}</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-[var(--color-primary-900)]">{row.count}</td>
                   <td className="px-4 py-3">
-                    <span className="block text-sm font-medium text-[var(--color-primary-900)]">{r.name}</span>
-                    {r.ref && <span className="block text-xs font-medium text-[var(--neutral-600)]">{r.ref}</span>}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {group === 'evaluations' ? (
+                        <><StatusBadge type="Ranking" /><StatusBadge type="Assessment forms" /></>
+                      ) : row.statuses.map(([type, n]) => (
+                        <span key={type} className="inline-flex items-center gap-1">
+                          <StatusBadge type={type} />
+                          {row.statuses.length > 1 || n > 1 ? <span className="text-xs font-medium tabular-nums text-[var(--neutral-600)]">×{n}</span> : null}
+                        </span>
+                      ))}
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="block text-sm font-medium text-[var(--color-primary-900)]">{group === 'jobs' || group === 'evaluations' ? r.department : r.position}</span>
-                    {group !== 'jobs' && group !== 'evaluations' && <span className="block text-xs font-medium text-[var(--neutral-600)]">{r.department}</span>}
-                  </td>
-                  <td className="px-4 py-3"><StatusBadge type={r.type} /></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[var(--neutral-800)]">{formatDate(r.date)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[var(--neutral-800)]">{formatDate(row.date)}</td>
                   <td className="px-4 py-3 text-[var(--neutral-400)]"><ChevronRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></td>
                 </tr>
               ))}
@@ -389,18 +410,18 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
         </div>
       </div>
 
-      {open && (
-        <ArchiveDrawer
-          record={open}
-          groupLabel={def.label}
-          onClose={closeDrawer}
-          onRestore={() => setDialog('restore')}
-          onPurge={() => setDialog('purge')}
+      {openRow && (
+        <ArchiveListModal
+          row={openRow}
+          group={def}
+          onClose={closeModal}
+          onRestore={(record) => setDialog({ kind: 'restore', record })}
+          onPurge={(record) => setDialog({ kind: 'purge', record })}
           onOpenAssessment={onOpenAssessment}
         />
       )}
-      {open && dialog === 'restore' && <RestoreDialog record={open} onCancel={() => setDialog('')} onConfirm={doRestore} />}
-      {open && dialog === 'purge' && <PurgeDialog record={open} onCancel={() => setDialog('')} onConfirm={doPurge} />}
+      {dialog?.kind === 'restore' && <RestoreDialog record={dialog.record} onCancel={() => setDialog(null)} onConfirm={doRestore} />}
+      {dialog?.kind === 'purge' && <PurgeDialog record={dialog.record} onCancel={() => setDialog(null)} onConfirm={doPurge} />}
 
       <div aria-live="polite" className="pointer-events-none fixed right-6 top-20 z-[60]">
         {toast && (

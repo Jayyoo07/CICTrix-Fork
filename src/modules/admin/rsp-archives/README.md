@@ -1,8 +1,8 @@
 # rsp-archives
 
-The RSP → Archives page. It shows four tabs of finished history, one archive-wide search, a one-line toolbar, a four-column table, and a detail drawer that holds the record's single action.
+The RSP → Archives page has four tabs of finished history, one archive-wide search and a one-line toolbar. Below them is a flat table with one row per department + position. Clicking a row opens a centered list modal (§9.10, 880px) that shows everyone or every post under that position, with Restore or Permanently Delete on the row it applies to.
 
-Plan: `docs/plans/2026-10-25-rsp-archives.md`. Design: `docs/mockups/2026-10-25-rsp-archives.html`.
+Plan: `docs/plans/2026-10-25-rsp-archives.md` (revision 2). Design: `docs/mockups/2026-10-25-rsp-archives-position-rows.html`.
 
 ## Public interface
 

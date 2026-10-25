@@ -23,6 +23,23 @@ Everything in the plan's steps shipped:
 - **Search** matches name, employee ID / REF number and position, as the placeholder says. It no longer matches department, which had made "engineer" return every record in the City Engineer's office. Department filtering stays in the Filters popover.
 - **Checks:** `npx tsc --noEmit`, `npx vitest run` and `npm run build`.
 
+## Revision 2: one row per department + position
+
+Mockup: `docs/mockups/2026-10-25-rsp-archives-position-rows.html`.
+
+- **Table.** Every tab is a flat table with one row per department + position. The columns are Department, Position, a count, the statuses present, and the latest date. The default sort is Department A–Z, and tab counts count position rows.
+- **Modal.** A centered 880px list modal (§9.10) replaces the side drawer, and on phones it becomes a full-screen sheet. Restore and Permanently Delete sit on the row they apply to, and their confirmation dialogs stack above the modal.
+- **Evaluation records.** Each position has one row, merging Ranking and Assessment forms. The modal shows the ranking, with §10 status badges and scores, and its primary button opens the assessment forms.
+- **Search** also matches people listed inside a record, such as a ranked applicant's name.
+- **Checks.** `npx tsc --noEmit` is clean, `npx vitest run` passes 495 tests, and `npm run build` succeeds. A temporary harness (since removed) checked these at 1366×768 and 375px:
+  - the position rows
+  - the modal's 880px width and full-screen sheet on phones
+  - the ranking badges
+  - Restore stacking, Esc order, and focus returning to the row
+  - Open assessment forms, and Purge's type-to-confirm
+
+  A real Restore and live data were not checked.
+
 ## Checks run
 
 - `npx tsc --noEmit`: clean.

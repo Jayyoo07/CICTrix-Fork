@@ -17,6 +17,8 @@ RSP → Archives shows everything that has ended, in one place, without the wall
 
 Mockup: `docs/mockups/2026-10-25-rsp-archives.html` (layout B, quiet tabs; the "Outcome" column is named "Status"). It supersedes the five archive cards, the separate Deleted Job Archives card and the Not Selected list on that page.
 
+**Revision 2 (2026-10-25), mockup `docs/mockups/2026-10-25-rsp-archives-position-rows.html`.** Every tab becomes a flat table with one row per department + position: Department, Position, a count of people or posts, the statuses present, and the latest date. Sorting is Department A–Z by default. Clicking a row opens a centered 880px list modal (§9.10) instead of the side drawer. The modal lists the people or posts under that position, with Restore or Permanently Delete on the row it applies to. Evaluation records have one row per position: Ranking and Assessment forms are merged, the modal shows the ranking, and its primary button opens the assessment forms. Tab counts count position rows.
+
 ## Approach
 
 **New module `src/modules/admin/rsp-archives/`** (index.ts, README.md, `_internal/`).

@@ -5,7 +5,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 import {
   listDepartmentSummaries,
   listCriticalPositions,
-  listAutoSuccessors,
+  listAutoSuccessorsForPositions,
   type DepartmentSummary,
   type CriticalPosition,
   type AutoSuccessorsResult,
@@ -225,12 +225,15 @@ const OcboTableView = (_props: { admin: string }) => {
     const pr = await listCriticalPositions(deptId);
     const positions = pr.ok ? pr.data : [];
     setPosByDept((p) => ({ ...p, [deptId]: positions }));
-    await Promise.all(
-      positions.map(async (pos) => {
-        const cr = await listAutoSuccessors(pos.id);
-        if (cr.ok) setCandByPos((p) => ({ ...p, [pos.id]: cr.data }));
-      }),
-    );
+    const candidateResults = await listAutoSuccessorsForPositions(positions.map((pos) => pos.id));
+    setCandByPos((prev) => {
+      const next = { ...prev };
+      for (const pos of positions) {
+        const cr = candidateResults.get(pos.id);
+        if (cr?.ok) next[pos.id] = cr.data;
+      }
+      return next;
+    });
     setLoadingDept((p) => ({ ...p, [deptId]: false }));
   };
 

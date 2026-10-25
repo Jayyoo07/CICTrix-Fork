@@ -696,13 +696,13 @@ const IPCRDetailPage = ({
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-bold text-slate-400">Self-Rating:</span>
                                   <div className="flex gap-1.5">
-                                    <span className="text-[10px] text-slate-650 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
+                                    <span className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
                                       Q: <strong className="text-slate-800">{si.q_rating ?? '—'}</strong>
                                     </span>
-                                    <span className="text-[10px] text-slate-650 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
+                                    <span className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
                                       E: <strong className="text-slate-800">{si.e_rating ?? '—'}</strong>
                                     </span>
-                                    <span className="text-[10px] text-slate-650 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
+                                    <span className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-semibold">
                                       T: <strong className="text-slate-800">{si.t_rating ?? '—'}</strong>
                                     </span>
                                     <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-bold">
@@ -1089,6 +1089,114 @@ const PhaseWindowSwitch = ({
   );
 };
 
+interface PhaseConfirmTarget {
+  phase: 'phase1' | 'phase2';
+  action: 'open' | 'close';
+}
+
+/** Unified confirmation modal for opening and closing Phase 1 / Phase 2 windows.
+ *  Uses Dialog without a title prop so Dialog does not inject a duplicate header close button. */
+const PhaseConfirmModal = ({
+  open,
+  phase,
+  action,
+  onClose,
+  onConfirmed,
+}: {
+  open: boolean;
+  phase: 'phase1' | 'phase2';
+  action: 'open' | 'close';
+  onClose: () => void;
+  onConfirmed: () => Promise<void>;
+}) => {
+  const [busy, setBusy] = useState(false);
+  const isOpenAction = action === 'open';
+  const isPhase1 = phase === 'phase1';
+
+  const title = isOpenAction
+    ? isPhase1 ? 'Open Phase 1?' : 'Open Phase 2?'
+    : isPhase1 ? 'Close Phase 1?' : 'Close Phase 2?';
+
+  const description = isOpenAction
+    ? isPhase1
+      ? 'This opens Target Setting system-wide and allows all regular and probationary employees to prepare and submit their IPCR targets.'
+      : 'This opens Accomplishment Rating system-wide and allows all regular and probationary employees to submit their self-ratings.'
+    : isPhase1
+      ? 'This closes Target Setting system-wide and locks the submission window for all regular and probationary employees.'
+      : 'This closes Accomplishment Rating system-wide and locks the submission window for all regular and probationary employees.';
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    try {
+      const email = getCurrentAdminEmail();
+      const res = isOpenAction
+        ? await openPhase({ phase, openedBy: email })
+        : await closePhase({ phase, closedBy: email });
+      setBusy(false);
+      onClose();
+      await onConfirmed();
+      if (res.ok === false) alert(res.error);
+      else if (res.warning) alert(res.warning);
+    } catch (err) {
+      setBusy(false);
+      onClose();
+      alert(err instanceof Error ? err.message : 'Action failed');
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <div className="w-[460px] max-w-full space-y-5 p-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                isOpenAction ? 'bg-indigo-100/70 text-indigo-600' : 'bg-rose-100/70 text-rose-600'
+              }`}
+            >
+              {isOpenAction ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">{title}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-sm text-slate-600 leading-relaxed">{description}</p>
+
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="px-5 py-2 text-sm font-bold border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={busy}
+            className={`px-5 py-2 text-sm font-bold text-white rounded-xl shadow-xs transition active:scale-95 disabled:opacity-50 ${
+              isOpenAction
+                ? 'bg-[#363EE8] hover:bg-[#2931c5]'
+                : 'bg-[#e11d48] hover:bg-[#be123c]'
+            }`}
+          >
+            {busy ? (isOpenAction ? 'Opening…' : 'Closing…') : isOpenAction ? 'Confirm open' : 'Confirm close'}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+};
+
 const ProbationaryPanel = ({
   employees,
   loading,
@@ -1115,11 +1223,7 @@ const ProbationaryPanel = ({
     target_setting: 'Closed',
     rating: 'Closed',
   });
-  const [showConfirmOpen1, setShowConfirmOpen1] = useState(false);
-  const [showConfirmClose1, setShowConfirmClose1] = useState(false);
-  const [showConfirmOpen2, setShowConfirmOpen2] = useState(false);
-  const [showConfirmClose2, setShowConfirmClose2] = useState(false);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<PhaseConfirmTarget | null>(null);
 
   const loadSystemStates = useCallback(async () => {
     try {
@@ -1233,8 +1337,8 @@ const ProbationaryPanel = ({
             <span className="text-xs font-bold text-slate-900">Phase 1 (Target)</span>
             <PhaseWindowSwitch
               isOpen={systemStates.target_setting === 'Open'}
-              onOpen={() => setShowConfirmOpen1(true)}
-              onClose={() => setShowConfirmClose1(true)}
+              onOpen={() => setConfirmModal({ phase: 'phase1', action: 'open' })}
+              onClose={() => setConfirmModal({ phase: 'phase1', action: 'close' })}
             />
           </div>
 
@@ -1243,8 +1347,8 @@ const ProbationaryPanel = ({
             <span className="text-xs font-bold text-slate-900">Phase 2 (Rating)</span>
             <PhaseWindowSwitch
               isOpen={systemStates.rating === 'Open'}
-              onOpen={() => setShowConfirmOpen2(true)}
-              onClose={() => setShowConfirmClose2(true)}
+              onOpen={() => setConfirmModal({ phase: 'phase2', action: 'open' })}
+              onClose={() => setConfirmModal({ phase: 'phase2', action: 'close' })}
             />
           </div>
         </div>
@@ -1377,232 +1481,14 @@ const ProbationaryPanel = ({
         />
       )}
 
-      {showConfirmOpen1 && (
-        <Dialog open onClose={() => setShowConfirmOpen1(false)}>
-          <div className="w-[460px] max-w-full space-y-5 p-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100/70 text-indigo-600">
-                  <Unlock className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Open Phase 1?</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmOpen1(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-sm text-slate-600 leading-relaxed">
-              This opens <strong className="font-bold text-slate-900">Target Setting</strong> system-wide and allows all regular and probationary employees to prepare and submit their IPCR targets.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowConfirmOpen1(false)}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await openPhase({ phase: 'phase1', openedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmOpen1(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold bg-[#363EE8] hover:bg-[#2931c5] text-white rounded-xl shadow-xs transition active:scale-95 disabled:opacity-50"
-              >
-                {actionBusy ? 'Opening…' : 'Confirm open'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmClose1 && (
-        <Dialog open onClose={() => setShowConfirmClose1(false)}>
-          <div className="w-[460px] max-w-full space-y-5 p-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-100/70 text-rose-600">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Close Phase 1?</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmClose1(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-sm text-slate-600 leading-relaxed">
-              This closes <strong className="font-bold text-slate-900">Target Setting</strong> system-wide and locks the submission window for all regular and probationary employees.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowConfirmClose1(false)}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await closePhase({ phase: 'phase1', closedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmClose1(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold bg-[#e11d48] hover:bg-[#be123c] text-white rounded-xl shadow-xs transition active:scale-95 disabled:opacity-50"
-              >
-                {actionBusy ? 'Closing…' : 'Confirm close'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmOpen2 && (
-        <Dialog open onClose={() => setShowConfirmOpen2(false)}>
-          <div className="w-[460px] max-w-full space-y-5 p-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100/70 text-indigo-600">
-                  <Unlock className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Open Phase 2?</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmOpen2(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-sm text-slate-600 leading-relaxed">
-              This opens <strong className="font-bold text-slate-900">Accomplishment Rating</strong> system-wide and allows all regular and probationary employees to submit their self-ratings.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowConfirmOpen2(false)}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await openPhase({ phase: 'phase2', openedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmOpen2(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold bg-[#363EE8] hover:bg-[#2931c5] text-white rounded-xl shadow-xs transition active:scale-95 disabled:opacity-50"
-              >
-                {actionBusy ? 'Opening…' : 'Confirm open'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmClose2 && (
-        <Dialog open onClose={() => setShowConfirmClose2(false)}>
-          <div className="w-[460px] max-w-full space-y-5 p-1">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-100/70 text-rose-600">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Close Phase 2?</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmClose2(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-sm text-slate-600 leading-relaxed">
-              This closes <strong className="font-bold text-slate-900">Accomplishment Rating</strong> system-wide and locks the submission window for all regular and probationary employees.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setShowConfirmClose2(false)}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold border border-slate-200 text-slate-700 bg-white rounded-xl hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await closePhase({ phase: 'phase2', closedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmClose2(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-5 py-2 text-sm font-bold bg-[#e11d48] hover:bg-[#be123c] text-white rounded-xl shadow-xs transition active:scale-95 disabled:opacity-50"
-              >
-                {actionBusy ? 'Closing…' : 'Confirm close'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
+      {confirmModal && (
+        <PhaseConfirmModal
+          open={Boolean(confirmModal)}
+          phase={confirmModal.phase}
+          action={confirmModal.action}
+          onClose={() => setConfirmModal(null)}
+          onConfirmed={loadSystemStates}
+        />
       )}
     </div>
   );
@@ -1640,11 +1526,7 @@ const RegularPanel = ({
     target_setting: 'Closed',
     rating: 'Closed',
   });
-  const [showConfirmOpen1, setShowConfirmOpen1] = useState(false);
-  const [showConfirmClose1, setShowConfirmClose1] = useState(false);
-  const [showConfirmOpen2, setShowConfirmOpen2] = useState(false);
-  const [showConfirmClose2, setShowConfirmClose2] = useState(false);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<PhaseConfirmTarget | null>(null);
 
   const loadSystemStates = useCallback(async () => {
     try {
@@ -1755,8 +1637,8 @@ const RegularPanel = ({
             <span className="text-xs font-bold text-slate-900">Phase 1 (Target)</span>
             <PhaseWindowSwitch
               isOpen={systemStates.target_setting === 'Open'}
-              onOpen={() => setShowConfirmOpen1(true)}
-              onClose={() => setShowConfirmClose1(true)}
+              onOpen={() => setConfirmModal({ phase: 'phase1', action: 'open' })}
+              onClose={() => setConfirmModal({ phase: 'phase1', action: 'close' })}
             />
           </div>
 
@@ -1765,8 +1647,8 @@ const RegularPanel = ({
             <span className="text-xs font-bold text-slate-900">Phase 2 (Rating)</span>
             <PhaseWindowSwitch
               isOpen={systemStates.rating === 'Open'}
-              onOpen={() => setShowConfirmOpen2(true)}
-              onClose={() => setShowConfirmClose2(true)}
+              onOpen={() => setConfirmModal({ phase: 'phase2', action: 'open' })}
+              onClose={() => setConfirmModal({ phase: 'phase2', action: 'close' })}
             />
           </div>
         </div>
@@ -1905,148 +1787,14 @@ const RegularPanel = ({
         />
       )}
 
-      {showConfirmOpen1 && (
-        <Dialog open onClose={() => setShowConfirmOpen1(false)} title="Open Phase 1 (Target Setting)">
-          <div className="text-slate-800 text-sm space-y-2.5">
-            <p>Are you sure you want to open Phase 1 (Target Setting) system-wide?</p>
-            <p className="text-xs text-slate-500">
-              This will notify all Office Accounts and allow employees to prepare/submit their targets.
-            </p>
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setShowConfirmOpen1(false)} disabled={actionBusy} className="px-4 py-2 text-xs font-bold border border-slate-200 text-slate-650 rounded-lg hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await openPhase({ phase: 'phase1', openedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmOpen1(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-4 py-2 text-xs font-bold bg-[#363EE8] text-white rounded-lg hover:bg-[#2931c5]"
-              >
-                {actionBusy ? 'Opening…' : 'Confirm Open'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmClose1 && (
-        <Dialog open onClose={() => setShowConfirmClose1(false)} title="Close Phase 1 (Target Setting)">
-          <div className="text-slate-800 text-sm space-y-2.5">
-            <p>Are you sure you want to close Phase 1 (Target Setting) system-wide?</p>
-            <p className="text-xs text-rose-600 font-semibold">
-              This will lock the target submission window for all regular employees.
-            </p>
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setShowConfirmClose1(false)} disabled={actionBusy} className="px-4 py-2 text-xs font-bold border border-slate-200 text-slate-650 rounded-lg hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await closePhase({ phase: 'phase1', closedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmClose1(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-4 py-2 text-xs font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700"
-              >
-                {actionBusy ? 'Closing…' : 'Confirm Close'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmOpen2 && (
-        <Dialog open onClose={() => setShowConfirmOpen2(false)} title="Open Phase 2 (Accomplishment Rating)">
-          <div className="text-slate-800 text-sm space-y-2.5">
-            <p>Are you sure you want to open Phase 2 (Accomplishment Rating) system-wide?</p>
-            <p className="text-xs text-slate-500">
-              This will notify all Office Accounts and allow employees to prepare/submit their self-ratings.
-            </p>
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setShowConfirmOpen2(false)} disabled={actionBusy} className="px-4 py-2 text-xs font-bold border border-slate-200 text-slate-650 rounded-lg hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await openPhase({ phase: 'phase2', openedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmOpen2(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-4 py-2 text-xs font-bold bg-[#363EE8] text-white rounded-lg hover:bg-[#2931c5]"
-              >
-                {actionBusy ? 'Opening…' : 'Confirm Open'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {showConfirmClose2 && (
-        <Dialog open onClose={() => setShowConfirmClose2(false)} title="Close Phase 2 (Accomplishment Rating)">
-          <div className="text-slate-800 text-sm space-y-2.5">
-            <p>Are you sure you want to close Phase 2 (Accomplishment Rating) system-wide?</p>
-            <p className="text-xs text-rose-600 font-semibold">
-              This will lock the accomplishment rating submission window for all regular employees.
-            </p>
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setShowConfirmClose2(false)} disabled={actionBusy} className="px-4 py-2 text-xs font-bold border border-slate-200 text-slate-650 rounded-lg hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setActionBusy(true);
-                  const res = await closePhase({ phase: 'phase2', closedBy: getCurrentAdminEmail() });
-                  setActionBusy(false);
-                  setShowConfirmClose2(false);
-                  // Always re-read the switch, including on failure: the
-                  // schedule row may have flipped before a later step failed,
-                  // and a badge that disagrees with the database is how this
-                  // screen came to show CLOSED while employees were open.
-                  await loadSystemStates();
-                  if (res.ok === false) alert(res.error);
-                  else if (res.warning) alert(res.warning);
-                }}
-                disabled={actionBusy}
-                className="px-4 py-2 text-xs font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700"
-              >
-                {actionBusy ? 'Closing…' : 'Confirm Close'}
-              </button>
-            </div>
-          </div>
-        </Dialog>
+      {confirmModal && (
+        <PhaseConfirmModal
+          open={Boolean(confirmModal)}
+          phase={confirmModal.phase}
+          action={confirmModal.action}
+          onClose={() => setConfirmModal(null)}
+          onConfirmed={loadSystemStates}
+        />
       )}
     </div>
   );
@@ -2224,7 +1972,7 @@ export const PMIPCRManagement = () => {
             <ClipboardCheck className="h-6 w-6 text-[#363EE8]" />
             IPCR Management
           </h2>
-          <p className="text-sm text-slate-550 mt-0.5">
+          <p className="text-sm text-slate-500 mt-0.5">
             Module 2 — employees auto-classified by length of service: 3-month cycle (probationary)
             and 6-month cycle (regular).
           </p>

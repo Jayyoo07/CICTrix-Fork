@@ -810,17 +810,7 @@ export function InterviewerDashboard({
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}>
-        <div className="modal-header">
-          <h2 className="modal-title">Confirm Delete</h2>
-          <button 
-            onClick={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}
-            className="modal-close-btn"
-            disabled={deleting}
-          >
-            <X size={24} />
-          </button>
-        </div>
+      <Dialog open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeleteError(null); }} title="Confirm Delete">
         <div className="modal-content">
           <div className="delete-confirm-content">
             <div className="warning-icon">⚠️</div>

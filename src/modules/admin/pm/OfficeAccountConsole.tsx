@@ -1308,10 +1308,10 @@ export const OfficeAccountConsole: React.FC = () => {
                         <p className="text-xs text-slate-500 mt-0.5">Historical log of batches compiled and locked into PM cold storage.</p>
                       </div>
 
-                      <div className="overflow-x-auto rounded-lg border border-slate-150">
+                      <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr className="bg-slate-50 text-slate-650 font-semibold border-b border-slate-150">
+                            <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                               <th className="px-4 py-2.5">Transmittal ID</th>
                               <th className="px-4 py-2.5">Batch Code</th>
                               <th className="px-4 py-2.5 text-center">Verified Records</th>
@@ -1390,11 +1390,11 @@ export const OfficeAccountConsole: React.FC = () => {
                       </div>
 
                       {activeOverrideId && (
-                        <div className="rounded-xl border border-indigo-150 bg-indigo-50/40 p-4 space-y-3 text-xs">
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3 text-xs">
                           <p className="font-bold text-slate-800">Override Rating for: {ratings.find(r => r.id === activeOverrideId)?.name}</p>
                           <div className="flex items-center gap-4">
                             <div>
-                              <label className="block text-slate-550 mb-0.5">Override Score (1.0 - 5.0)</label>
+                              <label className="block text-slate-500 mb-0.5">Override Score (1.0 - 5.0)</label>
                               <input
                                 type="number"
                                 step="0.1"
@@ -1406,7 +1406,7 @@ export const OfficeAccountConsole: React.FC = () => {
                               />
                             </div>
                             <div className="flex-1">
-                              <label className="block text-slate-550 mb-0.5">Rationale / Rationale Log</label>
+                              <label className="block text-slate-500 mb-0.5">Rationale / Rationale Log</label>
                               <input
                                 type="text"
                                 value={overrideRationale}
@@ -1425,7 +1425,7 @@ export const OfficeAccountConsole: React.FC = () => {
                             </button>
                             <button
                               onClick={() => setActiveOverrideId(null)}
-                              className="bg-slate-150 text-slate-700 px-3 py-1.5 rounded"
+                              className="bg-slate-200 text-slate-700 px-3 py-1.5 rounded"
                             >
                               Cancel
                             </button>
@@ -1433,10 +1433,10 @@ export const OfficeAccountConsole: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="overflow-x-auto rounded-lg border border-slate-150">
+                      <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr className="bg-slate-50 text-slate-650 font-semibold border-b border-slate-150">
+                            <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                               <th className="px-4 py-3">Employee</th>
                               <th className="px-4 py-3 text-center">Self-Rating</th>
                               <th className="px-4 py-3 text-center">Supervisor Rating</th>
@@ -1447,7 +1447,7 @@ export const OfficeAccountConsole: React.FC = () => {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {ratings.map(r => (
-                              <tr key={r.id} className="hover:bg-slate-55/30 transition">
+                              <tr key={r.id} className="hover:bg-slate-50 transition">
                                 <td className="px-4 py-3">
                                   <p className="font-bold text-slate-800">{r.name}</p>
                                   <p className="text-[10px] text-slate-500">{r.position}</p>
@@ -1509,7 +1509,7 @@ export const OfficeAccountConsole: React.FC = () => {
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                             <div className="border border-slate-100 bg-slate-50/50 rounded-lg p-3">
                               <p className="text-slate-400">Total IPCRs Aggregated</p>
-                              <p className="text-xl font-bold text-slate-805">4 Records</p>
+                              <p className="text-xl font-bold text-slate-800">4 Records</p>
                             </div>
                             <div className="border border-slate-100 bg-slate-50/50 rounded-lg p-3">
                               <p className="text-slate-400">Division Average Score</p>
@@ -1517,17 +1517,17 @@ export const OfficeAccountConsole: React.FC = () => {
                             </div>
                             <div className="border border-slate-100 bg-slate-50/50 rounded-lg p-3">
                               <p className="text-slate-400">Outstanding Ratings</p>
-                              <p className="text-xl font-bold text-slate-805">3 Employees</p>
+                              <p className="text-xl font-bold text-slate-800">3 Employees</p>
                             </div>
                             <div className="border border-slate-100 bg-slate-50/50 rounded-lg p-3">
                               <p className="text-slate-400">Archived Version ID</p>
-                              <p className="text-xl font-bold text-slate-805">#DPCR-2025-HR-1</p>
+                              <p className="text-xl font-bold text-slate-800">#DPCR-2025-HR-1</p>
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div className="border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500 text-xs">
-                          <FileSpreadsheet className="h-10 w-10 text-slate-350 mx-auto mb-2" />
+                          <FileSpreadsheet className="h-10 w-10 text-slate-400 mx-auto mb-2" />
                           <p className="font-bold">No DPCR summary sheet has been generated for this cycle.</p>
                           <p className="mt-1">Click "Generate DPCR Summary Sheet" above to compile.</p>
                         </div>
@@ -1544,7 +1544,7 @@ export const OfficeAccountConsole: React.FC = () => {
                         </div>
                         <button
                           onClick={compileOPCRBundle}
-                          className="bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
                         >
                           <Send className="h-4 w-4" />
                           Compile & Transmit OPCR Package to PM
@@ -1580,7 +1580,7 @@ export const OfficeAccountConsole: React.FC = () => {
                         </div>
                       ) : (
                         <div className="border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500 text-xs">
-                          <Send className="h-10 w-10 text-slate-355 mx-auto mb-2" />
+                          <Send className="h-10 w-10 text-slate-400 mx-auto mb-2" />
                           <p className="font-bold">No OPCR package has been generated or transmitted yet.</p>
                           <p className="mt-1">Click "Compile & Transmit OPCR Package to PM" to finalize this cycle.</p>
                         </div>
@@ -1777,10 +1777,10 @@ export const OfficeAccountConsole: React.FC = () => {
                       <p className="mt-1">Use the form above to recommend a training to L&amp;D.</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-slate-150">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-slate-50 text-slate-650 font-semibold border-b border-slate-150">
+                          <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <th className="px-4 py-3">Topic</th>
                             <th className="px-4 py-3">Competency</th>
                             <th className="px-4 py-3">Reasoning</th>

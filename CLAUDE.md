@@ -148,9 +148,10 @@ Covers all planning artifacts: feature plans and plans for refactors, migrations
 
 When a plan is confirmed, before writing any code:
 
-1. **Save it** at `docs/plans/YYYY-MM-DD-<topic>.md`. Frontmatter: `title`, `date`, `status`, `summary`, optional `spec`. Sections: Goal, Approach, Steps, Risks, Checks to run. One plan, one file. Never edit code from an unsaved plan.
+1. **Save it** at `docs/plans/YYYY-MM-DD-<topic>.md`, starting from `docs/plans/_template.md`. Frontmatter: `title`, `date`, `status`, `summary`, optional `spec`. Sections: Goal, Approach, Steps, Risks, Checks to run. One plan, one file. Never edit code from an unsaved plan.
 2. **Keep `status` current** through `Draft → Approved → In Progress → Blocked → Done`.
 3. **On completion, write `docs/session-summaries/YYYY-MM-DD-<topic>-summary.md`:** what shipped vs. planned, deviations, checks run. If the plan changes later, update the summary without being asked.
+4. **Regenerate the dashboard** after any plan or summary change: `powershell -NoProfile -ExecutionPolicy Bypass -File docs/plans/build-plans-index.ps1`. Never hand-write `index.html`.
 
 Folders are created lazily, when their first file is written. ADRs go in `docs/adr/NNNN-slug.md`, and only for decisions that are hard to reverse, surprising without context, and the result of a real trade-off.
 

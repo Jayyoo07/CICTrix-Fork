@@ -69,3 +69,19 @@ implementation_plan*.md
 implementation-plan*.md
 
 
+
+# ui-preview mockup sessions (scratch)
+docs/mockups/sessions/
+
+
+# Local AI agent & tool workspace directories
+.claude/launch.json
+.claude/skills/
+.claude/worktrees/
+.worktrees/
+.opencode/
+.tools/
+.mcp.json
+
+# Local Supabase temporary artifacts
+supabase/.temp/

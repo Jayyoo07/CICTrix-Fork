@@ -269,7 +269,7 @@ export const PMMasterControlPanel: React.FC = () => {
                               <td className="px-4 py-3.5 font-bold text-slate-800">{office.name}</td>
                               <td className="px-4 py-3.5 text-slate-600">{office.headName}</td>
                               <td className="px-4 py-3.5 text-slate-600">{office.supervisorName}</td>
-                              <td className="px-4 py-3.5 text-center font-semibold text-slate-705">{office.totalPersonnel}</td>
+                              <td className="px-4 py-3.5 text-center font-semibold text-slate-700">{office.totalPersonnel}</td>
                               <td className="px-4 py-3.5 text-center">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
                                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active Roster
@@ -304,7 +304,7 @@ export const PMMasterControlPanel: React.FC = () => {
 
                       <form onSubmit={handleEmergencyReroute} className="space-y-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-655 mb-1">Target Office</label>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Target Office</label>
                           <select
                             value={selectedOfficeId}
                             onChange={(e) => setSelectedOfficeId(e.target.value)}
@@ -318,7 +318,7 @@ export const PMMasterControlPanel: React.FC = () => {
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-655 mb-1">Outgoing Supervisor/Head</label>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Outgoing Supervisor/Head</label>
                             <input
                               type="text"
                               value={outgoingSupervisor}
@@ -328,7 +328,7 @@ export const PMMasterControlPanel: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-655 mb-1">Successor Rater/Head</label>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Successor Rater/Head</label>
                             <input
                               type="text"
                               value={incomingSupervisor}
@@ -528,21 +528,21 @@ export const PMMasterControlPanel: React.FC = () => {
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
                         <tr className="hover:bg-slate-50/40">
-                          <td className="px-4 py-3 font-semibold text-slate-850 font-sans">HRMO</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800 font-sans">HRMO</td>
                           <td className="px-4 py-3 font-sans">Alice Vance</td>
                           <td className="px-4 py-3">Process 90% of recruitment requests within 10 days</td>
                           <td className="px-4 py-3 text-center">#T-2025-A21</td>
                           <td className="px-4 py-3 text-center">2025-01-15</td>
                         </tr>
                         <tr className="hover:bg-slate-50/40">
-                          <td className="px-4 py-3 font-semibold text-slate-850 font-sans">ITD</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800 font-sans">ITD</td>
                           <td className="px-4 py-3 font-sans">Bob Miller</td>
                           <td className="px-4 py-3">Ensure 99.9% uptime on internal web portals</td>
                           <td className="px-4 py-3 text-center">#T-2025-B42</td>
                           <td className="px-4 py-3 text-center">2025-01-18</td>
                         </tr>
                         <tr className="hover:bg-slate-50/40">
-                          <td className="px-4 py-3 font-semibold text-slate-850 font-sans">Treasury</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800 font-sans">Treasury</td>
                           <td className="px-4 py-3 font-sans">Carol Smith</td>
                           <td className="px-4 py-3">Disburse tax statements in under 3 minutes average wait</td>
                           <td className="px-4 py-3 text-center">#T-2025-C11</td>
@@ -596,7 +596,7 @@ export const PMMasterControlPanel: React.FC = () => {
                         <div key={b.officeId} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/30">
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                             <div>
-                              <h4 className="text-sm font-bold text-slate-850">{b.officeName}</h4>
+                              <h4 className="text-sm font-bold text-slate-800">{b.officeName}</h4>
                               <p className="text-[11px] text-slate-500 mt-0.5">Compliance Level: {b.submittedIPCRs}/{b.employeeCount} IPCRs</p>
                             </div>
                             <div>
@@ -619,7 +619,7 @@ export const PMMasterControlPanel: React.FC = () => {
                             </div>
                             <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
                               <span>Submitted: {ipcrPct}%</span>
-                              <span className="font-semibold text-slate-655">Office Verified: {isVerified ? '100%' : 'Pending Closeout'}</span>
+                              <span className="font-semibold text-slate-600">Office Verified: {isVerified ? '100%' : 'Pending Closeout'}</span>
                             </div>
                           </div>
                         </div>
@@ -651,7 +651,7 @@ export const PMMasterControlPanel: React.FC = () => {
                       return (
                         <div key={b.officeId} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                           <header className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-slate-850">{b.officeName}</h4>
+                            <h4 className="text-xs font-bold text-slate-800">{b.officeName}</h4>
                             <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
                               allPresent ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                             }`}>

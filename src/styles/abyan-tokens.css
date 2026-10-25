@@ -48,6 +48,7 @@
 
   /* Gradients (§3.5) */
   --gradient-hero: linear-gradient(180deg, #363EE8 0%, #040E6B 100%);
+  --gradient-modal-header: linear-gradient(135deg, #363EE8 0%, #040E6B 100%);  /* §9.10 */
   --gradient-soft: linear-gradient(135deg, #C8D1FF 0%, #363EE8 100%);
   --gradient-button: linear-gradient(180deg, #363EE8 0%, #191FA8 100%);
 

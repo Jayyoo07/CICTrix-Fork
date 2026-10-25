@@ -1,6 +1,8 @@
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ActionFeedback } from '../../components/action-feedback';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { mockDatabase } from '../../lib/mockDatabase';
 import { isMockModeEnabled, supabase } from '../../lib/supabase';
 import abyanLogo from '../../assets/abyan-logo.png';
@@ -10,6 +12,7 @@ interface InterviewerLoginProps {
   onLogin: (email: string, name: string) => void;
 }
 const RATER_ACCESS_STATE_KEY = 'cictrix_rater_access_state_map';
+type LoginFailure = { message: string; nextStep: string };
 
 const getAccessClient = () => {
   // Interviewer access should always check the real rater DB when available.
@@ -51,7 +54,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<LoginFailure | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -68,10 +71,13 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
-    setError('');
+    setFailure(null);
 
     if (!email || !password) {
-      setError('Please enter your email and password.');
+      setFailure({
+        message: 'Enter your email and password.',
+        nextStep: 'Fill in both fields and try again.',
+      });
       return;
     }
 
@@ -82,7 +88,10 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
       const accessStateMap = loadRaterAccessState();
       if (Object.prototype.hasOwnProperty.call(accessStateMap, normalizedEmail) && !accessStateMap[normalizedEmail]) {
-        setError('Your interviewer access has been revoked. Please contact HR.');
+        setFailure({
+          message: 'Your interviewer access has been revoked.',
+          nextStep: 'Contact HR if you believe this is a mistake.',
+        });
         return;
       }
 
@@ -92,7 +101,8 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       const { data: raterRows, error: raterError } = await selectRatersForAccess(client);
 
       if (raterError) {
-        setError('Unable to verify interviewer access. Please try again.');
+        const described = describeActionFailure('check your interviewer access', raterError);
+        setFailure({ message: described.message, nextStep: described.nextStep });
         return;
       }
 
@@ -101,12 +111,18 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       const hasActiveRaterAccess = matchedRaters.some((row: any) => Boolean(row?.is_active));
 
       if (!raterRecord) {
-        setError('No interviewer access is assigned to this account in the rater database.');
+        setFailure({
+          message: 'No interviewer access is assigned to this email.',
+          nextStep: 'Ask RSP to add your email under Rater Management, then try again.',
+        });
         return;
       }
 
       if (!hasActiveRaterAccess && !Boolean(raterRecord.is_active)) {
-        setError('Your interviewer access has been revoked. Please contact HR.');
+        setFailure({
+          message: 'Your interviewer access has been revoked.',
+          nextStep: 'Contact HR if you believe this is a mistake.',
+        });
         return;
       }
 
@@ -129,7 +145,10 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       });
 
       if (authError || !authData.user) {
-        setError('Invalid email or password. If access was just granted, ensure this email also exists in Supabase Authentication.');
+        setFailure({
+          message: "That email and password don't match an account.",
+          nextStep: "Check them and try again. If access was just granted, ask RSP to finish setting up your account.",
+        });
         return;
       }
 
@@ -144,8 +163,8 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       onLogin(resolvedEmail, userName);
       navigateAfterLogin();
     } catch (err) {
-      console.error('Login error:', err);
-      setError('Login failed. Please try again.');
+      const described = describeActionFailure('sign you in', err);
+      setFailure({ message: described.message, nextStep: described.nextStep });
     } finally {
       setLoading(false);
     }
@@ -260,10 +279,13 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
-              {error && (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {error}
-                </div>
+              {failure && (
+                <ActionFeedback
+                  title="We couldn't sign you in."
+                  message={failure.message}
+                  nextStep={failure.nextStep}
+                  onDismiss={() => setFailure(null)}
+                />
               )}
 
               {/* Email */}
@@ -281,7 +303,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                     type="email"
                     placeholder="Enter your email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setFailure(null); }}
                     autoComplete="email"
                     disabled={loading}
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
@@ -304,7 +326,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setFailure(null); }}
                     autoComplete="current-password"
                     disabled={loading}
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
@@ -343,12 +365,15 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-busy={loading || undefined}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ backgroundColor: '#363EE8' }}
                 onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = '#2830c5'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#363EE8'; }}
               >
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sign in</>
+                  : 'Sign in'}
               </button>
             </form>
 

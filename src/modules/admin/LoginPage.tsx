@@ -1,12 +1,16 @@
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ActionFeedback } from '../../components/action-feedback';
+import { Button } from '../../components/Button';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { supabase } from '../../lib/supabase';
 import { scheduleTransientUiReset } from '../../utils/uiReset';
 import iloiloCitySeal from '../../assets/iloilo-city-seal.png';
 import abyanLogo from '../../assets/abyan-logo.png';
 
 type Role = 'super-admin' | 'rsp' | 'lnd' | 'pm';
+type LoginFailure = { message: string; nextStep: string };
 
 const normalizeAdminRole = (role: string | null | undefined): Role | null => {
   if (!role) return null;
@@ -52,7 +56,7 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [failure, setFailure] = useState<LoginFailure | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -78,12 +82,12 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!email || !password) {
-      setErrorMsg('Please enter your email and password.');
+      setFailure({ message: 'Enter your email and password.', nextStep: 'Fill in both fields and try again.' });
       return;
     }
 
     setLoading(true);
-    setErrorMsg(null);
+    setFailure(null);
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -93,7 +97,10 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
       if (authError || !authData.user) {
         // The credentials themselves failed — say so, rather than implying the
         // account exists but is barred.
-        setErrorMsg('Invalid email or password.');
+        setFailure({
+          message: "That email and password don't match an account.",
+          nextStep: "Check them and try again. If you've forgotten your password, contact your administrator.",
+        });
         return;
       }
 
@@ -105,14 +112,20 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
 
       if (roleError || !(roleData as any)?.role) {
         await discardSession();
-        setErrorMsg('No role assigned. Contact the admin.');
+        setFailure({
+          message: 'Your account signed in but has no portal role assigned.',
+          nextStep: 'Ask your administrator to assign your role, then sign in again.',
+        });
         return;
       }
 
       const role = normalizeAdminRole((roleData as any).role);
       if (!role) {
         await discardSession();
-        setErrorMsg('Invalid role assignment. Contact the admin.');
+        setFailure({
+          message: "Your account has a role this portal doesn't recognise.",
+          nextStep: 'Ask your administrator to correct the role, then sign in again.',
+        });
         return;
       }
 
@@ -121,8 +134,9 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
       const resolvedEmail = authData.user.email ?? email;
       onLogin(resolvedEmail, role);
       navigateAfterLogin(role);
-    } catch {
-      setErrorMsg('Login failed. Please try again.');
+    } catch (error) {
+      const described = describeActionFailure('sign you in', error);
+      setFailure({ message: described.message, nextStep: described.nextStep });
     } finally {
       setLoading(false);
     }
@@ -258,7 +272,7 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      setErrorMsg(null);
+                      setFailure(null);
                     }}
                     autoComplete="email"
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
@@ -266,11 +280,14 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
                 </div>
               </div>
 
-              {/* Error Message Card */}
-              {errorMsg && (
-                <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-600 font-medium">
-                  {errorMsg}
-                </div>
+              {/* Failure card — §9.9 inline alert, naming the next step. */}
+              {failure && (
+                <ActionFeedback
+                  title="We couldn't sign you in."
+                  message={failure.message}
+                  nextStep={failure.nextStep}
+                  onDismiss={() => setFailure(null)}
+                />
               )}
 
               {/* Password */}
@@ -294,7 +311,7 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      setErrorMsg(null);
+                      setFailure(null);
                     }}
                     autoComplete="current-password"
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#4F46E5] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
@@ -331,13 +348,9 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
 
               {/* Submit — Primary, Large, the page's one primary action (§9.1). */}
               <div className="abyan-ds mt-2">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn btn-lg btn-primary w-full"
-                >
-                  {loading ? 'Signing in…' : 'Sign in'}
-                </button>
+                <Button type="submit" size="lg" variant="primary" loading={loading} className="w-full">
+                  Sign in
+                </Button>
               </div>
             </form>
 

@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, Lock, Pencil, Save, Send, Target, TriangleAlert } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Loader2, Lock, Pencil, Save, Send, Target, TriangleAlert } from 'lucide-react';
+import { SkeletonList } from '../../components/table-loading';
 import type { Employee } from '../../types/employee.types';
 import { listPositionSalaryGrades, salaryGradeForEmployee } from '../../lib/api/salaryGrades';
 import {
@@ -81,6 +82,7 @@ export const IdpFormSection = ({ employee }: { employee: Employee }) => {
   }, [employee]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState<'draft' | 'submit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -154,9 +156,11 @@ export const IdpFormSection = ({ employee }: { employee: Employee }) => {
       }
     }
     setSaving(true);
+    setSavingAction(submitting ? 'submit' : 'draft');
     setError(null);
     const res = await saveSubmission(form, submitting);
     setSaving(false);
+    setSavingAction(null);
     if (res.ok === false) {
       setError(res.error);
       return;
@@ -167,7 +171,13 @@ export const IdpFormSection = ({ employee }: { employee: Employee }) => {
   };
 
   // ── Gating ────────────────────────────────────────────────────────────────
-  if (loading) return <div className="mx-auto max-w-3xl px-4 py-6 text-sm text-slate-400">Loading…</div>;
+  if (loading) return (
+    <div className="mx-auto max-w-3xl px-4 py-6" aria-busy="true">
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <SkeletonList show rows={4} label="Loading your IDP…" />
+      </div>
+    </div>
+  );
 
   const header = (
     <div className="mb-5 flex items-center gap-2.5">
@@ -473,17 +483,21 @@ export const IdpFormSection = ({ employee }: { employee: Employee }) => {
             type="button"
             onClick={() => void persist(false)}
             disabled={saving}
+            aria-busy={savingAction === 'draft' || undefined}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
           >
-            <Save className="h-4 w-4" /> Save draft
+            {savingAction === 'draft' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" />} Save draft
           </button>
           <button
             type="button"
             onClick={() => void persist(true)}
             disabled={saving}
+            aria-busy={savingAction === 'submit' || undefined}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-60"
           >
-            <Send className="h-4 w-4" /> {saving ? 'Saving…' : alreadySubmitted ? 'Submit revision' : 'Submit'}
+            {savingAction === 'submit'
+              ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              : <Send className="h-4 w-4" />} {alreadySubmitted ? 'Submit revision' : 'Submit'}
           </button>
         </div>
       )}

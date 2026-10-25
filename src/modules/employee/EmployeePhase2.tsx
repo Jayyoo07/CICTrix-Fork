@@ -12,7 +12,7 @@
  * which unify on success_indicator_ratings (accomplishment + Q/E/T, rated_by).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Lock, CheckCircle, Info } from 'lucide-react';
+import { Lock, CheckCircle, Info, Loader2 } from 'lucide-react';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import {
   loadEmployeeRatingSheet,
@@ -21,6 +21,7 @@ import {
   type Phase2Status,
 } from '../../lib/api/ipcrRatings';
 import { markEmployeeNotificationsRead } from '../../lib/api/employeeNotifications';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { SkeletonList, useDelayedLoading } from '../../components/table-loading';
 import { DEFAULT_RATING_SCALE, getRatingScale, type RatingScaleEntry } from '../../lib/api/ipcrRatingScale';
 
@@ -69,6 +70,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
   }, []);
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [saving, setSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState<'draft' | 'submit' | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   const [hasNewerData, setHasNewerData] = useState(false);
@@ -144,7 +146,8 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
       // Opening Phase 2 clears the "self-rating opened" notification badge.
       void markEmployeeNotificationsRead(employeeId);
     } catch (err) {
-      console.error('Failed to load rating sheet:', err);
+      const described = describeActionFailure('load your rating sheet', err);
+      setNotice({ tone: 'err', text: `${described.message} ${described.nextStep}` });
     } finally {
       if (!isSilent) {
         setLoading(false);
@@ -226,6 +229,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
   const persist = async (submit: boolean) => {
     if (!sheet) return;
     setSaving(true);
+    setSavingAction(submit ? 'submit' : 'draft');
     setNotice(null);
     const res = await saveEmployeeRatings({
       targetSettingId: sheet.targetSettingId,
@@ -241,6 +245,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
       submit,
     });
     setSaving(false);
+    setSavingAction(null);
     if (res.ok === false) { setNotice({ tone: 'err', text: res.error }); return; }
     setStatus(res.data.phase2Status);
     setNotice({
@@ -497,16 +502,25 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
             {isLocked ? 'You can save a draft now; Submit opens during the rating period.' : 'Q = Quality · E = Efficiency · T = Timeliness · A = Average'}
           </p>
           <div className="flex gap-2">
-            <button onClick={() => void persist(false)} disabled={saving} className="rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 text-xs font-semibold transition disabled:opacity-50">
-              {saving ? 'Saving…' : 'Save Draft'}
+            <button
+              onClick={() => void persist(false)}
+              disabled={saving}
+              aria-busy={savingAction === 'draft' || undefined}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
+            >
+              {savingAction === 'draft' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              Save Draft
             </button>
             <button
               onClick={() => void persist(true)}
               disabled={saving || !isComplete || !canSubmit}
+              aria-busy={savingAction === 'submit' || undefined}
               title={!canSubmit ? 'Submission opens during the rating period.' : isComplete ? '' : 'Please rate at least one dimension (Q, E, or T) for each indicator.'}
               className="inline-flex items-center gap-1 rounded-lg bg-[#363EE8] hover:bg-[#2e35d4] text-white px-4 py-2 text-xs font-semibold shadow transition disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
-              {canSubmit ? <CheckCircle className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />} Submit Self-Ratings
+              {savingAction === 'submit'
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                : canSubmit ? <CheckCircle className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />} Submit Self-Ratings
             </button>
           </div>
         </div>

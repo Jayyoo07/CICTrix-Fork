@@ -8,6 +8,7 @@ import {
   EyeOff,
   FileText,
   Home,
+  Loader2,
   Lock,
   LogOut,
   RefreshCw,
@@ -329,6 +330,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   };
   const [workspaceRow, setWorkspaceRow] = useState<IpcrWorkspaceRow | null>(null);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
+  const [workspaceAction, setWorkspaceAction] = useState<'draft' | 'submit' | null>(null);
   const [orientationChecked, setOrientationChecked] = useState({
     duties: true,
     policies: true,
@@ -723,6 +725,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     }
 
     setWorkspaceSaving(true);
+    setWorkspaceAction(submit ? 'submit' : 'draft');
     setIpcrError(null);
 
     // Source of truth: the relational rows Phase 2 will attach ratings to.
@@ -734,6 +737,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     });
     if (targetRes.ok === false) {
       setWorkspaceSaving(false);
+      setWorkspaceAction(null);
       setIpcrError(targetRes.error);
       return;
     }
@@ -757,6 +761,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       submit,
     });
     setWorkspaceSaving(false);
+    setWorkspaceAction(null);
     if (res.ok === false) {
       setIpcrError(res.error || 'Failed to save targets.');
       return;
@@ -821,6 +826,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       return;
     }
     setWorkspaceSaving(true);
+    setWorkspaceAction(submit ? 'submit' : 'draft');
     setIpcrError(null);
     const res = await saveAccomplishments({
       ...workspaceIdentity(),
@@ -831,6 +837,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     });
     if (res.ok === false) {
       setWorkspaceSaving(false);
+      setWorkspaceAction(null);
       setIpcrError(res.error || 'Failed to save accomplishments.');
       return;
     }
@@ -916,6 +923,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       reloadIpcrIfSafe(true);
     }
     setWorkspaceSaving(false);
+    setWorkspaceAction(null);
     setTimeout(() => setSaveSuccess(null), 5000);
   };
 
@@ -2206,16 +2214,20 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     <button
                       onClick={() => void handleSaveWorkspaceTargets(false)}
                       disabled={workspaceSaving}
-                      className="border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
+                      aria-busy={workspaceAction === 'draft' || undefined}
+                      className="inline-flex items-center justify-center gap-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
                     >
+                      {workspaceAction === 'draft' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                       Save Draft
                     </button>
                     <button
                       onClick={() => void handleSaveWorkspaceTargets(true)}
                       disabled={workspaceSaving}
-                      className="bg-[#363EE8] hover:bg-[#2e35d4] text-white rounded-lg px-4 py-2 text-xs font-semibold shadow transition disabled:opacity-50"
+                      aria-busy={workspaceAction === 'submit' || undefined}
+                      className="inline-flex items-center justify-center gap-2 bg-[#363EE8] hover:bg-[#2e35d4] text-white rounded-lg px-4 py-2 text-xs font-semibold shadow transition disabled:opacity-50"
                     >
-                      {workspaceSaving ? 'Submitting…' : 'Submit Targets for Approval'}
+                      {workspaceAction === 'submit' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                      Submit Targets for Approval
                     </button>
                   </div>
                 )}
@@ -2422,16 +2434,20 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                           <button
                             onClick={() => void handleSubmitWorkspaceAccomplishments(false)}
                             disabled={!isAccomplishmentRatingActive || workspaceSaving}
-                            className="border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
+                            aria-busy={workspaceAction === 'draft' || undefined}
+                            className="inline-flex items-center justify-center gap-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
                           >
+                            {workspaceAction === 'draft' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                             Save Draft
                           </button>
                           <button
                             onClick={() => void handleSubmitWorkspaceAccomplishments(true)}
                             disabled={!isAccomplishmentRatingActive || workspaceSaving}
-                            className="bg-[#363EE8] hover:bg-[#2e35d4] text-white rounded-lg px-4 py-2 text-xs font-semibold shadow transition disabled:bg-slate-400 disabled:cursor-not-allowed"
+                            aria-busy={workspaceAction === 'submit' || undefined}
+                            className="inline-flex items-center justify-center gap-2 bg-[#363EE8] hover:bg-[#2e35d4] text-white rounded-lg px-4 py-2 text-xs font-semibold shadow transition disabled:bg-slate-400 disabled:cursor-not-allowed"
                           >
-                            {workspaceSaving ? 'Submitting…' : 'Submit Evaluation'}
+                            {workspaceAction === 'submit' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                            Submit Evaluation
                           </button>
                         </div>
                       </div>

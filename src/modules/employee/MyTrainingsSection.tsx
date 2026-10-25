@@ -6,9 +6,12 @@
  * new enrollment shows up here on the next poll (15s) without a re-login.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarDays, GraduationCap, MapPin, User } from 'lucide-react';
 import { listMyTrainings, type MyTraining, type MyTrainingStatus } from '../../lib/api/myTrainings';
+import { ActionFeedback } from '../../components/action-feedback';
+import { SkeletonList } from '../../components/table-loading';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { CATEGORY_COLORS } from '../admin/trainingCategories';
 
 const POLL_MS = 15000;
@@ -27,17 +30,26 @@ const fmtRange = (t: MyTraining) =>
 export const MyTrainingsSection = ({ employeeId }: { employeeId: string }) => {
   const [trainings, setTrainings] = useState<MyTraining[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<{ message: string; nextStep: string } | null>(null);
   const timer = useRef<number | null>(null);
 
+  const load = useCallback(async () => {
+    const res = await listMyTrainings(employeeId);
+    if (!res.ok) {
+      const described = describeActionFailure('load your trainings', res.error);
+      setFailure({ message: described.message, nextStep: described.nextStep });
+    } else {
+      setTrainings(res.data);
+      setFailure(null);
+    }
+    setLoading(false);
+  }, [employeeId]);
+
   useEffect(() => {
-    const load = async () => {
-      setTrainings(await listMyTrainings(employeeId));
-      setLoading(false);
-    };
     void load();
     timer.current = window.setInterval(() => void load(), POLL_MS);
     return () => { if (timer.current) window.clearInterval(timer.current); };
-  }, [employeeId]);
+  }, [load]);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -50,7 +62,16 @@ export const MyTrainingsSection = ({ employeeId }: { employeeId: string }) => {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <div className="rounded-2xl border border-slate-200 bg-white" aria-busy="true">
+          <SkeletonList show rows={3} label="Loading your trainings…" />
+        </div>
+      ) : failure ? (
+        <ActionFeedback
+          title="We couldn't load your trainings."
+          message={failure.message}
+          nextStep={failure.nextStep}
+          onRetry={() => { setLoading(true); void load(); }}
+        />
       ) : trainings.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
           <GraduationCap className="mx-auto mb-3 h-10 w-10 text-slate-300" />

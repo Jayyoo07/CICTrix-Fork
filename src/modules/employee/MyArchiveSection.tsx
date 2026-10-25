@@ -6,26 +6,35 @@
  * average), so they can see how their targets and performance have progressed.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive } from 'lucide-react';
 import { getEmployeeArchive, type ArchiveSemester } from '../../lib/api/ipcrArchive';
+import { ActionFeedback } from '../../components/action-feedback';
+import { SkeletonList } from '../../components/table-loading';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { getAdjectival } from '../admin/pm/SummaryOfRatings';
 import { IpcrArchiveSemester } from '../admin/pm/IpcrArchiveSemester';
 
 export const MyArchiveSection = ({ employeeNum }: { employeeNum: string }) => {
   const [semesters, setSemesters] = useState<ArchiveSemester[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<{ message: string; nextStep: string } | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await getEmployeeArchive(employeeNum);
+    if (!res.ok) {
+      const described = describeActionFailure('load your archive', res.error);
+      setFailure({ message: described.message, nextStep: described.nextStep });
+    } else {
+      setSemesters(res.data);
+      setFailure(null);
+    }
+    setLoading(false);
+  }, [employeeNum]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const rows = await getEmployeeArchive(employeeNum);
-      if (cancelled) return;
-      setSemesters(rows);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [employeeNum]);
+    void load();
+  }, [load]);
 
   const career = useMemo(() => {
     const scores = semesters.map((s) => s.overall).filter((n): n is number => n != null);
@@ -54,7 +63,16 @@ export const MyArchiveSection = ({ employeeNum }: { employeeNum: string }) => {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading your archive…</p>
+        <div className="rounded-2xl border border-slate-200 bg-white" aria-busy="true">
+          <SkeletonList show rows={4} label="Loading your archive…" />
+        </div>
+      ) : failure ? (
+        <ActionFeedback
+          title="We couldn't load your archive."
+          message={failure.message}
+          nextStep={failure.nextStep}
+          onRetry={() => { setLoading(true); void load(); }}
+        />
       ) : semesters.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
           <Archive className="mx-auto mb-3 h-10 w-10 text-slate-300" />

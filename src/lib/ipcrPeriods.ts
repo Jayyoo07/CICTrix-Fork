@@ -24,6 +24,9 @@ export const CANONICAL_RATING_PERIODS = [
   'Jul 1-Dec 31 2024',
   'Jan 1-Jun 30 2025',
   'Jul 1-Dec 31 2025',
+  // Closed and rated by migration 20261024174932_seed_semester_ipcrs.sql. The
+  // archive filters on this list, so omitting it hid the newest semester.
+  'Jan 1-Jun 30 2026',
 ] as const;
 
 export type CanonicalRatingPeriod = (typeof CANONICAL_RATING_PERIODS)[number];

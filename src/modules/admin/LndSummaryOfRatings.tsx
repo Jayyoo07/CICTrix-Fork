@@ -5,7 +5,7 @@ import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { EmptyState } from '../../components/EmptyState';
 import { getActiveHeadcountByDepartment, getIPCRRecordsFromGapView } from '../../lib/api/competencyGapAnalysis';
 import {
-  REPORT_PERIOD,
+  RATED_PERIOD_LABEL,
   buildDeptCompletionRows,
   getAdjectival,
   type IPCRRatingRecord,
@@ -53,7 +53,7 @@ export const LndSummaryOfRatings = () => {
       // Headcount is the completion denominator; if it fails, fall back to the
       // rated employees alone rather than blanking the whole page.
       const [data, roster] = await Promise.all([
-        getIPCRRecordsFromGapView(REPORT_PERIOD),
+        getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
         getActiveHeadcountByDepartment().catch(err => {
           console.error('Error loading office headcount:', err);
           return new Map<string, { name: string; count: number }>();
@@ -139,7 +139,7 @@ export const LndSummaryOfRatings = () => {
             <p className="mt-1 text-sm text-gray-500">
               {activeDept === null
                 ? 'IPCR performance ratings by department — read-only identification surface'
-                : `Employee ratings · sorted lowest-first · ${REPORT_PERIOD}`}
+                : `Employee ratings · sorted lowest-first · ${RATED_PERIOD_LABEL}`}
             </p>
           </div>
           {/* No Refresh button: useRealtimeRefresh below subscribes to the

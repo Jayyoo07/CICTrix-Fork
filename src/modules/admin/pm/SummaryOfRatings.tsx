@@ -183,7 +183,13 @@ export const DeptCompletionCell = ({ row }: { row: DeptCompletionRow }) => {
   );
 };
 
-export const REPORT_PERIOD = 'January–June 2025';
+/**
+ * Label for the rating period, not a filter. The gap view exposes no
+ * `rating_period`, so this page averages every period it can read; claiming a
+ * single semester would misdescribe the number. Shared with the L&D summary and
+ * the PM overview so the three agree.
+ */
+export const RATED_PERIOD_LABEL = 'All rated periods';
 
 const NEEDS_IMPROVEMENT_THRESHOLD = 3;
 
@@ -218,7 +224,7 @@ export const SummaryOfRatings = () => {
       // Headcount is the completion denominator; if it fails, fall back to the
       // rated employees alone rather than blanking the whole page.
       const [data, roster] = await Promise.all([
-        getIPCRRecordsFromGapView(REPORT_PERIOD),
+        getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
         getActiveHeadcountByDepartment().catch(err => {
           console.error('Error loading office headcount:', err);
           return new Map<string, { name: string; count: number }>();
@@ -299,7 +305,7 @@ export const SummaryOfRatings = () => {
             <p className="mt-1 text-sm text-gray-500">
               {activeDept === null
                 ? 'IPCR performance ratings by department — read-only identification surface'
-                : `Employee ratings · sorted lowest-first · ${REPORT_PERIOD}`}
+                : `Employee ratings · sorted lowest-first · ${RATED_PERIOD_LABEL}`}
             </p>
           </div>
           <div className="flex items-center gap-3">

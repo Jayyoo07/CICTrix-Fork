@@ -10,10 +10,14 @@
    `.rsp-ds` (RSP portal) shares the tokens, buttons and badges but NOT the
    text-inherit reset below: its pages colour text with Tailwind utilities,
    which that reset would override. Its utility remaps live in rsp-design.css.
+   `.abyan-tokens` gives a container the tokens only: no text reset and no
+   remaps, for wrapping legacy markup that must keep rendering as it does
+   (the applicant tracker's expandable rows hold the page's older sections).
    ============================================================================ */
 
 .abyan-ds,
-.rsp-ds {
+.rsp-ds,
+.abyan-tokens {
   /* Brand (§3.1) */
   --color-primary: #363EE8;
   --color-primary-700: #191FA8;

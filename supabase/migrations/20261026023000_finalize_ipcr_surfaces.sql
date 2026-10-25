@@ -51,7 +51,10 @@ begin
   if not found then
     return;
   end if;
-  if v_ts.status <> 'approved' or v_ts.phase2_status <> 'completed' then
+  -- `is distinct from`, not `<>`: a record with a null status would make `<>`
+  -- evaluate to null and slip through the guard.
+  if v_ts.status is distinct from 'approved'
+     or v_ts.phase2_status is distinct from 'completed' then
     return;
   end if;
   if v_ts.cycle_id is null then

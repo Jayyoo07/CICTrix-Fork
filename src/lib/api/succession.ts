@@ -23,6 +23,7 @@ import type { FunctionType } from './ipcrTargets';
 import {
   RANKING_WEIGHTS,
   actionForGate,
+  compareRank,
   isDownwardMove,
   isDownwardTitleMove,
   positionLevelRatio,

@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  BarChart2,
   Bell,
   Briefcase,
   Building2,
@@ -25,7 +24,6 @@ import {
   Trash2,
   User,
   UserCheck,
-  UserMinus,
   UserPlus,
   Users,
   X,
@@ -709,7 +707,7 @@ const normalizeWrittenScore = (value: number): number => {
 
 export const RSPDashboard = () => {
   // Plantilla names for posting/application rows (never their internal keys).
-  const { nameFor: plantillaNameFor, summaryForPosting } = usePlantillaNames();
+  const { summaryForPosting } = usePlantillaNames();
 
   // Live updates: both events feed the dashboard's existing syncJobs reload.
   useRealtimeRefresh({
@@ -750,10 +748,6 @@ export const RSPDashboard = () => {
   const [jobsOffice, setJobsOffice] = useState('all');
   const [jobsPage, setJobsPage] = useState(0);
 
-  const [qualifiedTab, setQualifiedTab] = useState<'all' | 'completed' | 'pending'>('all');
-  const [qualifiedSearch, setQualifiedSearch] = useState('');
-  const [qualifiedPosition, setQualifiedPosition] = useState('all');
-  const [qualifiedOffice, setQualifiedOffice] = useState('all');
   const [reportsView, setReportsView] = useState<'overview' | 'documents'>('overview');
   const [activeRankingPosition, setActiveRankingPosition] = useState<string | null>(null);
   const [showRankingModal, setShowRankingModal] = useState(false);
@@ -763,7 +757,7 @@ export const RSPDashboard = () => {
   const [showAssessmentFormsModal, setShowAssessmentFormsModal] = useState(false);
   const [assessmentStatusFilter, setAssessmentStatusFilter] = useState<AssessmentStatusFilter>('all');
   const [assessmentSearch, setAssessmentSearch] = useState('');
-  const [rankingPositionFilter, setRankingPositionFilter] = useState<string>('all');
+  const [, setRankingPositionFilter] = useState<string>('all');
   const [activeDocumentTemplateId, setActiveDocumentTemplateId] = useState<EmployeeDocumentTemplateId | null>(null);
   const [expandedDocumentOffices, setExpandedDocumentOffices] = useState<Record<string, boolean>>({});
   const [selectedDocumentSubmissionIds, setSelectedDocumentSubmissionIds] = useState<string[]>([]);
@@ -1979,6 +1973,8 @@ export const RSPDashboard = () => {
     return map;
   }, [credentialedNewlyHiredRows]);
 
+  // getEmployeePortalAccounts reads module storage; these deps intentionally invalidate the cache.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const portalAccounts = useMemo(() => getEmployeePortalAccounts(), [credentialedNewlyHiredRows, section]);
 
   const portalAccountByEmployeeId = useMemo(
@@ -1994,7 +1990,7 @@ export const RSPDashboard = () => {
       if (account) map.set(String(row.applicantId), account);
     });
     return map;
-  }, [credentialedNewlyHiredRows, portalAccountByEmployeeId, portalAccounts]);
+  }, [credentialedNewlyHiredRows, portalAccountByEmployeeId]);
 
   // Real hire dates, keyed by BOTH applicant id and employee number so any
   // directory source can resolve one. newly_hired.dateHired is set at the
@@ -2347,7 +2343,7 @@ export const RSPDashboard = () => {
         ? formatDate(rec.date_hired)
         : (selectedEmployeeDetails?.created_at ? formatDate(selectedEmployeeDetails.created_at) : null),
     };
-  }, [selectedEmployeeId, selectedEmployeeDetails, selectedEmployeeDbRecord, employeeNumberById, employeeNumberFromNewlyHired, portalAccountByApplicantId, portalAccountByEmployeeId, employeePersonalByNumber]);
+  }, [selectedEmployeeId, selectedEmployeeDetails, selectedEmployeeDbRecord, employeeNumberById, employeeNumberFromNewlyHired, portalAccountByApplicantId, portalAccountByEmployeeId]);
 
   const selectedEmployeeDocuments = useMemo(() => {
     if (!selectedEmployeeDetails) return [] as Array<{
@@ -2403,7 +2399,7 @@ export const RSPDashboard = () => {
         : 'IT Department',
       newPosition: currentPosition,
     }));
-  }, [selectedEmployeeDetails]);
+  }, [selectedEmployeeDetails, employeeDirectoryDepartments]);
 
   const bulkRequestEmployees = useMemo<BulkRequestEmployee[]>(() => {
     return directoryEmployeesSource.map((employee) => ({
@@ -2814,12 +2810,6 @@ export const RSPDashboard = () => {
     return out;
   }, [deletedJobReports, rankingHistoricalData]);
 
-  const openRankingReport = (position: string) => {
-    setActiveRankingPosition(position);
-    setSelectedHireApplicantIds([]);
-    setShowRankingModal(true);
-  };
-
   const closeRankingReport = () => {
     setShowRankingModal(false);
     setShowHireApplicantsModal(false);
@@ -3077,10 +3067,6 @@ export const RSPDashboard = () => {
   const closeBulkRequestDialog = () => {
     setShowBulkRequestDialog(false);
     resetBulkRequestForm();
-  };
-
-  const openBulkRequestDialog = () => {
-    setShowBulkRequestDialog(true);
   };
 
   const openOfficeEmployees = (office: string) => {

@@ -69,5 +69,5 @@ export const useModalBehavior = ({ open, dismissible, onClose, panelRef, bodyRef
       if (opener && document.contains(opener)) opener.focus();
     };
     // Focus and listeners are set once per opening; later prop changes go through `latest`.
-  }, [open]);
+  }, [open, panelRef, bodyRef, closeRef, initialFocusRef]);
 };

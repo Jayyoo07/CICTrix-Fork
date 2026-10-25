@@ -118,7 +118,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
         return;
       }
 
-      if (!hasActiveRaterAccess && !Boolean(raterRecord.is_active)) {
+      if (!hasActiveRaterAccess && !raterRecord.is_active) {
         setFailure({
           message: 'Your interviewer access has been revoked.',
           nextStep: 'Contact HR if you believe this is a mistake.',

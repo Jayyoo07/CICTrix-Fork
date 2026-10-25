@@ -235,6 +235,9 @@ export const OfficeAccountConsole: React.FC = () => {
     onChange: useCallback(() => {
       void loadBellNotifications();
       void refreshPendingApprovals();
+      // refreshPendingApprovals is declared below with its own state; the realtime
+      // hook keeps the latest callback in a ref, so identity does not matter here.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loadBellNotifications]),
     enabled: !!officeRole,
   });
@@ -426,6 +429,8 @@ export const OfficeAccountConsole: React.FC = () => {
       }
     }
     void loadUserSession();
+    // Mount-only session bootstrap; the role resolution refreshes approvals itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Requests and recommendations are both office-scoped, so they can only load

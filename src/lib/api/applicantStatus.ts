@@ -250,8 +250,8 @@ export function funnelBucket(status: ApplicantWorkflowStatus): FunnelBucket {
     case 'For Evaluation':
       return 'assessment';
     case 'Qualified':
-    // Reserved, not hired yet: it can still be revoked.
     case 'For Contract Signing':
+      // Reserved, not hired yet: it can still be revoked.
       return 'qualified';
     case 'Selected':
       return 'selected';

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, Search, UserPlus, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, Search, UserPlus } from 'lucide-react';
 import { Modal } from '../../components/modal';
 import { useBackClosesView } from '../../hooks/useHistoryBack';
 import { fetchNewlyHiredStats, type NewlyHiredStats } from '../../lib/api/newlyHiredStats';
@@ -325,8 +325,11 @@ export function RspDashboardOverview({
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [jobs, applicants, succession]);
 
-  const inDept = (name: string | null | undefined) => department === 'all' || norm(name) === norm(department);
-  const start = periodStart(period, today);
+  const inDept = useCallback(
+    (name: string | null | undefined) => department === 'all' || norm(name) === norm(department),
+    [department],
+  );
+  const start = useMemo(() => periodStart(period, today), [period, today]);
 
   // ── Job postings ──────────────────────────────────────────────────────────
   const postings = useMemo(() => {
@@ -360,7 +363,7 @@ export function RspDashboardOverview({
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
     return { open: open.length, closingSoon, stale, underReview, rows };
-  }, [jobs, department, today]);
+  }, [jobs, inDept, today]);
 
   // ── Applicants ────────────────────────────────────────────────────────────
   const applicantStats = useMemo(() => {
@@ -398,7 +401,7 @@ export function RspDashboardOverview({
       closedOut,
       hiredElsewhere,
     };
-  }, [applicants, department, period, stageOf, today, onOpenApplicants, onOpenQualified, onOpenNewHired]);
+  }, [applicants, inDept, start, stageOf, today, onOpenApplicants, onOpenQualified, onOpenNewHired]);
 
   const perVacancy = postings.open > 0 ? (applicantStats.total / postings.open).toFixed(1) : '—';
 
@@ -431,7 +434,7 @@ export function RspDashboardOverview({
     return [...byKey.values()].sort(
       (x, y) => x.date.getTime() - y.date.getTime() || String(x.time ?? '').localeCompare(String(y.time ?? '')),
     );
-  }, [applicants, department, evaluatedApplicantIds, today]);
+  }, [applicants, inDept, evaluatedApplicantIds, today]);
 
   const assessmentStats = useMemo(() => {
     const weekEnd = new Date(today.getTime() + UPCOMING_WEEK_DAYS * DAY_MS);
@@ -448,7 +451,7 @@ export function RspDashboardOverview({
       resultsMissing: resultsMissing.size,
       completed: sessions.filter((s) => s.date >= start && s.date < today).length,
     };
-  }, [sessions, applicants, department, evaluatedApplicantIds, today, period]);
+  }, [sessions, applicants, inDept, evaluatedApplicantIds, today, start]);
 
   const listedSessions = useMemo(() => {
     if (selectedDay) return sessions.filter((s) => sameDay(s.date, selectedDay));
@@ -501,7 +504,7 @@ export function RspDashboardOverview({
         const bd = parseDay(b.incumbentLeavingDate)?.getTime() ?? Infinity;
         return ad - bd || a.title.localeCompare(b.title);
       });
-  }, [succession, department]);
+  }, [succession, inDept]);
 
   const monthLabel = calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const shiftMonth = (delta: number) =>

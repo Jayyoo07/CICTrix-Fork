@@ -1,7 +1,7 @@
 import { useBackClosesView } from '../../hooks/useHistoryBack';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAdminEmail } from '../../lib/adminSession';
-import { AlertCircle, Building2, Check, CheckCircle2, ClipboardList, Copy, History, Search, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
+import { AlertCircle, Building2, Check, CheckCircle2, ClipboardList, History, Search, ShieldCheck, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { AdminHeader } from '../../components/AdminHeader';
 import { Dialog } from '../../components/Dialog';
 import { Sidebar } from '../../components/Sidebar';
@@ -1720,13 +1720,6 @@ const input: React.CSSProperties = {
   boxSizing: 'border-box',
   background: '#fff',
   color: '#111827',
-};
-
-const credBox: React.CSSProperties = {
-  background: '#f3f4f6',
-  border: '1px solid #e5e7eb',
-  borderRadius: '8px',
-  padding: '12px 14px',
 };
 
 const primaryBtn: React.CSSProperties = {

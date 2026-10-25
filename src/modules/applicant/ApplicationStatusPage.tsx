@@ -612,6 +612,8 @@ export const ApplicationStatusPage = () => {
     autoSearchedRef.current = true;
     setQuery(incoming);
     void runSearch(incoming);
+    // Guarded by autoSearchedRef; runSearch is a local loader, not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, location.state]);
 
   const handleReupload = async (doc: AttachmentRow, file: File) => {

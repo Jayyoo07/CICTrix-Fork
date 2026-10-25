@@ -598,7 +598,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         setIpcrLoading(false);
       }
     }
-  }, [currentUser.supabaseId, currentUser.employeeId, profile.employmentStatus, profile.dateHired]);
+    // emptyCatRating is a pure local factory; adding it would re-create the loader every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser.supabaseId, currentUser.employeeId, profile.employmentStatus, profile.dateHired, snapshotLoaded]);
 
   const pendingIpcrRefresh = useRef(false);
   const reloadIpcrIfSafe = useCallback((isSilent: boolean) => {
@@ -1051,6 +1053,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     // Suppress the sync when the DB hydration has already applied fresher data.
     if (dbHydrated.current) return;
     setProfile(currentUser);
+    // Keyed by profileSyncVersion, which is derived from currentUser's id and updatedAt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileSyncVersion]);
 
   // ── DB hydration (mount-only) ──────────────────────────────────────────────

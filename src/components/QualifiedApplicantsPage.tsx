@@ -1321,7 +1321,7 @@ export const QualifiedApplicantsPage = () => {
       normalizedStatus.includes('hired');
 
     setStatusDecisionLocked(shouldLock);
-  }, [activeApplicant?.status]);
+  }, [activeApplicant]);
 
   const handleDisqualifyAction = (applicantId: string) => {
     // Prevent disqualifying if already disqualified

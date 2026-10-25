@@ -411,7 +411,7 @@ export const PMDashboard = ({
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   // Every Active employee's current IPCR status, for the overview's submission card. null = failed to load.
   const [ipcrStatuses, setIpcrStatuses] = useState<IpcrStatus[] | null>([]);
-  const [probationaryMetrics, setProbationaryMetrics] = useState({
+  const [, setProbationaryMetrics] = useState({
     total: 0,
     due: 0,
     nextDue: '—'
@@ -512,7 +512,11 @@ export const PMDashboard = ({
   }, []);
 
   useEffect(() => {
-    calculateStats();
+    const activeCycle = cycles.find(c => c.status === 'Active');
+    setStats({
+      activeCycle: activeCycle?.title || 'None',
+      pendingReviews: 12 // Dummy for now
+    });
   }, [cycles]);
 
   // Group active employees by department + merge live evaluation status per row.
@@ -870,14 +874,6 @@ export const PMDashboard = ({
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateStats = () => {
-    const activeCycle = cycles.find(c => c.status === 'Active');
-    setStats({
-      activeCycle: activeCycle?.title || 'None',
-      pendingReviews: 12 // Dummy for now
-    });
   };
 
   const handleAddCycle = async () => {

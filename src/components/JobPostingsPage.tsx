@@ -801,7 +801,7 @@ export const JobPostingsPage = () => {
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     setEditOpenedFromDetails(true);
     openEditModal(job);
-  }, [location.state, jobs]);
+  }, [location.state, location.pathname, location.search, navigate, jobs]);
 
   const closeModal = () => {
     setShowModal(false);
@@ -1007,52 +1007,6 @@ export const JobPostingsPage = () => {
     setToast(editingId
       ? `Job position updated${slotNote}.`
       : `Job position created${slotNote}. Open it from Job Vacancies to advertise it.`);
-  };
-
-  const duplicatePosting = async (job: JobPosting) => {
-    const duplicatedId = crypto.randomUUID();
-    // The copy keeps the plantilla names; internal keys are unique system-wide,
-    // so each copied plantilla gets a fresh one.
-    const duplicatedSlots = (job.plantillaSlots ?? [{
-      id: `legacy:${job.id}`,
-      jobPostingId: job.id,
-      slotNumber: 1,
-      itemNumber: job.jobCode,
-      status: 'open' as PlantillaSlotStatus,
-    }]).map((slot, index) => ({
-      id: `pending:${index}`,
-      jobPostingId: duplicatedId,
-      slotNumber: index + 1,
-      label: plantillaLabel(slot),
-      itemNumber: internalPlantillaKey(),
-      salaryGrade: slot.salaryGrade,
-      monthlySalary: slot.monthlySalary,
-      status: 'open' as PlantillaSlotStatus,
-    }));
-
-    const duplicated: JobPosting = {
-      ...job,
-      id: duplicatedId,
-      title: `${job.title} (Copy)`,
-      jobCode: duplicatedSlots[0].itemNumber,
-      plantillaSlots: duplicatedSlots,
-      status: 'Draft',
-      postedDate: new Date().toISOString(),
-    };
-    setJobs([duplicated, ...jobs]);
-    await saveJobPostingsAndWait([duplicated, ...jobs]);
-
-    const result = await saveSlotsForJob(
-      duplicatedId,
-      duplicatedSlots.map((slot) => ({
-        label: slot.label,
-        itemNumber: slot.itemNumber,
-        salaryGrade: slot.salaryGrade,
-        monthlySalary: slot.monthlySalary,
-        status: slot.status,
-      })),
-    );
-    setToast(result.ok ? 'Posting duplicated as draft.' : `Duplicated, but slots failed to save: ${result.error}`);
   };
 
   const deleteJobPosting = async (job: JobPosting) => {

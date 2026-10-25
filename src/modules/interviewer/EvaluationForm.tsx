@@ -243,6 +243,8 @@ export function EvaluationForm() {
       setActiveTab(type === 'promotional' ? 'pcpt' : 'oral');
       fetchApplicantData();
     }
+    // Loader is re-created each render and is not an input; refetch only when the id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const hasOralEvaluation = appointmentType === 'original';

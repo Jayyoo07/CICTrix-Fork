@@ -130,10 +130,6 @@ const statusBadge = (status: RaterStatus) => {
   );
 };
 
-const roleBadge = (role: string) => {
-  return <span className="rounded-md bg-purple-50 px-3 py-1 text-xs font-medium text-purple-600">{role}</span>;
-};
-
 const runRaterEmailUpdate = async (
   client: any,
   updates: Record<string, unknown>,
@@ -209,7 +205,7 @@ export const RaterManagementPage = () => {
   // First load only; focus and storage-event refetches stay silent.
   const [initialLoad, setInitialLoad] = useState(true);
   const ratersLoad = useTableLoading(initialLoad, ratersData.length > 0);
-  const [profileAccounts, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
+  const [, setProfileAccounts] = useState<ProfileAccountRow[]>([]);
   const [showGuide, setShowGuide] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');

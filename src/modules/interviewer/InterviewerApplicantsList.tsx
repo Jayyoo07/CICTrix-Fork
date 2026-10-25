@@ -494,11 +494,15 @@ export function InterviewerApplicantsList({
       window.removeEventListener('cictrix:job-postings-updated', handleFocus as EventListener);
       window.removeEventListener('storage', onStorage);
     };
+    // Loader is re-created each render and is not an input; refetch only when the job changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobTitle]);
 
   useRealtimeRefresh({
     channel: `interviewer-applicants-${jobTitle}`,
     tables: ['applicants', 'evaluations'],
+    // The realtime hook keeps the latest callback in a ref; the loader is not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     onChange: useCallback(() => { void fetchApplicantsAndJob(true); }, [jobTitle]),
   });
 

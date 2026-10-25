@@ -30,6 +30,8 @@ import {
   officialIndicator,
 } from './types';
 import type { DemoAccount, Schedule, TargetRow, AccomplishmentRow, TargetCategory } from './types';
+import { CharacterCount } from '../../../../components/CharacterCount';
+import { IPCR_LIMITS } from '../../../../lib/ipcrLimits';
 
 const inputCls =
   'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none';
@@ -213,11 +215,13 @@ function Phase1Form({ account, onSubmitted }: { account: DemoAccount; onSubmitte
           <div key={r.key} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-12">
             <div className="md:col-span-4">
               <Label>MFO / PAP</Label>
-              <textarea className={inputCls} rows={2} value={r.mfo} onChange={(e) => setRow(r.key, { mfo: e.target.value })} placeholder="Task or duty description" />
+              <textarea className={inputCls} rows={2} maxLength={IPCR_LIMITS.mfo} value={r.mfo} onChange={(e) => setRow(r.key, { mfo: e.target.value })} placeholder="Task or duty description" />
+              <CharacterCount value={r.mfo} max={IPCR_LIMITS.mfo} />
             </div>
             <div className="md:col-span-4">
               <Label>Success Indicator</Label>
-              <textarea className={inputCls} rows={2} value={r.indicator} onChange={(e) => setRow(r.key, { indicator: e.target.value })} placeholder="The target you are committing to" />
+              <textarea className={inputCls} rows={2} maxLength={IPCR_LIMITS.successIndicator} value={r.indicator} onChange={(e) => setRow(r.key, { indicator: e.target.value })} placeholder="The target you are committing to" />
+              <CharacterCount value={r.indicator} max={IPCR_LIMITS.successIndicator} />
             </div>
             <div className="md:col-span-2">
               <Label>Category</Label>
@@ -367,7 +371,8 @@ function Phase2Form({ account, targets, onSubmitted }: { account: DemoAccount; t
             </div>
             <div>
               <Label>Actual Accomplishment</Label>
-              <textarea className={inputCls} rows={3} value={forms[t.id]?.actual ?? ''} onChange={(e) => setForm(t.id, { actual: e.target.value })} placeholder="What you actually did against the target" />
+              <textarea className={inputCls} rows={3} maxLength={IPCR_LIMITS.accomplishment} value={forms[t.id]?.actual ?? ''} onChange={(e) => setForm(t.id, { actual: e.target.value })} placeholder="What you actually did against the target" />
+              <CharacterCount value={forms[t.id]?.actual ?? ''} max={IPCR_LIMITS.accomplishment} />
               <div className="mt-2 flex gap-3">
                 <Rating label="Q" value={forms[t.id]?.q ?? ''} onChange={(v) => setForm(t.id, { q: v })} />
                 <Rating label="E" value={forms[t.id]?.e ?? ''} onChange={(v) => setForm(t.id, { e: v })} />

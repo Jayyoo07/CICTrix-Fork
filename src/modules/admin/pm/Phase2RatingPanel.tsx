@@ -14,6 +14,8 @@ import {
 } from '../../../lib/api/ipcrRatings';
 import { createNotifications } from '../../../lib/api/employeeNotifications';
 import { SkeletonList, useTableLoading } from '../../../components/table-loading';
+import { CharacterCount } from '../../../components/CharacterCount';
+import { IPCR_LIMITS } from '../../../lib/ipcrLimits';
 
 const FUNCTION_LABEL: Record<string, string> = {
   core: 'Core Functions',
@@ -383,12 +385,16 @@ export const Phase2RatingPanel: React.FC<{
                                       <div>
                                         <span className="text-[10px] font-extrabold uppercase text-indigo-600 block tracking-wider">Employee Achievement (Phase 2 Accomplishment)</span>
                                         {editing ? (
-                                          <textarea
-                                            rows={2}
-                                            value={editAccomplishment[si.successIndicatorId] ?? ''}
-                                            onChange={(e) => setEditAccomplishment((prev) => ({ ...prev, [si.successIndicatorId]: e.target.value }))}
-                                            className="w-full mt-1.5 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                          />
+                                          <>
+                                            <textarea
+                                              rows={2}
+                                              value={editAccomplishment[si.successIndicatorId] ?? ''}
+                                              onChange={(e) => setEditAccomplishment((prev) => ({ ...prev, [si.successIndicatorId]: e.target.value }))}
+                                              maxLength={IPCR_LIMITS.accomplishment}
+                                              className="w-full mt-1.5 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                            <CharacterCount value={editAccomplishment[si.successIndicatorId] ?? ''} max={IPCR_LIMITS.accomplishment} />
+                                          </>
                                         ) : (
                                           <p className="text-slate-700 italic mt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-normal">
                                             {si.accomplishment || 'No accomplishments encoded.'}
@@ -487,13 +493,17 @@ export const Phase2RatingPanel: React.FC<{
                     </div>
                   ) : returnDraftId === sheet.targetSettingId ? (
                     <div className="flex flex-1 flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={returnComment}
-                        onChange={(e) => setReturnComment(e.target.value)}
-                        placeholder="Reason for returning accomplishments for revision (optional)"
-                        className="flex-1 min-w-[220px] rounded-lg border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
+                      <div className="min-w-[220px] flex-1">
+                        <input
+                          type="text"
+                          value={returnComment}
+                          onChange={(e) => setReturnComment(e.target.value)}
+                          maxLength={IPCR_LIMITS.reviewComment}
+                          placeholder="Reason for returning accomplishments for revision (optional)"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <CharacterCount value={returnComment} max={IPCR_LIMITS.reviewComment} />
+                      </div>
                       <button
                         onClick={() => void handleReturn(sheet)}
                         disabled={busy}

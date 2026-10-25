@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Info, X } from 'lucide-react';
+import { Info } from 'lucide-react';
 import {
   cellKey,
   listAttendance,
@@ -22,6 +22,7 @@ import {
   type DayStatus,
   type SessionHalf,
 } from '../../lib/api/trainingAttendance';
+import { Modal } from '../../components/modal';
 
 type Attendee = { enrollmentId: string; name: string; department: string };
 
@@ -227,50 +228,51 @@ export const AttendanceGrid = ({ startDate, endDate, attendees }: Props) => {
       </table>
 
       {/* Excuse note popup */}
-      {excuse && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setExcuse(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between px-5 pt-5 pb-2">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Excuse note</h3>
-                <p className="text-xs text-slate-500">{excuse.attendee} · {excuse.dayLabel}</p>
-              </div>
-              <button type="button" onClick={() => setExcuse(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="px-5 pb-5">
-              <textarea
-                rows={3}
-                value={excuse.note}
-                onChange={(e) => setExcuse({ ...excuse, note: e.target.value })}
-                placeholder="Reason for the excused absence (required)…"
-                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <div className="mt-3 flex items-center justify-between">
-                {cellOf(excuse.enrollmentId, excuse.dayKey, excuse.session).status === 'Excused' ? (
-                  <button
-                    type="button"
-                    onClick={() => { void commit(excuse.enrollmentId, excuse.dayKey, excuse.session, null); setExcuse(null); }}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                  >
-                    Clear
-                  </button>
-                ) : <span />}
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setExcuse(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
-                  <button
-                    type="button"
-                    disabled={!excuse.note.trim()}
-                    onClick={() => { void commit(excuse.enrollmentId, excuse.dayKey, excuse.session, 'Excused', excuse.note); setExcuse(null); }}
-                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-                  >
-                    Save excuse
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={Boolean(excuse)}
+        onClose={() => setExcuse(null)}
+        size="sm"
+        title="Excuse note"
+        subtitle={excuse ? `${excuse.attendee} · ${excuse.dayLabel}` : undefined}
+        footer={excuse && (
+          <>
+            {cellOf(excuse.enrollmentId, excuse.dayKey, excuse.session).status === 'Excused' && (
+              <button
+                type="button"
+                onClick={() => { void commit(excuse.enrollmentId, excuse.dayKey, excuse.session, null); setExcuse(null); }}
+                className="btn btn-md btn-secondary mr-auto"
+              >
+                Clear
+              </button>
+            )}
+            <button type="button" onClick={() => setExcuse(null)} className="btn btn-md btn-secondary">Cancel</button>
+            <button
+              type="button"
+              disabled={!excuse.note.trim()}
+              onClick={() => { void commit(excuse.enrollmentId, excuse.dayKey, excuse.session, 'Excused', excuse.note); setExcuse(null); }}
+              className="btn btn-md btn-primary"
+            >
+              Save Excuse
+            </button>
+          </>
+        )}
+      >
+        {excuse && (
+          <>
+            <label htmlFor="excuse-note" className="mb-1.5 block text-[13px] font-medium text-[var(--neutral-800)]">
+              Reason for the excused absence <span className="text-[var(--error-500)]">*</span>
+            </label>
+            <textarea
+              id="excuse-note"
+              rows={3}
+              value={excuse.note}
+              onChange={(e) => setExcuse({ ...excuse, note: e.target.value })}
+              placeholder="e.g. Medical appointment, with certificate"
+              className="w-full rounded-lg border border-[var(--neutral-200)] p-2.5 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[rgba(54,62,232,.15)]"
+            />
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

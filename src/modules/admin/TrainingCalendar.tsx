@@ -12,7 +12,6 @@ import {
   Tag,
   Target,
   User,
-  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '../../components/EmptyState';
@@ -36,6 +35,7 @@ import { AttendanceGrid } from './AttendanceGrid';
 import { TRAINING_CATEGORIES, categoryColor, type TrainingCategory } from './trainingCategories';
 import { lifecycleStatus, type LifecycleStatus } from '../../lib/api/trainingLifecycle';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from '../../components/table-loading';
+import { Modal } from '../../components/modal';
 
 /** Derived planning / published / locked status for a calendar event. */
 const eventLifecycle = (e: CalendarEvent): LifecycleStatus =>
@@ -301,17 +301,27 @@ const EventFormModal = ({ initialDate, event, onClose, onSaved }: EventFormProps
   const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-2xl">
-          <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Training' : 'New Training'}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-            <X className="h-5 w-5" />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!saving}
+      title={isEdit ? 'Edit Training' : 'New Training'}
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={saving} className="btn btn-md btn-secondary">Cancel</button>
+          <button
+            type="submit"
+            form="training-form"
+            disabled={saving}
+            aria-busy={saving || undefined}
+            className={`btn btn-md btn-primary${saving ? ' is-loading' : ''}`}
+          >
+            {isEdit ? 'Save Changes' : 'Create Training'}
           </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        </>
+      )}
+    >
+        <form id="training-form" onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className={labelClass}>Title / Topic</label>
             <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ethical Conduct in Public Service" className={inputClass} />
@@ -428,17 +438,8 @@ const EventFormModal = ({ initialDate, event, onClose, onSaved }: EventFormProps
             <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 transition-colors">
-              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Training'}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -479,54 +480,56 @@ const EventDetailPanel = ({ event, onClose, onEdit, onChanged }: DetailProps) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl mx-4 max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 pt-6 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span
-                  className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
-                  style={{ backgroundColor: `${color}1a`, color }}
-                >
-                  {event.category ?? 'Uncategorized'}
-                </span>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[event.status]}`}>
-                  {event.status}
-                </span>
-                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${LIFECYCLE_BADGE[status]}`}>
-                  {locked && <Lock className="h-3 w-3" />}{status}
-                </span>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">{event.title}</h2>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {locked ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500"
-                  title="Editing closes 3 days before a training starts — this training is locked."
-                >
-                  <Lock className="h-3.5 w-3.5" /> Locked
-                </span>
-              ) : (
-                <button type="button" onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition">
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </button>
-              )}
-              {!locked && event.status !== 'Cancelled' && (
-                <button type="button" onClick={handleCancelTraining} disabled={cancelling} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 transition">
-                  {cancelling ? 'Cancelling…' : 'Cancel training'}
-                </button>
-              )}
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!cancelling}
+      size="lg"
+      title={event.title}
+      footer={(
+        <>
+          {!locked && event.status !== 'Cancelled' && (
+            <button
+              type="button"
+              onClick={handleCancelTraining}
+              disabled={cancelling}
+              aria-busy={cancelling || undefined}
+              className={`btn btn-md btn-destructive-outline mr-auto${cancelling ? ' is-loading' : ''}`}
+            >
+              Cancel Training
+            </button>
+          )}
+          {locked ? (
+            <span
+              className="mr-auto inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--neutral-600)]"
+              title="Editing closes 3 days before a training starts — this training is locked."
+            >
+              <Lock className="h-4 w-4" aria-hidden="true" /> Locked
+            </span>
+          ) : (
+            <button type="button" onClick={onEdit} className="btn btn-md btn-secondary">
+              <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="btn btn-md btn-secondary">Close</button>
+        </>
+      )}
+    >
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
+            style={{ backgroundColor: `${color}1a`, color }}
+          >
+            {event.category ?? 'Uncategorized'}
+          </span>
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[event.status]}`}>
+            {event.status}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${LIFECYCLE_BADGE[status]}`}>
+            {locked && <Lock className="h-3 w-3" />}{status}
+          </span>
         </div>
-
-        <div className="px-6 py-5 space-y-6">
+        <div className="space-y-6">
           {/* Logistics — kept visually distinct from Objectives so L&D can scan
               "what is this training for" without wading through time/place. */}
           <section>
@@ -633,8 +636,7 @@ const EventDetailPanel = ({ event, onClose, onEdit, onChanged }: DetailProps) =>
             )}
           </section>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

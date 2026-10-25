@@ -1,6 +1,6 @@
 # Standard modal — session summary
 
-Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phases 1–2 of 5 done).
+Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phases 1–3 of 5 done).
 
 ## Phase 1 — Foundation (2026-10-25)
 
@@ -106,3 +106,34 @@ Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phases 1–2 of 5 
   - focus on Cancel, the first field or the date
   - Esc closes each one
 - **Not checked:** printing the assessment forms (print preview can't be driven here), and the live portal pages.
+
+## Phase 3 — L&D and Super Admin (2026-10-25)
+
+**Migrated (10 modals)**
+
+- **AttendanceGrid: Excuse note.** Clear is aligned left in the footer. Save Excuse is primary instead of amber, because §3.6 makes orange status-only.
+- **SeminarEnrollment: Add Attendees.** The selected count sits in the footer. The error and the over-capacity checkbox move to the end of the body.
+- **TrainingCalendar**
+  - New/Edit Training: the footer submit targets the form by id.
+  - Training details: the category, status and lifecycle badges move into the body. Cancel Training (destructive outline), Edit or Locked, and Close sit in the footer.
+- **TrainingPlan**
+  - Planning Window
+  - New/Edit Planned Training
+  - Planned training details: the badges and department/year line are in the body. Delete, Edit and Close sit in the footer. Promote stays in its body section.
+  - Dismiss This Suggestion
+- **SystemAdministrationPage**
+  - Confirm Department Head Appointment: `ConfirmModal`, with Back as the cancel label.
+  - The Appoint Department Head `Dialog`'s success view now has a title, "Department Head Appointed". The duplicate in-body heading is gone, and the header icons lose their dark inline colours.
+
+**Left as they are**
+
+- **Unreachable** (no importer): `TrainingCourses` (3 modals) and `TrainingEnrollmentEmailModal`.
+- **Already moved in phase 1:** Super Admin's other `<Dialog>` calls, and SupervisorAccess and CompetencyFramework.
+
+**Checks**
+
+- `npx tsc --noEmit`: clean.
+- `npx vitest run`: 56 files, 508 tests, including SystemAdministrationPage (7). The count grew from 502 because of other uncommitted work in this worktree, which is not part of this commit.
+- `npm run build`: succeeds.
+- `impeccable detect`: one `side-tab` on an existing callout.
+- **Not checked visually.** The L&D modals live inside components that need live data, so they weren't checked in a harness. The Super Admin confirm is covered by its tests.

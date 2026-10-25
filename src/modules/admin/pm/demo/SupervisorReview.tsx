@@ -23,6 +23,8 @@ import {
   type AccomplishmentRevision,
 } from './workflow';
 import type { DemoAccount, Schedule, TargetRow, AccomplishmentRow } from './types';
+import { CharacterCount } from '../../../../components/CharacterCount';
+import { IPCR_LIMITS } from '../../../../lib/ipcrLimits';
 
 const inputCls = 'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none';
 
@@ -209,6 +211,7 @@ function ReviewEditor({ pending, reviewer, onDone }: { pending: Pending; reviewe
                       value={edits[t.id]?.mfo ?? t.original_mfo_pap ?? t.mfo_pap ?? ''}
                       onChange={(v) => setEdit(t.id, { mfo: v })}
                       disabled={busy}
+                      maxLength={IPCR_LIMITS.mfo}
                     />
                     <EditBlock
                       label="Success Indicator"
@@ -216,6 +219,7 @@ function ReviewEditor({ pending, reviewer, onDone }: { pending: Pending; reviewe
                       value={edits[t.id]?.indicator ?? t.original_success_indicator ?? t.success_indicator ?? ''}
                       onChange={(v) => setEdit(t.id, { indicator: v })}
                       disabled={busy}
+                      maxLength={IPCR_LIMITS.successIndicator}
                     />
                   </>
                 ) : (
@@ -226,6 +230,7 @@ function ReviewEditor({ pending, reviewer, onDone }: { pending: Pending; reviewe
                       value={edits[acc.id]?.actual ?? acc.original_accomplishment ?? acc.actual_accomplishment ?? ''}
                       onChange={(v) => setEdit(acc.id, { actual: v })}
                       disabled={busy}
+                      maxLength={IPCR_LIMITS.accomplishment}
                     />
                   )
                 )}
@@ -239,8 +244,9 @@ function ReviewEditor({ pending, reviewer, onDone }: { pending: Pending; reviewe
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700">Remarks <span className="text-red-500">*</span> <span className="text-xs font-normal text-slate-400">(minimum 10 characters)</span></span>
-          <textarea className={inputCls} rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Why the revisions were made…" />
+          <textarea className={inputCls} rows={2} maxLength={IPCR_LIMITS.reviewComment} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Why the revisions were made…" />
         </label>
+        <CharacterCount value={remarks} max={IPCR_LIMITS.reviewComment} />
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         <div className="mt-4 flex items-center gap-3">
           <button onClick={submit} disabled={busy || !remarksValid} className="h-11 rounded-xl bg-indigo-600 px-6 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
@@ -262,7 +268,7 @@ function FieldBlock({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function EditBlock({ label, original, value, onChange, disabled }: { label: string; original: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+function EditBlock({ label, original, value, onChange, disabled, maxLength }: { label: string; original: string; value: string; onChange: (v: string) => void; disabled?: boolean; maxLength: number }) {
   const changed = value.trim() !== original.trim();
   return (
     <div className="mb-3">
@@ -270,10 +276,12 @@ function EditBlock({ label, original, value, onChange, disabled }: { label: stri
       <textarea
         className={`w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-1 ${changed ? 'border-orange-400 focus:border-orange-500 focus:ring-orange-500' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
         rows={2}
+        maxLength={maxLength}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
       />
+      <CharacterCount value={value} max={maxLength} />
       {changed && (
         <p className="mt-1 text-xs font-semibold text-orange-600">⚠ Revised by Office Account</p>
       )}

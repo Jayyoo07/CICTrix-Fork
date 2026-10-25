@@ -67,6 +67,8 @@ import {
 } from '../../lib/api/ipcrTargets';
 import { loadEffectiveSchedules } from '../../lib/api/phaseSchedules';
 import { generateIpcrPdf } from '../../lib/ipcrPdf';
+import { IPCR_LIMITS } from '../../lib/ipcrLimits';
+import { CharacterCount } from '../../components/CharacterCount';
 import { EmployeePhase2 } from './EmployeePhase2';
 import { supabase as supabaseClient } from '../../lib/supabase';
 import { listEmployeeNotifications, markEmployeeNotificationsRead, type EmployeeNotification } from '../../lib/api/employeeNotifications';
@@ -1967,15 +1969,19 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                                 <tr key={i} className="align-top">
                                   <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
                                     <div className="flex items-start gap-1.5">
-                                      <input
-                                        type="text"
-                                        value={mfo.title}
-                                        onChange={(e) => setMfoTitle(fn.key, i, e.target.value)}
-                                        disabled={readOnly}
-                                        placeholder={fn.mfoPlaceholder}
-                                        style={{ borderColor: '#C8D1FF' }}
-                                        className="w-full rounded-lg border px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-default"
-                                      />
+                                      <div className="min-w-0 flex-1">
+                                        <input
+                                          type="text"
+                                          value={mfo.title}
+                                          onChange={(e) => setMfoTitle(fn.key, i, e.target.value)}
+                                          disabled={readOnly}
+                                          maxLength={IPCR_LIMITS.mfo}
+                                          placeholder={fn.mfoPlaceholder}
+                                          style={{ borderColor: '#C8D1FF' }}
+                                          className="w-full rounded-lg border px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-default"
+                                        />
+                                        {!readOnly && <CharacterCount value={mfo.title} max={IPCR_LIMITS.mfo} />}
+                                      </div>
                                       {!readOnly && (
                                         <button
                                           type="button"
@@ -1992,15 +1998,19 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                                     <div className="space-y-1.5">
                                       {mfo.indicators.map((si, j) => (
                                         <div key={j} className="flex items-start gap-1.5">
-                                          <input
-                                            type="text"
-                                            value={si.description}
-                                            onChange={(e) => setIndicator(fn.key, i, j, e.target.value)}
-                                            disabled={readOnly}
-                                            placeholder={fn.siPlaceholder}
-                                            style={{ borderColor: '#C8D1FF' }}
-                                            className="w-full rounded-lg border px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-default"
-                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <input
+                                              type="text"
+                                              value={si.description}
+                                              onChange={(e) => setIndicator(fn.key, i, j, e.target.value)}
+                                              disabled={readOnly}
+                                              maxLength={IPCR_LIMITS.successIndicator}
+                                              placeholder={fn.siPlaceholder}
+                                              style={{ borderColor: '#C8D1FF' }}
+                                              className="w-full rounded-lg border px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-default"
+                                            />
+                                            {!readOnly && <CharacterCount value={si.description} max={IPCR_LIMITS.successIndicator} />}
+                                          </div>
                                           {!readOnly && (
                                             <button
                                               type="button"

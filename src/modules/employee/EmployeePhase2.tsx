@@ -22,6 +22,8 @@ import {
 } from '../../lib/api/ipcrRatings';
 import { markEmployeeNotificationsRead } from '../../lib/api/employeeNotifications';
 import { describeActionFailure } from '../../lib/friendlyErrors';
+import { IPCR_LIMITS } from '../../lib/ipcrLimits';
+import { CharacterCount } from '../../components/CharacterCount';
 import { SkeletonList, useDelayedLoading } from '../../components/table-loading';
 import { DEFAULT_RATING_SCALE, getRatingScale, type RatingScaleEntry } from '../../lib/api/ipcrRatingScale';
 
@@ -408,11 +410,13 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
                                 value={e.accomplishment}
                                 onChange={(ev) => setField(si.successIndicatorId, 'accomplishment', ev.target.value)}
                                 disabled={!editable}
+                                maxLength={IPCR_LIMITS.accomplishment}
                                 placeholder="Detail your achievement matching this target..."
                                 rows={2}
                                 style={{ borderColor: '#C8D1FF' }}
                                 className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
                               />
+                              {editable && <CharacterCount value={e.accomplishment} max={IPCR_LIMITS.accomplishment} />}
                             </td>
                             <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
                               {/* Spec §F. The employee's own note on this row —
@@ -422,11 +426,13 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
                                 value={e.remarks}
                                 onChange={(ev) => setField(si.successIndicatorId, 'remarks', ev.target.value)}
                                 disabled={!editable}
+                                maxLength={IPCR_LIMITS.remarks}
                                 placeholder="e.g. Submitted ahead of deadline"
                                 rows={2}
                                 style={{ borderColor: '#C8D1FF' }}
                                 className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
                               />
+                              {editable && <CharacterCount value={e.remarks} max={IPCR_LIMITS.remarks} />}
                             </td>
                             {(['quality', 'efficiency', 'timeliness'] as const).map((dim) => (
                               <td key={dim} className="border-b px-1 py-2 text-center" style={{ borderColor: '#EEF0FD' }}>

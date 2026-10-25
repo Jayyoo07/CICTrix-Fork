@@ -56,6 +56,8 @@ import { OfficeTrainingCourses } from './OfficeTrainingCourses';
 import { CriticalPositionPage } from '../../../components/CriticalPositionPage';
 import { CriticalPositionGapAnalysisPage } from '../../../components/CriticalPositionGapAnalysisPage';
 import { SkeletonList, useDelayedLoading, useTableLoading } from '../../../components/table-loading';
+import { CharacterCount } from '../../../components/CharacterCount';
+import { IPCR_LIMITS } from '../../../lib/ipcrLimits';
 
 type Pillar = 'Cultural Transformation' | 'Employee Development' | 'Leadership' | 'Technical';
 
@@ -1107,11 +1109,15 @@ export const OfficeAccountConsole: React.FC = () => {
                                             return (
                                               <li key={m.id} className="rounded-xl bg-slate-50/60 border border-slate-200 p-4 space-y-2">
                                                 {editing ? (
-                                                  <input
-                                                    value={editMfo[m.id] ?? ''}
-                                                    onChange={(e) => setEditMfo((prev) => ({ ...prev, [m.id]: e.target.value }))}
-                                                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                                  />
+                                                  <div>
+                                                    <input
+                                                      value={editMfo[m.id] ?? ''}
+                                                      onChange={(e) => setEditMfo((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                                                      maxLength={IPCR_LIMITS.mfo}
+                                                      className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    />
+                                                    <CharacterCount value={editMfo[m.id] ?? ''} max={IPCR_LIMITS.mfo} />
+                                                  </div>
                                                 ) : (
                                                   <p className="text-sm font-bold text-slate-900">{m.title || '(untitled MFO)'}</p>
                                                 )}
@@ -1120,11 +1126,15 @@ export const OfficeAccountConsole: React.FC = () => {
                                                     {m.indicators.map((si) => (
                                                       <li key={si.id}>
                                                         {editing ? (
-                                                          <input
-                                                            value={editSi[si.id] ?? ''}
-                                                            onChange={(e) => setEditSi((prev) => ({ ...prev, [si.id]: e.target.value }))}
-                                                            className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                                          />
+                                                          <div>
+                                                            <input
+                                                              value={editSi[si.id] ?? ''}
+                                                              onChange={(e) => setEditSi((prev) => ({ ...prev, [si.id]: e.target.value }))}
+                                                              maxLength={IPCR_LIMITS.successIndicator}
+                                                              className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            />
+                                                            <CharacterCount value={editSi[si.id] ?? ''} max={IPCR_LIMITS.successIndicator} />
+                                                          </div>
                                                         ) : (
                                                           si.description
                                                         )}
@@ -1154,13 +1164,17 @@ export const OfficeAccountConsole: React.FC = () => {
                                     </div>
                                   ) : returnDraftId === p.targetSettingId ? (
                                     <div className="flex flex-1 flex-wrap items-center gap-2">
-                                      <input
-                                        type="text"
-                                        value={returnComment}
-                                        onChange={(e) => setReturnComment(e.target.value)}
-                                        placeholder="Reason for returning (optional)"
-                                        className="flex-1 min-w-[220px] rounded-lg border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                      />
+                                      <div className="min-w-[220px] flex-1">
+                                        <input
+                                          type="text"
+                                          value={returnComment}
+                                          onChange={(e) => setReturnComment(e.target.value)}
+                                          maxLength={IPCR_LIMITS.reviewComment}
+                                          placeholder="Reason for returning (optional)"
+                                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        />
+                                        <CharacterCount value={returnComment} max={IPCR_LIMITS.reviewComment} />
+                                      </div>
                                       <button onClick={() => void handleReturn(p)} disabled={busy} className="rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-bold text-white shadow-sm disabled:opacity-50">Confirm Return</button>
                                       <button onClick={() => { setReturnDraftId(null); setReturnComment(''); }} disabled={busy} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
                                     </div>

@@ -3,11 +3,12 @@ import { ArrowUpDown, Building2, ChevronDown, ChevronLeft, ChevronRight, Search 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { EmptyState } from '../../components/EmptyState';
-import { getActiveHeadcountByDepartment, getIPCRRecordsFromGapView } from '../../lib/api/competencyGapAnalysis';
+import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView } from '../../lib/api/competencyGapAnalysis';
 import {
   RATED_PERIOD_LABEL,
   buildDeptCompletionRows,
   getAdjectival,
+  restrictToActiveOffices,
   type IPCRRatingRecord,
 } from './pm/SummaryOfRatings';
 import { CompetencyGapPanel } from './pm/CompetencyGapPanel';
@@ -52,16 +53,22 @@ export const LndSummaryOfRatings = () => {
     try {
       // Headcount is the completion denominator; if it fails, fall back to the
       // rated employees alone rather than blanking the whole page.
-      const [data, roster] = await Promise.all([
+      // The active-office list only filters; if it fails, show everything.
+      const [data, roster, activeOffices] = await Promise.all([
         getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
         getActiveHeadcountByDepartment().catch(err => {
           console.error('Error loading office headcount:', err);
           return new Map<string, { name: string; count: number }>();
         }),
+        getActiveOfficeKeys().catch(err => {
+          console.error('Error loading active offices:', err);
+          return null;
+        }),
       ]);
       if (loadId !== latestLoadId.current) return;
-      setRecords(data);
-      setHeadcount(roster);
+      const scoped = restrictToActiveOffices(data, roster, activeOffices);
+      setRecords(scoped.records);
+      setHeadcount(scoped.headcount);
       setLastSynced(new Date());
     } catch (err) {
       console.error('Error loading IPCR records:', err);

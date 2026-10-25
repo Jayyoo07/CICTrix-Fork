@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archives flat table</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<style>
+:root{--p:#363EE8;--p700:#191FA8;--p900:#040E6B;--p200:#C8D1FF;--p50:#EEF0FF;--page:#F1F5F9;--n800:#28343D;--n600:#515F69;--n500:#64748B;--n400:#94A3B8;--n200:#E2E8F0;--n100:#F1F5F9;--e100:#FDE2E2;--e500:#E05252;--e700:#B42323;--overlay:rgba(4,14,107,.45);--sh2:0 4px 12px rgba(16,30,41,.10);--sh3:0 12px 32px rgba(16,30,41,.16);--font:'Poppins',system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;font-family:var(--font);background:var(--page);color:var(--n800)}
+button{font-family:inherit}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.switch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 16px;background:#101E29;color:#fff;font:500 13px var(--font)}
+.switch button{font:600 13px var(--font);border-radius:999px;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;height:30px;padding:0 14px;cursor:pointer}
+.switch button[aria-pressed=true]{background:#fff;color:var(--p900)}
+.wrap{padding:24px;max-width:1320px}
+.q{font:600 16px/24px var(--font);color:var(--p900);margin:0 0 4px}.sub{font:400 14px/22px var(--font);color:var(--n600);margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--n200);border-radius:12px;padding:0 20px 20px}
+.tabs{display:flex;gap:28px;border-bottom:1px solid var(--n200);align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.tabs .t{display:flex;gap:28px}
+.tab{font:500 14px var(--font);color:var(--n600);border:0;background:none;border-bottom:2px solid transparent;padding:16px 0 12px;cursor:pointer;display:flex;gap:8px}
+.tab[aria-selected=true]{color:var(--p);border-color:var(--p);font-weight:600}
+.tab .n{color:var(--n500);font-size:13px}.tab[aria-selected=true] .n{color:var(--p)}
+.search{position:relative;width:320px;margin-bottom:10px}.search svg{position:absolute;left:12px;top:12px;color:var(--n400)}
+.search input{width:100%;height:40px;border:1px solid var(--n200);border-radius:8px;padding:0 12px 0 38px;font:500 14px var(--font)}
+.search input::placeholder{color:var(--n600)}
+.bar{display:flex;gap:12px;align-items:center;padding:16px 0 12px;flex-wrap:wrap}.bar .sp{flex:1}
+select{height:36px;border:1px solid var(--n200);border-radius:8px;padding:0 10px;font:500 14px var(--font);color:var(--p900);background:#fff}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 14px var(--font);border-radius:999px;border:1.5px solid var(--p);background:#fff;color:var(--p);height:36px;padding:0 20px;cursor:pointer}
+.btn:hover{background:var(--p50)}.btn.sm{height:32px;font-size:13px;padding:0 14px}
+.btn.pri{background:linear-gradient(180deg,#363EE8,#191FA8);color:#fff;border-color:transparent}
+.tw{border:1px solid var(--n200);border-radius:12px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th{background:var(--page);font:600 13px/20px var(--font);color:var(--p900);text-align:left;padding:10px 16px;white-space:nowrap}
+td{font:500 14px/18px var(--font);padding:12px 16px;border-top:1px solid var(--n200);vertical-align:middle}
+tbody tr{cursor:pointer}tbody tr:hover td{background:#F8FAFF}
+.b{display:block;color:var(--p900)}.s{display:block;font:500 12px/16px var(--font);color:var(--n600)}
+.dept-cont{color:var(--n400)}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-radius:999px;font:500 12px var(--font);white-space:nowrap}
+.dot{width:6px;height:6px;border-radius:50%}
+.neu{background:var(--n100);color:var(--n800)}.neu .dot{background:var(--n500)}
+.err{background:var(--e100);color:var(--e700)}.err .dot{background:var(--e500)}
+.tint{background:var(--p50);color:var(--p700)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.count{display:inline-grid;place-items:center;min-width:24px;height:22px;padding:0 8px;border-radius:999px;background:var(--n100);font:600 12px var(--font);color:var(--p900)}
+.chev{color:var(--n400);width:40px}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:16px;font:500 12px var(--font);color:var(--n600)}
+.pg{display:flex;gap:8px}.pg span{min-width:36px;height:36px;border:1px solid var(--n200);border-radius:8px;display:grid;place-items:center;font:500 14px var(--font);padding:0 12px;color:var(--n800)}
+.pg .on{background:var(--p);color:#fff;border-color:var(--p)}
+/* §9.10 modal */
+.ov{position:fixed;inset:0;background:var(--overlay);display:grid;place-items:center;padding:16px;z-index:9}
+.modal{background:#fff;border-radius:16px;box-shadow:var(--sh3);width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column}
+.modal.lg{max-width:880px}.modal.md{max-width:640px}
+.mh{display:flex;justify-content:space-between;gap:12px;padding:24px 24px 0}
+.mh h2{font:600 20px/28px var(--font);color:var(--p900);margin:0}.mh p{margin:2px 0 0;font:500 13px var(--font);color:var(--n600)}
+.x{width:36px;height:36px;border:0;background:none;border-radius:8px;color:var(--n600);display:grid;place-items:center;cursor:pointer}
+.mb{padding:16px 24px;overflow:auto}
+.mf{display:flex;justify-content:flex-end;gap:12px;padding:16px 24px 24px}
+dl{display:grid;grid-template-columns:140px 1fr;gap:10px 16px;margin:0}
+dt{font:500 13px/20px var(--font);color:var(--n600)}dd{margin:0;font:500 14px/20px var(--font)}
+.note{font:500 12px var(--font);color:var(--n600);margin:6px 0 0}
+.lbl{font:600 12px var(--font);letter-spacing:.4px;text-transform:uppercase;color:var(--n600);margin:0 0 6px}
+[hidden]{display:none!important}
+.opt{border:2px dashed var(--p200);border-radius:16px;padding:16px;margin-bottom:24px;background:#fff}
+</style>
+</head>
+<body>
+<div class="switch">
+  <span>Decision 2026-10-25: Archives, one row per department + position; people open in a centered large modal (§9.10). Supersedes the side drawer in 2026-10-25-rsp-archives.html.</span>
+</div>
+<div class="wrap" id="app"></div>
+
+<script>
+const IC={search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',cr:'<path d="m9 18 6-6-6-6"/>',sl:'<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/>',dl:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',ft:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',rc:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'};
+const sv=(n)=>`<svg class="i" viewBox="0 0 24 24">${IC[n]}</svg>`;
+const B=(t)=>t==='Disqualified'?`<span class="badge err"><span class="dot"></span>${t}</span>`:['Ranking','Assessment forms'].includes(t)?`<span class="badge tint">${t}</span>`:`<span class="badge neu"><span class="dot"></span>${t}</span>`;
+const CEO='Office of The City Engineer', HR='Human Resource Management Office';
+const PEOPLE=[
+ {d:CEO,p:'Engineer II (Mechanical Engineer)',n:'John Kenneth Delgado Villaflor',r:'REF-2026-0201',s:'Disqualified',why:'Did not attend the written exam',dt:'Oct 23, 2026'},
+ {d:CEO,p:'Engineer II (Mechanical Engineer)',n:'Gabriel Anton Sarabia Locsin',r:'REF-2026-0202',s:'Not Selected',why:'Plantilla filled',dt:'Oct 23, 2026'},
+ {d:CEO,p:'Engineer II (Mechanical Engineer)',n:'Ma. Christina Yanson Lopez',r:'REF-2026-0203',s:'Not Selected',why:'Plantilla filled',dt:'Oct 23, 2026'},
+ {d:CEO,p:'Engineer I (Civil)',n:'Paolo Miguel Treñas Golez',r:'REF-2026-0188',s:'Withdrawn – Hired Elsewhere',why:'Hired as Engineer II',dt:'Oct 20, 2026'},
+ {d:HR,p:'Administrative Aide IV',n:'Ana Reyes',r:'REF-2026-0141',s:'Disqualified',why:'Incomplete PDS',dt:'Oct 24, 2026'},
+];
+const RANK=[['John Kenneth Delgado Villaflor','Submitted','—'],['Gabriel Anton Sarabia Locsin','Submitted','—'],['Ma. Christina Yanson Lopez','Submitted','—'],['Paolo Miguel Treñas Golez','Submitted','—']];
+let O='a', modal='';
+
+const head=(tabCounts)=>`<div class="tabs"><div class="t">${['Employees','Applicants','Job posts','Evaluation records'].map((t,i)=>`<button class="tab" aria-selected="${i===(tabCounts.sel)}">${t}<span class="n">${tabCounts.c[i]}</span></button>`).join('')}</div>
+ <label class="search">${sv('search')}<input placeholder="Name, employee ID or REF number"></label></div>
+ <div class="bar"><select><option>All types</option></select><button class="btn">${sv('sl')}Filters</button><span class="sp"></span><select><option>Department A–Z</option><option>Newest first</option></select><button class="btn">${sv('dl')}Export</button></div>`;
+const pager=(n)=>`<div class="pager"><span>Showing 1–${n} of ${n} entries</span><div class="pg"><span>‹ Previous</span><span class="on">1</span><span>Next ›</span></div></div>`;
+
+function viewA(){
+  // Applicants grouped by department + position
+  const groups={}; PEOPLE.forEach(x=>{const k=x.d+'|'+x.p;(groups[k]=groups[k]||[]).push(x)});
+  const rowsApp=Object.entries(groups).map(([k,list])=>{const [d,p]=k.split('|');const by={};list.forEach(x=>by[x.s]=(by[x.s]||0)+1);
+    return `<tr data-m="appGroup"><td><span class="b">${d}</span></td><td><span class="b">${p}</span></td><td><span class="count">${list.length}</span></td><td><div class="chips">${Object.entries(by).map(([s,c])=>`${B(s)}<span class="s" style="display:inline;align-self:center">×${c}</span>`).join(' ')}</div></td><td>${list[0].dt}</td><td class="chev">${sv('cr')}</td></tr>`}).join('');
+  const rowsEval=[[CEO,'Engineer II (Mechanical Engineer)',4],[CEO,'Engineer I (Civil)',3],[CEO,'Engineer II (Drainage / Flood Control)',2],[CEO,'Admin Aide IV (Clerk II)',5],[CEO,'Engineer II (Civil / Structural)',3],[HR,'Administrative Aide IV',6]]
+    .map(([d,p,n])=>`<tr data-m="evalGroup"><td><span class="b">${d}</span></td><td><span class="b">${p}</span></td><td><span class="count">${n}</span></td><td><div class="chips"><span class="badge tint">Ranking</span><span class="badge tint">Assessment forms</span></div></td><td>Oct 23, 2026</td><td class="chev">${sv('cr')}</td></tr>`).join('');
+  return `
+  <div class="opt"><p class="q">A · One row per department + position. Click it to open the list of people in a centered modal.</p>
+  <p class="sub">Evaluation records: Ranking and Assessment forms merge into one row per position (no more duplicate rows). Same shape on every tab.</p>
+  <div class="card">${head({sel:3,c:[0,5,1,6]})}
+   <div class="tw"><table><thead><tr><th>Department</th><th>Position</th><th>Applicants</th><th>Records</th><th>Date</th><th></th></tr></thead><tbody>${rowsEval}</tbody></table></div>${pager(6)}</div></div>
+  <div class="opt"><p class="q">Same layout on the Applicants tab</p>
+  <div class="card">${head({sel:1,c:[0,5,1,6]})}
+   <div class="tw"><table><thead><tr><th>Department</th><th>Position</th><th>People</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>${rowsApp}</tbody></table></div>${pager(3)}</div></div>`;
+}
+function viewB(){
+  const sorted=[...PEOPLE].sort((a,b)=>a.d.localeCompare(b.d)||a.p.localeCompare(b.p));
+  let prevD='',prevP='';
+  const rows=sorted.map(x=>{const sameD=x.d===prevD, sameP=sameD&&x.p===prevP; prevD=x.d; prevP=x.p;
+    return `<tr data-m="person"><td><span class="b ${sameD?'dept-cont':''}">${sameD?'〃':x.d}</span></td><td><span class="b ${sameP?'dept-cont':''}">${sameP?'〃':x.p}</span></td><td><span class="b">${x.n}</span><span class="s">${x.r}</span></td><td>${B(x.s)}</td><td>${x.dt}</td><td class="chev">${sv('cr')}</td></tr>`}).join('');
+  return `<div class="opt"><p class="q">B · One row per person. Department and Position come first, and repeats are dimmed so each office's group stands out.</p>
+  <p class="sub">Clicking a row opens that one record in a centered modal. Evaluation records would still be one row per position.</p>
+  <div class="card">${head({sel:1,c:[0,5,1,6]})}
+   <div class="tw"><table><thead><tr><th>Department</th><th>Position</th><th>Applicant</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pager(5)}</div></div>`;
+}
+const modals={
+ evalGroup:`<div class="modal lg" role="dialog" aria-modal="true"><div class="mh"><div><h2>Engineer II (Mechanical Engineer)</h2><p>Office of The City Engineer · 4 applicants · Oct 23, 2026</p></div><button class="x" aria-label="Close">${sv('x')}</button></div>
+  <div class="mb"><p class="lbl">Ranking</p><div class="tw"><table style="min-width:0"><thead><tr><th style="width:56px">Rank</th><th>Applicant</th><th>Status</th><th style="text-align:right">Score</th></tr></thead><tbody>${RANK.map((r,i)=>`<tr><td>${i+1}</td><td><span class="b">${r[0]}</span></td><td>${B(r[1])}</td><td style="text-align:right">${r[2]}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="mf"><button class="btn">Close</button><button class="btn pri">${sv('ft')}Open assessment forms</button></div></div>`,
+ appGroup:`<div class="modal lg" role="dialog" aria-modal="true"><div class="mh"><div><h2>Engineer II (Mechanical Engineer)</h2><p>Office of The City Engineer · 3 closed applications</p></div><button class="x" aria-label="Close">${sv('x')}</button></div>
+  <div class="mb"><div class="tw"><table style="min-width:0"><thead><tr><th>Applicant</th><th>Status</th><th>Reason</th><th>Date</th><th></th></tr></thead><tbody>${PEOPLE.slice(0,3).map(x=>`<tr style="cursor:default"><td><span class="b">${x.n}</span><span class="s">${x.r}</span></td><td>${B(x.s)}</td><td>${x.why}</td><td style="white-space:nowrap">${x.dt}</td><td style="text-align:right">${x.s==='Disqualified'?`<button class="btn sm">${sv('rc')}Restore</button>`:''}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="mf"><button class="btn">Close</button></div></div>`,
+ person:`<div class="modal md" role="dialog" aria-modal="true"><div class="mh"><div><h2>John Kenneth Delgado Villaflor</h2><p>REF-2026-0201</p></div><button class="x" aria-label="Close">${sv('x')}</button></div>
+  <div class="mb"><div style="margin-bottom:16px">${B('Disqualified')}</div><dl><dt>Department</dt><dd>Office of The City Engineer</dd><dt>Position</dt><dd>Engineer II (Mechanical Engineer)</dd><dt>Reason</dt><dd>Did not attend the written exam</dd><dt>Date</dt><dd>Oct 23, 2026</dd></dl></div>
+  <div class="mf"><button class="btn">Close</button><button class="btn pri">${sv('rc')}Restore application</button></div></div>`,
+};
+function render(){document.getElementById('app').innerHTML=(O==='a'?viewA():viewB())+(modal?`<div class="ov" data-close>${modals[modal]}</div>`:'');}
+document.addEventListener('click',e=>{const o=e.target.closest('[data-o]');if(o){O=o.dataset.o;modal='';document.querySelectorAll('[data-o]').forEach(b=>b.setAttribute('aria-pressed',b===o));return render();}
+ const r=e.target.closest('[data-m]');if(r){modal=r.dataset.m;return render();}
+ if(e.target.matches('[data-close]')||e.target.closest('.x')||e.target.closest('.mf .btn:not(.pri)')){modal='';render();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal){modal='';render();}});
+render();
+</script>
+</body>
+</html>

@@ -335,70 +335,7 @@
   padding: var(--spacing-xl);
 }
 
-/* Dialog Component */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  animation: fadeIn var(--transition-base);
-  backdrop-filter: blur(2px);
-}
-
-.dialog-content {
-  background-color: var(--color-background);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  animation: slideIn var(--transition-base);
-}
-
-.dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-xl);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.dialog-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-text-primary);
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  transition: color var(--transition-base);
-  padding: 0.5rem;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-}
-
-.dialog-close:hover {
-  color: var(--color-text-primary);
-  background-color: var(--color-background-secondary);
-}
-
-.dialog-body {
-  padding: var(--spacing-xl);
-}
+/* Dialog styling moved to the shared Modal (src/components/modal, DESIGN_IDENTITY §9.10). */
 
 @keyframes fadeIn {
   from {

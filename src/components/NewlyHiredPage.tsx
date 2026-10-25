@@ -6,7 +6,6 @@ import {
   Printer,
   Save,
   UserPlus,
-  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
@@ -23,6 +22,7 @@ import { seedEmployeeContactFromApplication } from '../lib/api/employeePortal';
 import type { NewlyHired, NewlyHiredStatus } from '../types/recruitment.types';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
+import { Modal } from './modal';
 
 type ViewMode = 'overview' | 'department';
 
@@ -565,45 +565,38 @@ export const NewlyHiredPage = () => {
         )}
       </main>
 
-      {showCredentialsModal && (
-        <div className="fixed inset-0 z-[260] bg-black/70 p-4" onClick={() => { setShowCredentialsModal(false); clearGeneratedCache(); }}>
-          <div className="mx-auto w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <header className="flex items-start justify-between border-b border-slate-200 px-8 py-6">
-              <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-green-100 p-3 text-green-600">
-                  <CheckCircle2 size={24} />
-                </div>
-                <div>
-                  <h2 className="text-4xl font-bold text-slate-900">Generated Employee Credentials</h2>
-                  <p className="text-lg text-slate-500">{formatOfficeLabel(selectedDepartment)} • {generatedCredentials.length} credential set</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => window.print()} className="rounded-2xl bg-blue-600 px-5 py-2.5 text-base font-semibold text-white">
-                  <Printer className="mr-2 inline h-4 w-4" /> Print
-                </button>
-                <button
-                  type="button"
-                  onClick={saveAccountDetails}
-                  disabled={savingCredentials}
-                  className="rounded-2xl bg-green-600 px-5 py-2.5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                >
-                  <Save className="mr-2 inline h-4 w-4" /> {savingCredentials ? 'Saving…' : 'Save Credentials'}
-                </button>
-                <button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" onClick={() => { setShowCredentialsModal(false); clearGeneratedCache(); }}>
-                  <X size={20} />
-                </button>
-              </div>
-            </header>
-
+      <Modal
+        open={showCredentialsModal}
+        onClose={() => { setShowCredentialsModal(false); clearGeneratedCache(); }}
+        dismissible={!savingCredentials}
+        size="xl"
+        icon={<CheckCircle2 strokeWidth={1.75} />}
+        title="Generated Employee Credentials"
+        subtitle={`${formatOfficeLabel(selectedDepartment)} • ${generatedCredentials.length} credential set`}
+        footer={(
+          <>
+            <button type="button" onClick={() => window.print()} className="btn btn-md btn-secondary">
+              <Printer className="h-4 w-4" aria-hidden="true" /> Print
+            </button>
+            <button
+              type="button"
+              onClick={saveAccountDetails}
+              disabled={savingCredentials}
+              aria-busy={savingCredentials || undefined}
+              className={`btn btn-md btn-primary${savingCredentials ? ' is-loading' : ''}`}
+            >
+              {!savingCredentials && <Save className="h-4 w-4" aria-hidden="true" />} Save Credentials
+            </button>
+          </>
+        )}
+      >
             {saveError && (
-              <p className="mx-8 mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {saveError}
               </p>
             )}
 
-            <div className="max-h-[72vh] space-y-4 overflow-y-auto p-8">
+            <div className="space-y-4">
               {generatedCredentials.length === 0 && (
                 <article className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
                   <p className="text-lg font-semibold text-slate-900">No new credentials were generated.</p>
@@ -646,9 +639,7 @@ export const NewlyHiredPage = () => {
                 </article>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
     </div>
   );

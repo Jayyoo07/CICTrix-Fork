@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getAdminEmail } from '../lib/adminSession';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import {
@@ -144,6 +144,11 @@ const buildOcboRows = (res: AutoSuccessorsResult | undefined): OcboRow[] => {
   }));
 };
 
+/** DOM id of a position block, the target of ?dept=…&position=… from the RSP dashboard. */
+const positionAnchor = (positionId: string) => `succession-position-${positionId}`;
+/** How long a deep-linked position stays highlighted after it scrolls into view. */
+const DEEP_LINK_HIGHLIGHT_MS = 2400;
+
 /** Column header, same as the L&D Training needs assessment table. */
 const TH = 'px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500';
 
@@ -228,6 +233,42 @@ const OcboTableView = ({ admin }: { admin: string }) => {
     );
     setLoadingDept((p) => ({ ...p, [deptId]: false }));
   };
+
+  // Deep link from the RSP dashboard: open the office, then bring the position
+  // into view and highlight it briefly. Each step runs once per page load.
+  const location = useLocation();
+  const deepLink = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return { dept: params.get('dept'), position: params.get('position') };
+  }, [location.search]);
+  const deepLinkExpanded = useRef(false);
+  const deepLinkScrolled = useRef(false);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const highlightTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const deptId = deepLink.dept;
+    if (loading || deepLinkExpanded.current || !deptId) return;
+    if (!departments.some((d) => d.departmentId === deptId)) return;
+    deepLinkExpanded.current = true;
+    if (!expanded.has(deptId)) void toggle(deptId);
+    // toggle reads state from this render; it only needs to run once here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, departments, deepLink.dept]);
+
+  useEffect(() => {
+    const { dept, position } = deepLink;
+    if (deepLinkScrolled.current || !dept || !position || !posByDept[dept]) return;
+    const el = document.getElementById(positionAnchor(position));
+    if (!el) return;
+    deepLinkScrolled.current = true;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView?.({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+    setHighlighted(position);
+    // Not cleared on re-run: a later posByDept change must not strand the highlight.
+    highlightTimer.current = window.setTimeout(() => setHighlighted(null), DEEP_LINK_HIGHLIGHT_MS);
+  }, [deepLink, posByDept]);
+  useEffect(() => () => window.clearTimeout(highlightTimer.current), []);
 
   const openArchive = (r: OcboRow) => {
     const params = new URLSearchParams({ module: 'archive', employee: r.employeeId });
@@ -333,7 +374,13 @@ const OcboTableView = ({ admin }: { admin: string }) => {
                   // losing sight of how many people were considered.
                   const filtered = candByPos[pos.id]?.notQualified.length ?? 0;
                   return (
-                    <div key={pos.id} className="mb-5 last:mb-0">
+                    <div
+                      key={pos.id}
+                      id={positionAnchor(pos.id)}
+                      className={`-mx-2 mb-5 rounded-xl px-2 py-1 transition-[background-color,box-shadow] duration-200 ease-out last:mb-0 ${
+                        highlighted === pos.id ? 'bg-[var(--color-primary-50)] ring-2 ring-[var(--color-primary)]' : ''
+                      }`}
+                    >
                       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                         <span className="text-sm font-semibold text-slate-900">{pos.title}</span>
                         <span className="text-xs text-slate-500">

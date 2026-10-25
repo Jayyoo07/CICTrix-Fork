@@ -1,8 +1,9 @@
 // "Schedule Applicants" dialog: one interview slot, one oral exam slot, a
 // rater and a venue applied to every selected applicant (DESIGN_IDENTITY §9.10).
 
-import { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, Loader2, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CalendarCheck } from 'lucide-react';
+import { Modal } from './modal';
 import type { ApplicantRecord } from './QualifiedApplicantsSection';
 import { scheduleApplicantsBatch, type InterviewerOption } from '../lib/applicantSchedule';
 import {
@@ -132,14 +133,6 @@ export const ScheduleApplicantsModal = ({ applicants, raters, onCancel, onSchedu
     [applicants],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel, saving]);
-
   const handleConfirm = async () => {
     if (saving) return;
     const problem = slotError('interview', interview, today) ?? slotError('oral examination', oral, today);
@@ -170,40 +163,29 @@ export const ScheduleApplicantsModal = ({ applicants, raters, onCancel, onSchedu
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] overflow-y-auto bg-[var(--overlay)] p-4"
-      onClick={() => { if (!saving) onCancel(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="schedule-applicants-title"
-        className="mx-auto my-8 w-full max-w-[640px] rounded-[var(--radius-xl)] bg-[var(--bg-surface)] shadow-[var(--shadow-3)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--neutral-200)] px-6 py-5">
-          <div>
-            <h2 id="schedule-applicants-title" className="!m-0 text-[18px] font-semibold leading-6 text-[var(--color-primary-900)]">
-              Schedule Applicants
-            </h2>
-            <p className="!mb-0 !mt-1 text-[14px] font-medium leading-[18px] text-[var(--neutral-600)]">
-              Interview and oral exam for {applicants.length} applicant{applicants.length === 1 ? '' : 's'} across{' '}
-              {positionSummary.length} position{positionSummary.length === 1 ? '' : 's'}.
-            </p>
-          </div>
+    <Modal
+      open
+      onClose={onCancel}
+      dismissible={!saving}
+      title="Schedule Applicants"
+      subtitle={<>Interview and oral exam for {applicants.length} applicant{applicants.length === 1 ? '' : 's'} across{' '}{positionSummary.length} position{positionSummary.length === 1 ? '' : 's'}.</>}
+      footer={(
+        <>
+          <button type="button" className="btn btn-md btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
           <button
             type="button"
-            aria-label="Close"
-            title="Close"
-            onClick={onCancel}
+            className={`btn btn-md btn-primary${saving ? ' is-loading' : ''}`}
+            onClick={() => void handleConfirm()}
             disabled={saving}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-md)] text-[var(--neutral-600)] hover:bg-[var(--bg-page)]"
+            aria-busy={saving || undefined}
           >
-            <X size={20} strokeWidth={1.75} />
+            {!saving && <CalendarCheck size={16} strokeWidth={1.75} aria-hidden="true" />}
+            Confirm Schedule
           </button>
-        </div>
-
-        <div className="space-y-5 px-6 py-5">
+        </>
+      )}
+    >
+        <div className="space-y-5">
           <ul className="!m-0 divide-y divide-[var(--neutral-200)] rounded-[var(--radius-lg)] border border-[var(--neutral-200)] !p-0">
             {positionSummary.map((p) => (
               <li key={p.key} className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -272,19 +254,6 @@ export const ScheduleApplicantsModal = ({ applicants, raters, onCancel, onSchedu
             <p role="alert" className="!mb-0 text-[12px] font-medium leading-4 text-[var(--error-700)]">{error}</p>
           )}
         </div>
-
-        <div className="flex flex-col-reverse gap-3 border-t border-[var(--neutral-200)] px-6 py-4 sm:flex-row sm:justify-end">
-          <button type="button" className="btn btn-md btn-secondary w-full sm:w-auto" onClick={onCancel} disabled={saving}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-md btn-primary w-full sm:w-auto" onClick={() => void handleConfirm()} disabled={saving}>
-            {saving
-              ? <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-              : <CalendarCheck size={16} strokeWidth={1.75} aria-hidden="true" />}
-            {saving ? 'Scheduling…' : 'Confirm Schedule'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

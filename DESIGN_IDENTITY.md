@@ -127,6 +127,7 @@ This document is the single source of truth for how ABYAN looks and feels. Every
 | **Hero** | `linear-gradient(180deg, #363EE8 0%, #040E6B 100%)` | Landing/public hero, login side panel |
 | **Brand Soft** | `linear-gradient(135deg, #C8D1FF 0%, #363EE8 100%)` | Feature panels, illustration backdrops, progress accents |
 | **Primary Button** | `linear-gradient(180deg, #363EE8 0%, #191FA8 100%)` | Primary buttons (subtle; see Buttons) |
+| **Modal Header** | `linear-gradient(135deg, #363EE8 0%, #040E6B 100%)` | The header band of every modal (§9.10) |
 
 Portal heroes are straight-edged: the hero gradient plus one blended, faded photograph (see §7.1). **No drawn shapes** (circles, arcs, blobs, polygons) and no curved hero corners.
 
@@ -602,7 +603,7 @@ Used where a KPI should also preview **who** it counts (e.g. Interviewer Dashboa
 | Footer | "View all (N) →" in brand blue, Body M Medium. **Visual only.** |
 | Empty / loading | Centered icon, short line and next step inside the list area. Shimmer skeletons for the header, the number and 3 rows. |
 | Interaction | The whole card is one control (`role="button"`, `tabindex="0"`, Enter/Space, `aria-haspopup="dialog"`) with no nested interactive elements. Hover: elevation 1 + `#C8D1FF` border. Focus: 2px `#363EE8` ring. |
-| Opens | A **large list modal** (§9.10, 880px): toolbar (§9.4) plus a table paginated at 8 rows (§9.6). Focus is trapped inside and returns to the card on close. It becomes a full-screen sheet on mobile, and only the overlay scrolls, never an area inside the modal. |
+| Opens | A **large list modal** (§9.10 `Modal size="lg"`, 880px): toolbar (§9.4) plus a table paginated at 8 rows (§9.6). Focus is trapped inside and returns to the card on close. It becomes a full-screen sheet on mobile. The body scrolls inside the panel so the header and footer stay visible (changed 2026-10-25 from "only the overlay scrolls"; see §17 item 13). |
 
 ### 9.8 Status & Category Badges
 
@@ -633,10 +634,32 @@ Used where a KPI should also preview **who** it counts (e.g. Interviewer Dashboa
 
 ### 9.10 Modals & Dialogs
 
-- Overlay `rgba(4,14,107,.45)` (tinted deep blue, not black).
-- Panel: white, radius 12–16px, elevation 3, padding 24px, max-width 480px (confirm) / 640px (forms) / 880px (large).
-- Title: Title S or Title M `#040E6B`; close (×) icon top-right.
-- Footer actions right-aligned: **Cancel (secondary) → Confirm (primary)**. Destructive confirmations use the destructive button.
+**Every modal uses the shared `Modal` (`src/components/modal`).** Its anatomy comes from the RSP *Create New Job Position* modal: a gradient header, a white body that scrolls, and a footer holding the actions. Small confirmations use `ConfirmModal`, which has the same anatomy at 480px. Decision 2026-10-25 (`docs/plans/2026-10-25-standard-modal.md`).
+
+```
+┌──────────────────────────────────────────────┐
+│ ▓▓ Create New Job Position              ✕ ▓▓ │  ← gradient header, white title
+│ ▓▓ Fill in the details to create a …      ▓▓ │    subtitle #C8D1FF
+├──────────────────────────────────────────────┤
+│ body (white, scrolls inside the panel)       │
+├──────────────────────────────────────────────┤
+│                     ( Cancel ) ( + Create )  │  ← footer, right-aligned
+└──────────────────────────────────────────────┘
+```
+
+| Part | Spec |
+|---|---|
+| Overlay | `--overlay` `rgba(4,14,107,.45)`: tinted deep blue, not black. Centered, 16px padding. |
+| Panel | White, `--radius-xl` (16px), `--shadow-3`, `overflow: hidden`, `max-height: 88vh`, flex column |
+| Sizes | `sm` 480px (confirmations), `md` 640px (forms, the default), `lg` 880px (lists and tables, §9.7.1), `xl` 1024px (document viewers; use `flush` for an edge-to-edge body at a fixed 88vh) |
+| Header | `--gradient-modal-header` (`linear-gradient(135deg, #363EE8 0%, #040E6B 100%)`), padding 16px 24px. Title: 20px/28px Bold, **white**. Optional subtitle: Body M (14px), `#C8D1FF` (4.6:1 on `#363EE8`). An optional 20px icon sits before the title. |
+| Close | Top-right, 36px icon button with the `x` icon, `aria-label="Close"`. White at 80%; hover background white at 10%; focus ring `0 0 0 3px rgba(255,255,255,.5)`. |
+| Body | Padding 20px 24px. Body text `#28343D`. **The body scrolls inside the panel** so the header and footer stay visible. |
+| Footer | 1px `#E2E8F0` top border, padding 16px 24px. Actions are right-aligned: **Cancel (secondary) → primary**. Destructive confirmations keep the blue header and use the destructive button. While saving, the primary shows the §9.1 loading state and keeps its label. |
+| Mobile (< 640px) | A full-screen sheet: no outer padding or radius. The header and footer stay fixed and the body scrolls. |
+| Behaviour | `role="dialog"`, `aria-modal="true"`, labelled by the title and described by the subtitle. Focus goes to the first field, or to the close button. Tab is trapped inside. Esc and an overlay click close it (`dismissible={false}` turns both off while busy). Focus returns to the element that opened it. Page scroll is locked while it's open. A nested modal (for example a confirmation over a list) stacks above it, and Esc closes the top one first. |
+
+> **Header text must be white.** As with Logout (§9.1), the legacy `globals.css` colours `h2`/`p` dark. `Modal` renders inside an `.abyan-ds` scope and sets the colour on the elements, so check the rendered colour, not just the code.
 
 ### 9.11 Charts & Data Visualization
 
@@ -959,6 +982,7 @@ Categories such as **Department**, **Employment type** (Permanent, Casual, Contr
   --gradient-hero: linear-gradient(180deg, #363EE8 0%, #040E6B 100%);
   --gradient-soft: linear-gradient(135deg, #C8D1FF 0%, #363EE8 100%);
   --gradient-button: linear-gradient(180deg, #363EE8 0%, #191FA8 100%);
+  --gradient-modal-header: linear-gradient(135deg, #363EE8 0%, #040E6B 100%);
 
   /* Radius */
   --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-pill: 999px;
@@ -1071,6 +1095,7 @@ module.exports = {
 | Show KPI: icon chip + title + value | Add gradients, shadows, or clashing colors to KPI cards |
 | Keep brand patterns in heroes/auth/empty states | Put patterns behind dense data |
 | Use the gradient + one blended, faded photo in portal heroes (§7.1) | Draw circles, arcs, blobs or polygons in the hero, or round its corners |
+| Build every modal with the shared `Modal` / `ConfirmModal` (§9.10) | Hand-roll a `fixed inset-0` overlay, a white-header modal, or a side drawer for details |
 | Give each dashboard section its own white card | Wrap every section in one big white container |
 | Keep the same top navigation bar and lockup in every portal (§8.2) | Restyle the header, logo lockup or Logout per portal |
 | Keep the Logout label and icon white | Let a global text color turn the Logout label dark |
@@ -1095,6 +1120,7 @@ Before merging any UI change, confirm:
 - [ ] Contrast and keyboard navigation are checked.
 - [ ] The top bar follows §8.2, and the Logout label and icon render **white** (check the rendered color, not just the code).
 - [ ] Sidebar follows §9.12: collapsed by default, hover and focus open, overlay, reduced motion respected.
+- [ ] Modals use the shared `Modal` / `ConfirmModal` (§9.10). The header title renders **white**, and Esc, focus return and inner body scrolling work.
 - [ ] Verified at mobile, tablet, and desktop widths.
 - [ ] Works identically across Public, Employee, and HR/Admin portals.
 
@@ -1116,6 +1142,7 @@ These were found while compiling this guide and should be resolved by the design
 10. ~~**Side navigation: Settings has no active state.**~~ **Resolved** in the RSP rollout: the highlight lives on the rail itself (not inside a single nav group), so it can travel to Settings too. See §9.12 implementation notes.
 11. ~~**Side navigation: focus ring on the active item.**~~ **Resolved** in the RSP rollout: the active item's focus ring is `--color-primary` instead of white when the rail is open. See §9.12 implementation notes.
 12. **Side navigation: Esc drops focus.** In the mockup, Esc closes the rail by blurring the focused item, which sends keyboard focus to the page body. Still true in the RSP rollout. Consider moving focus to a sensible target, such as the main content.
+13. **Modal migration (2026-10-25).** §9.10 now has a gradient header, adopted from the Create Job Position modal. The body now scrolls inside the panel, which reverses §9.7.1's earlier "only the overlay scrolls". Existing modals move to the shared `Modal` portal by portal (`docs/plans/2026-10-25-standard-modal.md`). Until a portal's phase lands, its hand-rolled modals are known drift.
 
 ---
 

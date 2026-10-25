@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, UserPlus, Users } from 'lucide-react';
+import { Briefcase, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, GitBranch, Search, UserPlus, Users } from 'lucide-react';
+import { Modal } from '../../components/modal';
+import { useBackClosesView } from '../../hooks/useHistoryBack';
 import { fetchNewlyHiredStats, type NewlyHiredStats } from '../../lib/api/newlyHiredStats';
-import { getSuccessionDashboardOverview, type SuccessionOverview } from '../../lib/api/succession';
+import {
+  getSuccessionDashboardOverview,
+  type SuccessionOverview,
+  type SuccessionOverviewPosition,
+} from '../../lib/api/succession';
 import '../../styles/rsp-dashboard.css';
 import '../../styles/dashboard-scale.css';
 
@@ -45,6 +51,8 @@ interface Props {
   onOpenApplicants: () => void;
   onOpenQualified: () => void;
   onOpenSuccession: () => void;
+  /** Opens one key position on the Succession Planning page. `replace` when leaving from the list modal. */
+  onOpenSuccessionPosition: (departmentId: string, positionId: string, opts?: { replace?: boolean }) => void;
   onOpenNewHired: () => void;
 }
 
@@ -67,12 +75,13 @@ const DAY_MS = 86400000;
 const CLOSING_SOON_DAYS = 7;
 const VACANCY_STALE_DAYS = 90;
 const VACANCY_AGING_DAYS = 30;
-const LEAVING_WINDOW_MONTHS = 24;
 const UPCOMING_WEEK_DAYS = 7;
 const UPCOMING_MONTH_DAYS = 30;
 const RECENT_HELD_DAYS = 14;
 const MAX_DEPARTMENT_ROWS = 5;
 const MAX_SUCCESSION_ROWS = 5;
+// The View all modal paginates like the Interviewer list modal (DESIGN_IDENTITY §9.7.1).
+const SUCCESSION_MODAL_PAGE_SIZE = 8;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -113,6 +122,156 @@ const PERIOD_LABEL: Record<Period, string> = { month: 'this month', quarter: 'th
 
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
+// ── Succession rows (dashboard card and View all modal) ─────────────────────
+// Successors are the ranked pool the Succession Planning page shows for each
+// position (docs/plans/2026-10-25-rsp-dashboard-succession.md).
+
+type SuccessionRow = SuccessionOverviewPosition;
+
+function SuccessionTable({ rows, onOpen }: { rows: SuccessionRow[]; onOpen: (row: SuccessionRow) => void }) {
+  return (
+    <table className="rd-table">
+      <thead>
+        <tr>
+          <th>Key position</th><th>Incumbent leaves</th><th className="n">Successors</th>
+          <th><span className="sr-only">Open</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p) => {
+          const canOpen = p.departmentId !== null;
+          const open = () => canOpen && onOpen(p);
+          return (
+            <tr
+              key={p.id}
+              className={canOpen ? 'rd-row-link' : undefined}
+              role={canOpen ? 'link' : undefined}
+              tabIndex={canOpen ? 0 : undefined}
+              aria-label={canOpen ? `Open ${p.title} on the Succession Planning page` : undefined}
+              onClick={open}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  open();
+                }
+              }}
+            >
+              <td><span className="rd-pri">{p.title}</span><span className="rd-meta">{p.departmentName}</span></td>
+              <td>{formatMonthYear(p.incumbentLeavingDate)}</td>
+              <td className="n" title={p.successorCount === null ? 'Successors could not be loaded' : undefined}>
+                {p.successorCount ?? '—'}
+              </td>
+              <td className="rd-chev">{canOpen && <ChevronRight size={16} aria-hidden="true" />}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+/** Page numbers for §9.6: all of them up to 7, else first, last and current ±1 with gaps. */
+const pageList = (current: number, total: number): (number | 'gap')[] => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const keep = new Set([1, total, current - 1, current, current + 1]);
+  const out: (number | 'gap')[] = [];
+  for (let n = 1; n <= total; n += 1) {
+    if (keep.has(n)) out.push(n);
+    else if (out[out.length - 1] !== 'gap') out.push('gap');
+  }
+  return out;
+};
+
+function SuccessionListModal({
+  open,
+  onClose,
+  rows,
+  onOpen,
+}: {
+  open: boolean;
+  onClose: () => void;
+  rows: SuccessionRow[];
+  onOpen: (row: SuccessionRow) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  useBackClosesView(open, onClose, 'succession-list');
+
+  const filtered = useMemo(() => {
+    const q = norm(query);
+    return rows.filter((p) => !q || norm(p.title).includes(q) || norm(p.departmentName).includes(q));
+  }, [rows, query]);
+  const pages = Math.max(1, Math.ceil(filtered.length / SUCCESSION_MODAL_PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const first = (current - 1) * SUCCESSION_MODAL_PAGE_SIZE;
+  const visible = filtered.slice(first, first + SUCCESSION_MODAL_PAGE_SIZE);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Key positions"
+      subtitle={`${rows.length} key position${rows.length === 1 ? '' : 's'}, fewest successors first`}
+    >
+      <div className="rspdash rd-modal">
+        <div className="rd-toolbar">
+          <label className="rd-search">
+            <Search size={16} aria-hidden="true" />
+            <span className="sr-only">Search key positions</span>
+            <input
+              type="search"
+              value={query}
+              placeholder="Search position or office"
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+        </div>
+        {visible.length === 0 ? (
+          <p className="rd-empty">No key positions match your search.</p>
+        ) : (
+          <SuccessionTable rows={visible} onOpen={onOpen} />
+        )}
+        <div className="rd-pager">
+          <span>
+            {filtered.length === 0
+              ? 'Showing 0 entries'
+              : `Showing ${first + 1}–${first + visible.length} of ${filtered.length} entries`}
+          </span>
+          {pages > 1 && (
+            <nav aria-label="Pagination">
+              <button type="button" disabled={current === 1} onClick={() => setPage(current - 1)}>
+                <ChevronLeft size={16} aria-hidden="true" /> Previous
+              </button>
+              {pageList(current, pages).map((n, i) =>
+                n === 'gap' ? (
+                  <span key={`gap-${i}`} className="rd-gap">…</span>
+                ) : (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`rd-pg ${n === current ? 'on' : ''}`}
+                    aria-current={n === current ? 'page' : undefined}
+                    onClick={() => setPage(n)}
+                  >
+                    {n}
+                  </button>
+                ),
+              )}
+              <button type="button" disabled={current === pages} onClick={() => setPage(current + 1)}>
+                Next <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </nav>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function RspDashboardOverview({
   jobs,
   applicants,
@@ -122,6 +281,7 @@ export function RspDashboardOverview({
   onOpenApplicants,
   onOpenQualified,
   onOpenSuccession,
+  onOpenSuccessionPosition,
   onOpenNewHired,
 }: Props) {
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -132,6 +292,7 @@ export function RspDashboardOverview({
   const [sessionRange, setSessionRange] = useState<'week' | 'month'>('week');
   const [succession, setSuccession] = useState<SuccessionOverview | null>(null);
   const [successionError, setSuccessionError] = useState<string | null>(null);
+  const [successionListOpen, setSuccessionListOpen] = useState(false);
   const [newlyHired, setNewlyHired] = useState<NewlyHiredStats | null>(null);
 
   useEffect(() => {
@@ -326,40 +487,21 @@ export function RspDashboardOverview({
   }, [calendarMonth, sessions, today]);
 
   // ── Succession ────────────────────────────────────────────────────────────
-  const successionStats = useMemo(() => {
+  // Fewest successors first (a failed count sorts last), then the incumbent
+  // leaving soonest, so the positions most exposed lead the table.
+  const successionRows = useMemo(() => {
     if (!succession) return null;
-    const positions = succession.positions.filter((p) => inDept(p.departmentName));
-    const windowEnd = new Date(today.getFullYear(), today.getMonth() + LEAVING_WINDOW_MONTHS, today.getDate());
-    const leavingSoon = (raw: string | null) => {
-      const d = parseDay(raw);
-      return !!d && d >= today && d <= windowEnd;
-    };
-    const covered = positions.filter((p) => p.successorCount >= Math.max(1, p.requiredSuccessorsCount)).length;
-    const none = positions.filter((p) => p.successorCount === 0).length;
-    const partial = positions.length - covered - none;
-    const riskOf = (p: (typeof positions)[number]) =>
-      p.successorCount === 0 ? (leavingSoon(p.incumbentLeavingDate) ? 'high' : 'medium')
-        : p.successorCount < Math.max(1, p.requiredSuccessorsCount) ? 'medium' : 'low';
-    const RISK_ORDER = { high: 0, medium: 1, low: 2 } as const;
-    const rows = positions
-      .map((p) => ({ ...p, risk: riskOf(p) }))
+    return succession.positions
+      .filter((p) => inDept(p.departmentName))
       .sort((a, b) => {
-        if (a.risk !== b.risk) return RISK_ORDER[a.risk] - RISK_ORDER[b.risk];
+        const ac = a.successorCount ?? Infinity;
+        const bc = b.successorCount ?? Infinity;
+        if (ac !== bc) return ac - bc;
         const ad = parseDay(a.incumbentLeavingDate)?.getTime() ?? Infinity;
         const bd = parseDay(b.incumbentLeavingDate)?.getTime() ?? Infinity;
-        return ad - bd;
+        return ad - bd || a.title.localeCompare(b.title);
       });
-    return {
-      total: positions.length,
-      coverage: pct(positions.length - none, positions.length),
-      none,
-      covered,
-      partial,
-      leaving: positions.filter((p) => leavingSoon(p.incumbentLeavingDate)).length,
-      pool: succession.talentPool.filter((t) => inDept(t.departmentName)).length,
-      rows,
-    };
-  }, [succession, department, today]);
+  }, [succession, department]);
 
   const monthLabel = calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const shiftMonth = (delta: number) =>
@@ -628,67 +770,44 @@ export function RspDashboardOverview({
           <div className="rd-sec-h">
             <span className="rd-ico"><GitBranch size={16} aria-hidden="true" /></span>
             <h2>Succession planning</h2>
-            <span className="rd-desc">Key position coverage and talent pool</span>
+            <span className="rd-desc">Ranked successors for each key position</span>
             <button type="button" className="rd-link" onClick={onOpenSuccession}>Succession planning ›</button>
           </div>
-          {successionError && <p className="rd-empty rd-card">Succession data could not be loaded: {successionError}</p>}
-          {!successionError && !successionStats && <p className="rd-empty rd-card">Loading succession data…</p>}
-          {successionStats && (
-            <div className="rd-two rd-two-1-2">
-              <div className="rd-card">
-                <div className="rd-stats rd-s2">
-                  <div className="rd-stat"><span className="l">Key positions</span><span className="v">{successionStats.total}</span></div>
-                  <div className={`rd-stat ${successionStats.none ? 'risk' : ''}`}><span className="l">No successor</span><span className="v">{successionStats.none}</span></div>
-                  <div className={`rd-stat rd-top ${successionStats.leaving ? 'warn' : ''}`}><span className="l">Leaving ≤ 24 mo</span><span className="v">{successionStats.leaving}</span></div>
-                  <div className="rd-stat rd-top"><span className="l">Talent pool</span><span className="v">{successionStats.pool}</span></div>
-                </div>
-                <span className="rd-subtitle rd-block">Successor coverage · {successionStats.coverage}% of key positions</span>
-                <div className="rd-bar rd-bar-lg" aria-hidden="true">
-                  <i style={{ width: `${pct(successionStats.covered, successionStats.total)}%`, background: 'var(--rd-ok)' }} />
-                  <i style={{ width: `${pct(successionStats.partial, successionStats.total)}%`, background: 'var(--rd-accent)' }} />
-                  <i style={{ width: `${pct(successionStats.none, successionStats.total)}%`, background: 'var(--rd-risk)' }} />
-                </div>
-                <div className="rd-legend rd-legend-cal">
-                  <span style={{ ['--c' as string]: 'var(--rd-ok)' }}>Covered {successionStats.covered}</span>
-                  <span style={{ ['--c' as string]: 'var(--rd-accent)' }}>Partial {successionStats.partial}</span>
-                  <span style={{ ['--c' as string]: 'var(--rd-risk)' }}>None {successionStats.none}</span>
-                </div>
-              </div>
-              <div className="rd-card">
-                <div className="rd-h"><h3>Key position coverage</h3><span className="rd-asof-dark">sorted by risk</span></div>
-                {successionStats.rows.length === 0 ? (
-                  <p className="rd-empty">No key positions have been identified yet.</p>
-                ) : (
-                  <table className="rd-table">
-                    <thead>
-                      <tr><th>Key position</th><th>Incumbent leaves</th><th className="n">Successors</th><th>Coverage</th><th>Risk</th></tr>
-                    </thead>
-                    <tbody>
-                      {successionStats.rows.slice(0, MAX_SUCCESSION_ROWS).map((p) => {
-                        const required = Math.max(1, p.requiredSuccessorsCount);
-                        return (
-                          <tr key={p.id}>
-                            <td><span className="rd-pri">{p.title}</span><span className="rd-meta">{p.departmentName}</span></td>
-                            <td>{formatMonthYear(p.incumbentLeavingDate)}</td>
-                            <td className="n">{p.successorCount} of {required}</td>
-                            <td>
-                              {p.successorCount === 0 ? <span className="rd-pill rd-p-risk">No successor</span>
-                                : p.successorCount < required ? <span className="rd-pill rd-p-info">Partial</span>
-                                : <span className="rd-pill rd-p-ok">Covered</span>}
-                            </td>
-                            <td>
-                              <span className={`rd-pill ${p.risk === 'high' ? 'rd-p-risk' : p.risk === 'medium' ? 'rd-p-warn' : 'rd-p-ok'}`}>
-                                {p.risk === 'high' ? 'High' : p.risk === 'medium' ? 'Medium' : 'Low'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+          <div className="rd-card">
+            <div className="rd-h"><h3>Key positions</h3><span className="rd-asof-dark">fewest successors first</span></div>
+            {successionError && <p className="rd-empty">Succession data could not be loaded: {successionError}</p>}
+            {!successionError && !successionRows && <p className="rd-empty">Ranking successors for each key position…</p>}
+            {successionRows && successionRows.length === 0 && (
+              <p className="rd-empty">No key positions have been identified yet.</p>
+            )}
+            {successionRows && successionRows.length > 0 && (
+              <>
+                <SuccessionTable
+                  rows={successionRows.slice(0, MAX_SUCCESSION_ROWS)}
+                  onOpen={(p) => p.departmentId && onOpenSuccessionPosition(p.departmentId, p.id)}
+                />
+                {successionRows.length > MAX_SUCCESSION_ROWS && (
+                  <button
+                    type="button"
+                    className="rd-link rd-viewall"
+                    aria-haspopup="dialog"
+                    onClick={() => setSuccessionListOpen(true)}
+                  >
+                    View all ({successionRows.length}) →
+                  </button>
                 )}
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+          {successionRows && (
+            <SuccessionListModal
+              open={successionListOpen}
+              onClose={() => setSuccessionListOpen(false)}
+              rows={successionRows}
+              // The modal's own Back entry is replaced, so Back from the
+              // Succession page lands on the dashboard, not a closed modal.
+              onOpen={(p) => p.departmentId && onOpenSuccessionPosition(p.departmentId, p.id, { replace: true })}
+            />
           )}
         </section>
       </div>

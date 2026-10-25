@@ -36,6 +36,7 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
+import { Modal } from './modal';
 
 interface HiringRow {
   id: string;
@@ -806,124 +807,129 @@ export const ForHiringPage = () => {
     if (!selectTarget) return null;
     const plantilla = selectTarget.slot ? plantillaLabel(selectTarget.slot) : '';
     const deadlineText = deadline ? formatDisplayDate(deadline) : '[date]';
+    const title = selectStep === 'notice'
+      ? `${selectTarget.fullName} applied to other positions`
+      : selectStep === 'confirm'
+        ? `Select ${selectTarget.fullName} for ${selectTarget.position}?`
+        : 'Select for Hiring';
+    const footer = selectStep === 'notice' ? (
+      <>
+        <button type="button" className="btn btn-md btn-secondary" onClick={closeSelectDialog}>Cancel</button>
+        <button type="button" className="btn btn-md btn-primary" onClick={() => setSelectStep('confirm')}>Continue</button>
+      </>
+    ) : selectStep === 'confirm' ? (
+      <>
+        <button
+          type="button"
+          className="btn btn-md btn-secondary"
+          disabled={reserving}
+          onClick={() => (otherApps.length > 0 ? setSelectStep('notice') : closeSelectDialog())}
+        >
+          {otherApps.length > 0 ? 'Back' : 'Cancel'}
+        </button>
+        <button
+          type="button"
+          className={`btn btn-md btn-primary${reserving ? ' is-loading' : ''}`}
+          disabled={!canConfirm}
+          aria-busy={reserving || undefined}
+          onClick={() => { void handleConfirmSelect(); }}
+        >
+          Confirm Selection
+        </button>
+      </>
+    ) : undefined;
+
     return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="select-dialog-title"
+      <Modal
+        open
+        onClose={closeSelectDialog}
+        dismissible={!reserving}
+        size="sm"
+        icon={selectStep === 'notice' ? <AlertTriangle strokeWidth={1.75} /> : undefined}
+        title={title}
+        subtitle={selectStep === 'confirm' ? `${plantilla || 'No plantilla linked'} · ${selectTarget.department}` : undefined}
+        footer={footer}
       >
-        <div className="max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-2xl bg-white p-6 shadow-[var(--shadow-3)]">
-          {selectStep === 'loading' && (
-            <p className="text-sm text-[var(--neutral-600)]" aria-busy="true">Checking the applicant's other applications…</p>
-          )}
+        {selectStep === 'loading' && (
+          <p className="text-sm text-[var(--neutral-600)]" aria-busy="true">Checking the applicant's other applications…</p>
+        )}
 
-          {selectStep === 'notice' && (
-            <>
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--warning-100)] text-[var(--warning-500)]">
-                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <h2 id="select-dialog-title" className="mb-1 text-base font-semibold text-[var(--color-primary-900)]">
-                {selectTarget.fullName} applied to other positions
-              </h2>
-              <p className="mb-3 text-sm text-[var(--neutral-600)]">
-                They have {otherApps.length} other open application{otherApps.length === 1 ? '' : 's'}:
-              </p>
-              <ul className="divide-y divide-[var(--neutral-200)] rounded-xl border border-[var(--neutral-200)] text-sm">
-                {otherApps.map(app => (
-                  <li key={app.id} className="px-3 py-2.5">
-                    <p className="font-semibold text-[var(--color-primary-900)]">{app.position}</p>
-                    <p className="text-xs text-[var(--neutral-600)]">{[app.office, app.plantilla].filter(Boolean).join(' · ')}</p>
-                    <span className="badge badge-neutral mt-1">{app.status || 'Submitted'}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-sm text-[var(--neutral-800)]">
-                Continue selecting them for <b>{selectTarget.position}{plantilla ? ` · ${plantilla}` : ''}</b>? Their other
-                applications close once their credentials are generated.
-              </p>
-              <div className="mt-5 flex justify-end gap-3">
-                <button type="button" className="btn btn-md btn-secondary" onClick={closeSelectDialog}>Cancel</button>
-                <button type="button" className="btn btn-md btn-primary" onClick={() => setSelectStep('confirm')}>Continue</button>
-              </div>
-            </>
-          )}
+        {selectStep === 'notice' && (
+          <>
+            <p className="mb-3 text-sm text-[var(--neutral-600)]">
+              They have {otherApps.length} other open application{otherApps.length === 1 ? '' : 's'}:
+            </p>
+            <ul className="divide-y divide-[var(--neutral-200)] rounded-xl border border-[var(--neutral-200)] text-sm">
+              {otherApps.map(app => (
+                <li key={app.id} className="px-3 py-2.5">
+                  <p className="font-semibold text-[var(--color-primary-900)]">{app.position}</p>
+                  <p className="text-xs text-[var(--neutral-600)]">{[app.office, app.plantilla].filter(Boolean).join(' · ')}</p>
+                  <span className="badge badge-neutral mt-1">{app.status || 'Submitted'}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-sm text-[var(--neutral-800)]">
+              Continue selecting them for <b>{selectTarget.position}{plantilla ? ` · ${plantilla}` : ''}</b>? Their other
+              applications close once their credentials are generated.
+            </p>
+          </>
+        )}
 
-          {selectStep === 'confirm' && (
-            <>
-              <h2 id="select-dialog-title" className="mb-1 text-base font-semibold text-[var(--color-primary-900)]">
-                Select {selectTarget.fullName} for {selectTarget.position}?
-              </h2>
-              <p className="mb-3 text-sm text-[var(--neutral-600)]">{plantilla || 'No plantilla linked'} · {selectTarget.department}</p>
+        {selectStep === 'confirm' && (
+          <>
+            <div className="rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-3 text-sm text-[var(--neutral-800)]">
+              <b>This updates the applicant's status and cannot be undone</b>, unless the applicant does not secure the
+              slot by the date below.
+            </div>
 
-              <div className="rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-3 text-sm text-[var(--neutral-800)]">
-                <b>This updates the applicant's status and cannot be undone</b>, unless the applicant does not secure the
-                slot by the date below.
-              </div>
+            <label htmlFor="signing-deadline" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
+              Report to the office on or before <span className="text-[var(--error-500)]">*</span>
+            </label>
+            <input
+              id="signing-deadline"
+              type="date"
+              min={today}
+              value={deadline}
+              onChange={(event) => setDeadline(event.target.value)}
+              className="h-10 w-full rounded-lg border border-[var(--neutral-200)] px-3 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
+            />
 
-              <label htmlFor="signing-deadline" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
-                Report to the office on or before <span className="text-[var(--error-500)]">*</span>
-              </label>
+            <label htmlFor="signing-instructions" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
+              Instructions to the applicant
+            </label>
+            <textarea
+              id="signing-instructions"
+              rows={4}
+              value={instructions}
+              onChange={(event) => setInstructions(event.target.value)}
+              aria-describedby="signing-instructions-help"
+              className="w-full rounded-lg border border-[var(--neutral-200)] px-3 py-2 text-sm leading-relaxed focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
+            />
+            <p id="signing-instructions-help" className="mt-1 text-xs text-[var(--neutral-600)]">
+              Shown on their status tracker as a congratulatory notice, always followed by: "{signingForfeitWarning(deadlineText)}"
+            </p>
+
+            <label className="mt-4 flex items-start gap-2 text-sm text-[var(--neutral-800)]">
               <input
-                id="signing-deadline"
-                type="date"
-                min={today}
-                value={deadline}
-                onChange={(event) => setDeadline(event.target.value)}
-                className="h-10 w-full rounded-lg border border-[var(--neutral-200)] px-3 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(event) => setAcknowledged(event.target.checked)}
+                className="mt-0.5 h-[18px] w-[18px] accent-[var(--color-primary)]"
               />
+              I understand this cannot be revoked unless the applicant does not secure the slot.
+            </label>
 
-              <label htmlFor="signing-instructions" className="mb-1.5 mt-4 block text-[13px] font-medium text-[var(--neutral-800)]">
-                Instructions to the applicant
-              </label>
-              <textarea
-                id="signing-instructions"
-                rows={4}
-                value={instructions}
-                onChange={(event) => setInstructions(event.target.value)}
-                aria-describedby="signing-instructions-help"
-                className="w-full rounded-lg border border-[var(--neutral-200)] px-3 py-2 text-sm leading-relaxed focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary-200)]"
-              />
-              <p id="signing-instructions-help" className="mt-1 text-xs text-[var(--neutral-600)]">
-                Shown on their status tracker as a congratulatory notice, always followed by: "{signingForfeitWarning(deadlineText)}"
+            {!selectTarget.slot && (
+              <p className="mt-3 text-xs font-medium text-[var(--error-700)]">
+                This application is not linked to a plantilla, so it cannot be reserved. Link it from the job post first.
               </p>
-
-              <label className="mt-4 flex items-start gap-2 text-sm text-[var(--neutral-800)]">
-                <input
-                  type="checkbox"
-                  checked={acknowledged}
-                  onChange={(event) => setAcknowledged(event.target.checked)}
-                  className="mt-0.5 h-[18px] w-[18px] accent-[var(--color-primary)]"
-                />
-                I understand this cannot be revoked unless the applicant does not secure the slot.
-              </label>
-
-              {!selectTarget.slot && (
-                <p className="mt-3 text-xs font-medium text-[var(--error-700)]">
-                  This application is not linked to a plantilla, so it cannot be reserved. Link it from the job post first.
-                </p>
-              )}
-              {selectError && (
-                <p role="alert" className="mt-3 text-sm font-medium text-[var(--error-700)]">{selectError}</p>
-              )}
-
-              <div className="mt-5 flex justify-end gap-3">
-                <button
-                  type="button"
-                  className="btn btn-md btn-secondary"
-                  disabled={reserving}
-                  onClick={() => (otherApps.length > 0 ? setSelectStep('notice') : closeSelectDialog())}
-                >
-                  {otherApps.length > 0 ? 'Back' : 'Cancel'}
-                </button>
-                <button type="button" className="btn btn-md btn-primary" disabled={!canConfirm} onClick={() => { void handleConfirmSelect(); }}>
-                  {reserving ? 'Saving…' : 'Confirm Selection'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+            )}
+            {selectError && (
+              <p role="alert" className="mt-3 text-sm font-medium text-[var(--error-700)]">{selectError}</p>
+            )}
+          </>
+        )}
+      </Modal>
     );
   }
 };

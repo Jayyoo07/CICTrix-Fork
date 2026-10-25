@@ -38,6 +38,7 @@ import {
   type CompetencyRequirement,
   type TrainingRequirement,
 } from '../lib/api/succession';
+import { Modal as StandardModal } from './modal';
 
 /** Predefined training category options for the multi-select gate field. */
 export const SUCCESSION_TRAINING_CATEGORIES = [
@@ -848,23 +849,10 @@ const Modal = ({
   onClose: () => void;
   children: ReactNode;
 }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-    <div
-      className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-start justify-between gap-4 border-b border-[var(--border-color)] px-6 py-4">
-        <div>
-          <h2 className="!mb-0 text-lg font-bold text-[var(--text-primary)]">{title}</h2>
-          {subtitle && <p className="!mb-0 mt-0.5 text-sm text-[var(--text-secondary)]">{subtitle}</p>}
-        </div>
-        <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label="Close">
-          <X size={20} />
-        </button>
-      </div>
-      <div className="overflow-y-auto px-6 py-5">{children}</div>
-    </div>
-  </div>
+  // Thin wrapper over the shared §9.10 modal; callers keep their action rows in the body.
+  <StandardModal open onClose={onClose} title={title} subtitle={subtitle}>
+    {children}
+  </StandardModal>
 );
 
 const Field = ({ label, children }: { label: string; children: ReactNode }) => (

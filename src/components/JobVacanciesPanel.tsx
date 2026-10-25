@@ -1,4 +1,5 @@
-import { Briefcase, ChevronLeft, ChevronRight, Lock, Search, Users, X, XCircle } from 'lucide-react';
+import { Briefcase, ChevronLeft, ChevronRight, Lock, Search, Users, XCircle } from 'lucide-react';
+import { Modal } from './modal';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { formatOfficeLabel, formatOfficeName } from '../constants/positions';
 import { formatPHDate } from '../lib/recruitmentData';
@@ -237,11 +238,6 @@ const OpenVacancyDialog = ({ jobs, onCancel, onCreatePosition, onSubmit }: OpenV
 
   useEffect(() => { setHighlight(selectable[0] ?? -1); }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!picked) inputRef.current?.focus(); }, [picked]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !menuOpen) onCancel(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen, onCancel]);
 
   const choose = (match: PositionMatch | undefined) => {
     if (!match || match.eligibility !== 'available') return;
@@ -290,18 +286,28 @@ const OpenVacancyDialog = ({ jobs, onCancel, onCreatePosition, onSubmit }: OpenV
   );
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto p-4 pt-12" style={{ background: 'rgba(4,14,107,.45)' }}>
-      <div className="w-full max-w-[640px] rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby={`${listId}-title`}>
-        <div className="mb-5 flex items-start gap-3">
-          <div>
-            <h3 id={`${listId}-title`} className={`!mb-0.5 text-xl font-semibold ${HEADING}`}>Open Vacant Job Position</h3>
-            <p className="!mb-0 text-sm text-slate-500">Pick a closed job position. Its details come from Job Positions.</p>
-          </div>
-          <button type="button" aria-label="Close" onClick={onCancel} className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100">
-            <X className="h-5 w-5" />
+    <Modal
+      open
+      onClose={onCancel}
+      dismissible={!saving}
+      title="Open Vacant Job Position"
+      subtitle="Pick a closed job position. Its details come from Job Positions."
+      initialFocusRef={picked ? undefined : inputRef}
+      footer={(
+        <>
+          <button type="button" className="btn btn-md btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button
+            type="button"
+            className={`btn btn-md btn-primary${saving ? ' is-loading' : ''}`}
+            disabled={!canSubmit}
+            aria-busy={saving || undefined}
+            onClick={() => void submit()}
+          >
+            Open Vacancy
           </button>
-        </div>
-
+        </>
+      )}
+    >
         {!picked && (
           <div>
             <label htmlFor={`${listId}-q`} className="mb-1.5 block text-[13px] font-medium text-slate-700">Job position <span className="text-rose-500">*</span></label>
@@ -422,13 +428,6 @@ const OpenVacancyDialog = ({ jobs, onCancel, onCreatePosition, onSubmit }: OpenV
           </div>
         </div>
 
-        <div className="abyan-ds mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5">
-          <button type="button" className="btn btn-md btn-secondary" onClick={onCancel}>Cancel</button>
-          <button type="button" className="btn btn-md btn-primary" disabled={!canSubmit} onClick={() => void submit()}>
-            {saving ? 'Opening…' : 'Open Vacancy'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Building2, ChevronDown, ClipboardCheck } from 'lucide-react';
-import { getActiveHeadcountByDepartment, getIPCRRecordsFromGapView, normDeptKey } from '../../lib/api/competencyGapAnalysis';
+import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../lib/api/competencyGapAnalysis';
 import {
   buildDeptCompletionRows,
   getAdjectival,
   groupByDept,
   RATED_PERIOD_LABEL,
+  restrictToActiveOffices,
   type DeptCompletionRow,
   type IPCRRatingRecord,
 } from './pm/SummaryOfRatings';
@@ -212,13 +213,19 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
     let cancelled = false;
     (async () => {
       try {
-        const [data, roster] = await Promise.all([
+        const [data, roster, activeOffices] = await Promise.all([
           getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
           getActiveHeadcountByDepartment(),
+          // The active-office list only filters; if it fails, show everything.
+          getActiveOfficeKeys().catch((err) => {
+            console.error('Error loading active offices:', err);
+            return null;
+          }),
         ]);
         if (cancelled) return;
-        setRecords(data);
-        setHeadcount(roster);
+        const scoped = restrictToActiveOffices(data, roster, activeOffices);
+        setRecords(scoped.records);
+        setHeadcount(scoped.headcount);
       } catch (err) {
         console.error('Error loading PM dashboard ratings:', err);
         if (!cancelled) setLoadError(true);

@@ -23,6 +23,7 @@ import {
 import { RaterManagementNavigationGuide } from './RaterManagementNavigationGuide';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
+import { ConfirmModal } from './modal';
 
 type RaterStatus = 'Active' | 'Inactive';
 type ClientSource = 'preferred' | 'fallback';
@@ -812,45 +813,21 @@ export const RaterManagementPage = () => {
       <RaterManagementNavigationGuide open={showGuide} onClose={() => setShowGuide(false)} />
 
       {/* Are you sure? (§9.10, destructive) */}
-      {pendingRemoval && (
-        <div
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
-          style={{ background: 'rgba(4, 14, 107, .45)' }}
-          onClick={() => setPendingRemoval(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="remove-rater-title"
-            onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-[420px] rounded-2xl bg-white p-6"
-            style={{ boxShadow: 'var(--shadow-3)' }}
-          >
-            <h3 id="remove-rater-title" className="!mb-1 text-lg font-bold text-[#040E6B]">Are you sure?</h3>
-            <p className="!mb-0 text-sm text-slate-600">
-              Remove <span className="font-semibold text-slate-900">{pendingRemoval.name}</span> from the rater
-              list. You will have {UNDO_SECONDS} seconds to undo this.
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setPendingRemoval(null)}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => { const target = pendingRemoval; setPendingRemoval(null); scheduleRemoval(target); }}
-                className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 active:bg-rose-800"
-              >
-                <Trash2 className="h-4 w-4" /> Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={Boolean(pendingRemoval)}
+        icon={<Trash2 strokeWidth={1.75} />}
+        title="Are you sure?"
+        tone="destructive"
+        confirmLabel="Remove"
+        message={pendingRemoval && (
+          <p className="!mb-0">
+            Remove <span className="font-semibold text-slate-900">{pendingRemoval.name}</span> from the rater
+            list. You will have {UNDO_SECONDS} seconds to undo this.
+          </p>
+        )}
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => { const target = pendingRemoval; setPendingRemoval(null); if (target) scheduleRemoval(target); }}
+      />
 
       {/* Undo window. It counts down so the ten seconds are visible rather
           than something the admin has to race. */}

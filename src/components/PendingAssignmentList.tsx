@@ -17,7 +17,6 @@ import {
   Save,
   Search,
   UserCheck,
-  X,
 } from 'lucide-react';
 import { SortButton, SortHeader, toTime, useTableSort } from './tableSort';
 import {
@@ -38,6 +37,7 @@ import {
   toggleId,
   type CheckState,
 } from '../lib/scheduleSelection';
+import { Modal } from './modal';
 
 interface PendingAssignmentListProps {
   applicants: ApplicantRecord[];
@@ -753,34 +753,31 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
       )}
 
       {/* ── EDIT SCHEDULE MODAL ── */}
-      {editingApplicant && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(4,14,107,0.45)', padding: '1rem' }}
-          onClick={() => setEditingApplicant(null)}
-        >
-          <div
-            style={{ background: '#ffffff', borderRadius: 20, boxShadow: '0 24px 80px rgba(54,62,232,0.22)', width: '100%', maxWidth: 520, overflow: 'hidden' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal header */}
-            <div style={{ background: 'linear-gradient(135deg, #5B65F0 0%, #363EE8 100%)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#ffffff' }}>Edit Schedule</h3>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)' }}>
-                  {editingApplicant.full_name} — {editingApplicant.position}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingApplicant(null)}
-                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, cursor: 'pointer', color: '#ffffff', padding: '0.35rem', display: 'flex' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal body */}
-            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <Modal
+        open={Boolean(editingApplicant)}
+        onClose={() => setEditingApplicant(null)}
+        dismissible={!editSaving}
+        size="sm"
+        title="Edit Schedule"
+        subtitle={editingApplicant ? `${editingApplicant.full_name} — ${editingApplicant.position}` : undefined}
+        footer={(
+          <>
+            <button type="button" onClick={() => setEditingApplicant(null)} disabled={editSaving} className="btn btn-md btn-secondary">Cancel</button>
+            <button
+              type="button"
+              onClick={() => void handleEditSave()}
+              disabled={editSaving}
+              aria-busy={editSaving || undefined}
+              className={`btn btn-md btn-primary${editSaving ? ' is-loading' : ''}`}
+            >
+              {!editSaving && <Save size={14} aria-hidden="true" />}
+              Save Changes
+            </button>
+          </>
+        )}
+      >
+        {editingApplicant && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: 6 }}>
@@ -846,40 +843,8 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
               </div>
               {editError && <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 600, color: '#EF4444' }}>{editError}</p>}
             </div>
-
-            {/* Modal footer */}
-            <div style={{ padding: '1rem 1.5rem', borderTop: '1.5px solid #EEF0FD', display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
-              <button
-                type="button"
-                onClick={() => setEditingApplicant(null)}
-                style={{ padding: '0.55rem 1.25rem', background: '#ffffff', border: '1.5px solid #C8D1FF', borderRadius: 8, fontWeight: 600, fontSize: '0.875rem', color: '#040E6B', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleEditSave()}
-                disabled={editSaving}
-                aria-busy={editSaving || undefined}
-                style={{ padding: '0.55rem 1.5rem', background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: editSaving ? 'progress' : 'pointer', opacity: editSaving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: editSaving ? 'none' : '0 4px 14px rgba(54,62,232,0.35)' }}
-              >
-                {/* Label stays while saving (§9.1); the icon slot carries the
-                    spinner, so the button neither reflows nor stops saying
-                    what it does. */}
-                {editSaving ? (
-                  <span
-                    aria-hidden
-                    className="h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none motion-reduce:opacity-60"
-                  />
-                ) : (
-                  <Save size={14} />
-                )}
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
     </div>
   );

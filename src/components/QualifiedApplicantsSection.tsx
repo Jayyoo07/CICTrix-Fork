@@ -14,7 +14,6 @@ import {
   Save,
   Search,
   Users,
-  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
@@ -25,6 +24,7 @@ import {
   subscribeToEvaluationChanges,
   type EvaluationSnapshot,
 } from '../lib/evaluationScores';
+import { Modal } from './modal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -364,20 +364,15 @@ const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '1rem' }}>
-      <div style={{ background: 'var(--bg-control)', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', width: '100%', maxWidth: 520 }}>
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: `1px solid var(--border-subtle)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--status-error-light)', color: 'var(--status-error)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <FileText size={16} />
-            </div>
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
-          </div>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4 }}>
-            <X size={18} />
-          </button>
-        </div>
-        <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+    <Modal
+      open
+      onClose={onClose}
+      icon={<FileText strokeWidth={1.75} />}
+      title={title}
+      size="sm"
+      footer={<button type="button" onClick={onClose} className="btn btn-md btn-secondary">Close</button>}
+    >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
           {files.length === 0 ? (
             <p style={{ margin: 0, color: 'var(--text-secondary)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.9rem' }}>
               No files uploaded for this category.
@@ -408,13 +403,7 @@ const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
             ))
           )}
         </div>
-        <div style={{ padding: '0.85rem 1.5rem', borderTop: `1px solid var(--border-subtle)`, textAlign: 'right' }}>
-          <button type="button" onClick={onClose} style={{ padding: '0.55rem 1.25rem', background: 'none', border: `1px solid var(--border-subtle)`, borderRadius: 8, fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -458,29 +447,36 @@ const ExamScoresModal = ({ folder, existingScores, onClose, onSave }: ExamScores
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '1rem' }}>
-      <div style={{ background: 'var(--bg-control)', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: '100%', maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: `1px solid var(--border-subtle)`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Pencil size={20} style={{ color: 'var(--accent-primary)' }} />
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Written Examination Scores</h2>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{folder.position}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4 }}>
-            <X size={20} />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!saving}
+      icon={<Pencil strokeWidth={1.75} />}
+      title="Written Examination Scores"
+      subtitle={folder.position}
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={saving} className="btn btn-md btn-secondary">Cancel</button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!allFilled || saving || saved}
+            aria-busy={saving || undefined}
+            className={`btn btn-md btn-primary${saving ? ' is-loading' : ''}`}
+          >
+            {!saving && <Save size={15} aria-hidden="true" />}
+            Save Scores
           </button>
-        </div>
-        {/* Instructions */}
-        <div style={{ padding: '0.75rem 1.5rem', borderBottom: `1px solid var(--border-subtle)` }}>
+        </>
+      )}
+    >
+        <div style={{ marginBottom: '0.85rem' }}>
           <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             Enter the written examination score (0–100) for each applicant.
           </p>
         </div>
         {/* List */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0.85rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {ranked.map((a, i) => {
             const val = scores[a.id] ?? '';
             const valid = isValid(val);
@@ -512,21 +508,7 @@ const ExamScoresModal = ({ folder, existingScores, onClose, onSave }: ExamScores
             );
           })}
         </div>
-        {/* Footer */}
-        <div style={{ padding: '0.9rem 1.5rem', borderTop: `1px solid var(--border-subtle)`, display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
-          <button type="button" onClick={onClose} style={{ padding: '0.55rem 1.25rem', background: 'none', border: `1px solid var(--border-subtle)`, borderRadius: 8, fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button
-            type="button" onClick={handleSave} disabled={!allFilled || saving || saved}
-            style={{ padding: '0.55rem 1.5rem', background: saved ? 'var(--status-success)' : allFilled ? 'var(--accent-blue)' : 'var(--accent-blue-light)', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', cursor: !allFilled || saving || saved ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <Save size={15} />
-            {saved ? 'Saved!' : saving ? 'Saving…' : 'Save Scores'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -734,30 +716,37 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--overlay)', fontFamily: 'var(--font-sans)' }}>
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="scoring-modal-title"
-          className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white"
-          style={{ maxHeight: '88vh', boxShadow: 'var(--shadow-3)', fontFamily: 'var(--font-sans)' }}
-        >
-
-          {/* Header — same treatment as Create New Job Position */}
-          <div className="flex shrink-0 items-center justify-between px-6 py-4" style={{ background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-900) 100%)' }}>
-            <div className="min-w-0">
-              <h2 id="scoring-modal-title" className="scoring-modal-title text-xl font-bold text-white" style={{ margin: 0 }}>Applicant Evaluation &amp; Scoring</h2>
-              <p className="scoring-modal-subtitle truncate text-sm" style={{ margin: 0, color: 'var(--color-primary-200)' }}>
-                {applicant.full_name} &mdash; {applicant.position}
-              </p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/10">
-              <X size={20} />
+      <Modal
+        open
+        onClose={onClose}
+        title="Applicant Evaluation & Scoring"
+        subtitle={<>{applicant.full_name} &mdash; {applicant.position}</>}
+        footer={(
+          <>
+            <button type="button" onClick={onClose} className="btn btn-md btn-secondary">
+              Cancel
             </button>
-          </div>
-
-          {/* Scrollable body */}
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-5" style={{ background: 'var(--bg-surface)' }}>
+            {!isFinalized && (() => {
+              const requiredKeys = requiredRspKeysForApptType(apptType);
+              const missing = requiredKeys.filter((k) => typeof scores[k]?.finalScore !== 'number');
+              const allRspCategoriesFilled = missing.length === 0;
+              const disabled = saving || !allRspCategoriesFilled;
+              return (
+                <button
+                  type="button" onClick={handleSave} disabled={disabled}
+                  aria-busy={saving || undefined}
+                  title={!allRspCategoriesFilled ? `Fill required fields: ${missing.join(', ')}` : undefined}
+                  className={`btn btn-md btn-primary${saving ? ' is-loading' : ''}`}
+                >
+                  {!saving && <Save size={15} aria-hidden="true" />}
+                  {allRspCategoriesFilled ? 'Save Scores' : 'Fill Required Fields'}
+                </button>
+              );
+            })()}
+          </>
+        )}
+      >
+          <div className="flex flex-col gap-4">
 
             {/* Score finalized banner (info alert, §9.9) */}
             {isFinalized && (
@@ -1209,31 +1198,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
             </section>
 
           </div>
-
-          {/* Footer (§9.10): pinned, Cancel (secondary) left of the primary action */}
-          <div className="flex shrink-0 justify-end gap-3 border-t px-6 py-4" style={{ borderColor: 'var(--color-primary-200)' }}>
-            <button type="button" onClick={onClose} className="btn btn-md btn-secondary">
-              Cancel
-            </button>
-            {!isFinalized && (() => {
-              const requiredKeys = requiredRspKeysForApptType(apptType);
-              const missing = requiredKeys.filter((k) => typeof scores[k]?.finalScore !== 'number');
-              const allRspCategoriesFilled = missing.length === 0;
-              const disabled = saving || !allRspCategoriesFilled;
-              return (
-                <button
-                  type="button" onClick={handleSave} disabled={disabled}
-                  title={!allRspCategoriesFilled ? `Fill required fields: ${missing.join(', ')}` : undefined}
-                  className="btn btn-md btn-primary"
-                >
-                  <Save size={15} />
-                  {saving ? 'Saving…' : allRspCategoriesFilled ? 'Save Scores' : 'Fill Required Fields'}
-                </button>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
+      </Modal>
 
       {filesModal && (
         <FilesViewerModal

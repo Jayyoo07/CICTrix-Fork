@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import { LogOut } from 'lucide-react';
+import { ConfirmModal } from './modal';
 
 interface ConfirmLogoutDialogProps {
   open: boolean;
@@ -25,57 +25,14 @@ export const ConfirmLogoutDialog = ({
   sessionLabel,
   onCancel,
   onConfirm,
-}: ConfirmLogoutDialogProps) => {
-  const cancelRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    cancelRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onCancel]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="abyan-ds fixed inset-0 z-[300] flex items-center justify-center p-4"
-      style={{ background: 'rgba(4, 14, 107, .45)' }}
-      onClick={onCancel}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="abyan-logout-title"
-        onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-[420px] rounded-2xl bg-white p-6 text-center"
-        style={{ boxShadow: 'var(--shadow-3)' }}
-      >
-        <div
-          aria-hidden="true"
-          className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
-          style={{ background: 'var(--color-primary-50)', color: 'var(--color-primary)' }}
-        >
-          <LogOut size={22} strokeWidth={1.75} />
-        </div>
-        <h3 id="abyan-logout-title" className="text-title-s" style={{ color: 'var(--color-primary-900)' }}>
-          Confirm Logout
-        </h3>
-        <p className="text-body-m mt-1" style={{ color: 'var(--neutral-600)' }}>
-          Are you sure you want to log out of your {sessionLabel ? `${sessionLabel} ` : ''}session?
-        </p>
-        <div className="mt-5 flex items-center justify-center gap-2">
-          <button ref={cancelRef} type="button" className="btn btn-md btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-md btn-primary" onClick={onConfirm}>
-            Yes, Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+}: ConfirmLogoutDialogProps) => (
+  <ConfirmModal
+    open={open}
+    icon={<LogOut strokeWidth={1.75} />}
+    title="Confirm Logout"
+    message={`Are you sure you want to log out of your ${sessionLabel ? `${sessionLabel} ` : ''}session?`}
+    confirmLabel="Yes, Logout"
+    onConfirm={onConfirm}
+    onCancel={onCancel}
+  />
+);

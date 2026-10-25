@@ -3,7 +3,7 @@ import { ArrowUpDown, Building2, ChevronDown, ChevronRight, RefreshCw, Search } 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
 import { EmptyState } from '../../../components/EmptyState';
-import { getActiveHeadcountByDepartment, getIPCRRecordsFromGapView, normDeptKey } from '../../../lib/api/competencyGapAnalysis';
+import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../../lib/api/competencyGapAnalysis';
 import { CompetencyGapPanel } from './CompetencyGapPanel';
 import { SemesterSummarySection } from './SemesterSummarySection';
 
@@ -124,6 +124,25 @@ export interface DeptCompletionRow {
   nonSubmission: number;
 }
 
+// Keep only offices that are active in `departments`, and give every active
+// office a headcount entry so one with nobody yet still lists (0 / 0).
+// `activeOffices` null means the lookup failed: show the data unfiltered.
+export function restrictToActiveOffices(
+  records: IPCRRatingRecord[],
+  headcount: Map<string, { name: string; count: number }>,
+  activeOffices: Map<string, string> | null,
+): { records: IPCRRatingRecord[]; headcount: Map<string, { name: string; count: number }> } {
+  if (!activeOffices) return { records, headcount };
+  const scoped = new Map<string, { name: string; count: number }>();
+  for (const [key, name] of activeOffices.entries()) {
+    scoped.set(key, headcount.get(key) ?? { name, count: 0 });
+  }
+  return {
+    records: records.filter(r => activeOffices.has(normDeptKey(r.department))),
+    headcount: scoped,
+  };
+}
+
 // Department landing rows: IPCR completion = employees with a rated IPCR over
 // the office's Active headcount. Offices with nobody rated yet still appear
 // (0 / N) — they are the ones that most need chasing.
@@ -223,16 +242,22 @@ export const SummaryOfRatings = () => {
     try {
       // Headcount is the completion denominator; if it fails, fall back to the
       // rated employees alone rather than blanking the whole page.
-      const [data, roster] = await Promise.all([
+      // The active-office list only filters; if it fails, show everything.
+      const [data, roster, activeOffices] = await Promise.all([
         getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
         getActiveHeadcountByDepartment().catch(err => {
           console.error('Error loading office headcount:', err);
           return new Map<string, { name: string; count: number }>();
         }),
+        getActiveOfficeKeys().catch(err => {
+          console.error('Error loading active offices:', err);
+          return null;
+        }),
       ]);
       if (loadId !== latestLoadId.current) return;
-      setRecords(data);
-      setHeadcount(roster);
+      const scoped = restrictToActiveOffices(data, roster, activeOffices);
+      setRecords(scoped.records);
+      setHeadcount(scoped.headcount);
       setLastSynced(new Date());
     } catch (err) {
       console.error('Error loading IPCR records:', err);

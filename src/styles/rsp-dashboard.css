@@ -145,6 +145,47 @@
 .rspdash .rd-pri { display: block; font-weight: 500; }
 .rspdash .rd-meta { display: block; font-size: 11px; color: var(--rd-ink-2); }
 
+/* Succession rows open the position on the Succession Planning page (§9.5 hover). */
+.rspdash .rd-row-link { cursor: pointer; transition: background 150ms ease-out; }
+.rspdash .rd-row-link:hover { background: #F8FAFF; }
+.rspdash .rd-row-link:focus-visible { outline: 2px solid var(--rd-accent); outline-offset: -2px; }
+.rspdash .rd-row-link:hover .rd-pri { color: var(--rd-accent); }
+.rspdash .rd-table .rd-chev { width: 24px; padding-left: 0; color: var(--rd-muted); text-align: right; }
+.rspdash .rd-row-link:hover .rd-chev { color: var(--rd-accent); }
+.rspdash .rd-viewall { display: block; margin: 10px 0 0 auto; }
+
+/* ── Succession View all modal ────────────────────────────────────────────────
+   The shared Modal portals outside .rspdash, so its body re-enters the scope
+   with .rspdash.rd-modal and drops the page background. */
+.rspdash.rd-modal { background: transparent; font-size: 13px; }
+.rspdash .rd-toolbar { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.rspdash .rd-search { position: relative; display: flex; align-items: center; }
+.rspdash .rd-search svg { position: absolute; left: 10px; color: var(--rd-muted); pointer-events: none; }
+.rspdash .rd-search input {
+  width: 260px; height: 36px; padding: 0 12px 0 34px; border: 1px solid var(--rd-line); border-radius: 8px; background: #fff;
+  font: 500 13px 'Poppins', sans-serif; color: var(--rd-n-t); outline: none;
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.rspdash .rd-search input::placeholder { color: var(--rd-muted); }
+.rspdash .rd-search input:hover { border-color: var(--rd-tint); }
+.rspdash .rd-search input:focus { border-color: var(--rd-accent); box-shadow: 0 0 0 3px rgba(54, 62, 232, .15); }
+.rspdash .rd-pager { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--rd-ink-2); }
+.rspdash .rd-pager nav { display: flex; align-items: center; gap: 8px; }
+.rspdash .rd-pager button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-width: 36px; height: 36px; padding: 0 12px; border: 1px solid var(--rd-line); border-radius: 8px;
+  background: #fff; color: var(--rd-n-t); font-weight: 500; font-size: 13px;
+}
+.rspdash .rd-pager .rd-pg { padding: 0; }
+.rspdash .rd-pager button:hover:not(:disabled) { background: var(--rd-accent-soft); border-color: var(--rd-tint); }
+.rspdash .rd-pager button.on { background: var(--rd-accent); border-color: var(--rd-accent); color: #fff; }
+.rspdash .rd-pager button:disabled { color: var(--rd-muted); background: #F8FAFC; cursor: not-allowed; }
+.rspdash .rd-pager button:focus-visible { outline: 2px solid var(--rd-accent); outline-offset: 2px; }
+.rspdash .rd-gap { color: var(--rd-muted); }
+@media (max-width: 640px) {
+  .rspdash .rd-toolbar, .rspdash .rd-search, .rspdash .rd-search input { width: 100%; }
+}
+
 /* ── Badges (§9.8) ────────────────────────────────────────────────────────── */
 .rspdash .rd-pill { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .rspdash .rd-p-warn { background: var(--rd-warn-soft); color: var(--rd-warn-t); }

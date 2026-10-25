@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABYAN · RSP dashboard succession (named successors)</title>
+<style>
+  body { font: 400 14px/20px 'Poppins', system-ui, sans-serif; background: #F1F5F9; color: #28343D; margin: 0; padding: 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; max-width: 1280px; }
+  .card { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #E2E8F0; border-radius: 8px; }
+  .stats div { padding: 10px; border-bottom: 1px solid #E2E8F0; }
+  .stats div:nth-child(odd) { border-right: 1px solid #E2E8F0; }
+  .stats div:nth-last-child(-n+2) { border-bottom: 0; }
+  .stats b { display: block; font-size: 22px; line-height: 32px; color: #040E6B; }
+  .stats .risk b { color: #B42323; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th { background: #F1F5F9; color: #040E6B; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 13px; }
+  td { padding: 8px 12px; border-bottom: 1px solid #E2E8F0; }
+  tr.row { cursor: pointer; } tr.row:hover { background: #F8FAFF; }
+  .pri { color: #040E6B; font-weight: 500; display: block; } .meta { color: #515F69; font-size: 12px; }
+  .pill { border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+  .err { background: #FDE2E2; color: #B42323; } .warn { background: #FCE8C8; color: #A8590A; } .ok { background: #DCFCE7; color: #0F7A40; } .info { background: #E0E5FF; color: #191FA8; }
+  .note { color: #515F69; font-size: 12px; margin: 8px 0 0; }
+  .link { color: #363EE8; font-weight: 500; text-align: right; margin: 10px 0 0; }
+  .chev { color: #363EE8; }
+  h3 { margin: 0; color: #040E6B; font-size: 16px; }
+  .modal { margin-top: 32px; max-width: 880px; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 32px rgba(16,30,41,.16); }
+  .mh { background: linear-gradient(135deg, #363EE8 0%, #040E6B 100%); color: #fff; padding: 16px 24px; }
+  .mh b { font-size: 20px; } .mh span { display: block; color: #C8D1FF; }
+  .mb { padding: 20px 24px; }
+  .toolbar { display: flex; gap: 12px; justify-content: flex-end; }
+  .toolbar input, .toolbar select { height: 36px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0 12px; font: inherit; }
+  .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: #515F69; font-size: 12px; }
+  .pager span.p { display: inline-grid; place-items: center; width: 36px; height: 36px; border: 1px solid #E2E8F0; border-radius: 8px; margin-left: 8px; color: #28343D; }
+  .pager span.on { background: #363EE8; color: #fff; border-color: #363EE8; }
+</style>
+</head>
+<body>
+<p class="note">Chosen 2026-10-25: option B (named successors, relabeled) with row drill-in and a View all list modal. Plan: docs/plans/2026-10-25-rsp-dashboard-succession.md. Layout from docs/mockups/2026-10-15-rsp-dashboard-kpis.html.</p>
+<div class="grid">
+  <div class="card">
+    <div class="stats">
+      <div>Key positions<b>33</b></div>
+      <div class="risk">No successor named<b>33</b></div>
+      <div>Leaving ≤ 24 mo<b>0</b></div>
+      <div>Named candidates<b>0</b></div>
+    </div>
+    <p style="margin:12px 0 6px;color:#040E6B">Named successor coverage · 0% of key positions</p>
+    <div style="display:flex;height:10px;border-radius:999px;overflow:hidden;background:#E05252"></div>
+    <p class="note">Counts successors named for each position. The ranked pool on the Succession Planning page is computed separately.</p>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between"><h3>Key position coverage</h3><span class="meta">sorted by risk</span></div>
+    <table>
+      <tr><th>Key position</th><th>Incumbent leaves</th><th>Named successors</th><th>Coverage</th><th>Risk</th><th></th></tr>
+      <tr class="row"><td><span class="pri">City Engineer</span><span class="meta">Office of The City Engineer</span></td><td>—</td><td>0 of 1</td><td><span class="pill err">None named</span></td><td><span class="pill warn">Medium</span></td><td class="chev">›</td></tr>
+      <tr class="row"><td><span class="pri">Assistant City Engineer</span><span class="meta">Office of The City Engineer</span></td><td>—</td><td>0 of 1</td><td><span class="pill err">None named</span></td><td><span class="pill warn">Medium</span></td><td class="chev">›</td></tr>
+      <tr class="row"><td><span class="pri">Architect III</span><span class="meta">Office of The City Engineer</span></td><td>—</td><td>0 of 1</td><td><span class="pill err">None named</span></td><td><span class="pill warn">Medium</span></td><td class="chev">›</td></tr>
+    </table>
+    <p class="link">View all (33) →</p>
+  </div>
+</div>
+
+<div class="modal" role="presentation">
+  <div class="mh"><b>Key position coverage</b><span>33 key positions, sorted by risk</span></div>
+  <div class="mb">
+    <div class="toolbar"><input placeholder="Search position or office"><select><option>All risk levels</option><option>High</option><option>Medium</option><option>Low</option></select></div>
+    <table>
+      <tr><th>Key position</th><th>Incumbent leaves</th><th>Named successors</th><th>Coverage</th><th>Risk</th><th></th></tr>
+      <tr class="row"><td><span class="pri">City Engineer</span><span class="meta">Office of The City Engineer</span></td><td>—</td><td>0 of 1</td><td><span class="pill err">None named</span></td><td><span class="pill warn">Medium</span></td><td class="chev">›</td></tr>
+      <tr class="row"><td><span class="pri">Engineer IV (Chief Mech/Elec Engr)</span><span class="meta">Office of The City Engineer</span></td><td>—</td><td>0 of 1</td><td><span class="pill err">None named</span></td><td><span class="pill warn">Medium</span></td><td class="chev">›</td></tr>
+    </table>
+    <div class="pager"><span>Showing 1–8 of 33 entries</span><span>‹ Previous <span class="p on">1</span><span class="p">2</span><span class="p">3</span><span class="p">4</span> Next ›</span></div>
+  </div>
+</div>
+</body>
+</html>

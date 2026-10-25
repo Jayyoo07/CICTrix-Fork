@@ -7,6 +7,8 @@ import {
   actionForGate,
   compareRank,
   isDownwardMove,
+  compareTitleRank,
+  isDownwardTitleMove,
   positionLevelRatio,
   educationBeyondMinimumRatio,
   evaluateQualifications,
@@ -578,6 +580,38 @@ describe('Weights after the eligibility split', () => {
     expect(w.eligibility).toBeGreaterThan(0);
     const total = w.ipcr + w.experience + w.training + w.education + w.eligibility;
     expect(total).toBeCloseTo(100, 1);
+  });
+});
+
+describe('C. rank from the position title', () => {
+  it('excludes the reported senior-for-junior cases', () => {
+    expect(isDownwardTitleMove('City Engineer', 'Assistant City Engineer')).toBe(true);
+    expect(isDownwardTitleMove('City Engineer', 'Engineer IV (Chief Maintenance Engr)')).toBe(true);
+    expect(isDownwardTitleMove('City Engineer', 'Engineer IV (Chief Mech/Elec Engr)')).toBe(true);
+    expect(isDownwardTitleMove('Assistant City Accountant', 'Accountant IV')).toBe(true);
+    expect(isDownwardTitleMove('Assistant City Accountant', 'Accountant III (Division Chief)')).toBe(true);
+    expect(isDownwardTitleMove('City Social Welfare & Dev. Officer', 'Social Welfare Officer IV (Division Chief)')).toBe(true);
+  });
+
+  it('keeps candidates genuinely below the target', () => {
+    expect(isDownwardTitleMove('Engineer II', 'Engineer IV')).toBe(false);
+    expect(isDownwardTitleMove('Accountant III (Division Chief)', 'Assistant City Accountant')).toBe(false);
+    expect(isDownwardTitleMove('Engineer IV (Chief Maintenance Engr)', 'Assistant City Engineer')).toBe(false);
+    expect(isDownwardTitleMove('Accountant III (Division Chief)', 'Accountant IV')).toBe(false);
+  });
+
+  it('compares numerals within a family, ignoring parentheticals and digits vs romans', () => {
+    expect(compareTitleRank('Engineer V', 'Engineer II (Civil Engineer)')).toBe('higher');
+    expect(compareTitleRank('Nurse 2', 'Nurse III')).toBe('lower');
+    expect(compareTitleRank('Nurse II', 'Nurse 2')).toBe('equal');
+    expect(compareTitleRank('Engineer IV (Chief Maintenance Engr)', 'Engineer IV')).toBe('higher');
+  });
+
+  it('stays unknown across families so nobody is dropped on a guess', () => {
+    expect(compareTitleRank('Nurse V', 'Midwife II')).toBe('unknown');
+    expect(compareTitleRank('Dentist IV', 'Medical Officer III')).toBe('unknown');
+    expect(compareTitleRank('', 'Engineer I')).toBe('unknown');
+    expect(isDownwardTitleMove('Nurse V', 'Midwife II')).toBe(false);
   });
 });
 

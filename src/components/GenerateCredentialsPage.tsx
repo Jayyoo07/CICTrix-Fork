@@ -21,6 +21,7 @@ import {
   toggleId,
   type CheckState,
 } from '../lib/scheduleSelection';
+import { ConfirmModal, Modal } from './modal';
 
 /**
  * Applicants selected on For Hiring wait here until they report for contract
@@ -284,141 +285,122 @@ export const GenerateCredentialsPage = () => {
       </div>
 
       {/* Generate: confirm (§9.10) */}
-      {confirmGenerate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4" role="dialog" aria-modal="true" aria-labelledby="generate-title">
-          <div className="w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-[var(--shadow-3)]">
-            <h2 id="generate-title" className="mb-2 text-base font-semibold text-[var(--color-primary-900)]">
-              Generate credentials for {selected.size} applicant{selected.size === 1 ? '' : 's'}?
-            </h2>
-            <p className="mb-3 text-sm text-[var(--neutral-800)]">
-              Each one is hired and their plantilla is marked filled. Everyone else who applied to those plantillas moves to
-              Archives as Not Selected, and their status tracker shows the regret letter.
-            </p>
-            <ul className="mb-3 max-h-48 divide-y divide-[var(--neutral-200)] overflow-y-auto rounded-xl border border-[var(--neutral-200)] text-sm">
-              {selectedRows.map((r) => (
-                <li key={r.id} className="px-3 py-2">
-                  <p className="font-semibold text-[var(--color-primary-900)]">{r.fullName}</p>
-                  <p className="text-xs text-[var(--neutral-600)]">{r.positionLabel} · {r.department}</p>
-                </li>
-              ))}
-            </ul>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="btn btn-md btn-secondary" disabled={generating} onClick={() => setConfirmGenerate(false)}>Cancel</button>
-              <button type="button" className="btn btn-md btn-primary" disabled={generating} onClick={() => { void handleGenerate(); }}>
-                {generating ? 'Generating…' : 'Generate'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmGenerate}
+        title={`Generate credentials for ${selected.size} applicant${selected.size === 1 ? '' : 's'}?`}
+        confirmLabel="Generate"
+        loading={generating}
+        onCancel={() => setConfirmGenerate(false)}
+        onConfirm={() => { void handleGenerate(); }}
+        message={(
+          <p className="!mb-0">
+            Each one is hired and their plantilla is marked filled. Everyone else who applied to those plantillas moves to
+            Archives as Not Selected, and their status tracker shows the regret letter.
+          </p>
+        )}
+      >
+        <ul className="max-h-48 divide-y divide-[var(--neutral-200)] overflow-y-auto rounded-xl border border-[var(--neutral-200)] text-sm">
+          {selectedRows.map((r) => (
+            <li key={r.id} className="px-3 py-2">
+              <p className="font-semibold text-[var(--color-primary-900)]">{r.fullName}</p>
+              <p className="text-xs text-[var(--neutral-600)]">{r.positionLabel} · {r.department}</p>
+            </li>
+          ))}
+        </ul>
+      </ConfirmModal>
 
       {/* Did not report: destructive confirm (§9.1, §9.10) */}
-      {revokeTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4" role="dialog" aria-modal="true" aria-labelledby="revoke-title">
-          <div className="w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-[var(--shadow-3)]">
-            <h2 id="revoke-title" className="mb-2 text-base font-semibold text-[var(--color-primary-900)]">
-              Revoke {revokeTarget.fullName}'s selection?
-            </h2>
-            <p className="mb-4 text-sm text-[var(--neutral-800)]">
-              They did not report by {formatDisplayDate(revokeTarget.signingDeadline)}. {revokeTarget.positionLabel} reopens, and you
-              can select another applicant on the For Hiring tab. Their application goes back to the For Hiring list.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="btn btn-md btn-secondary" disabled={revoking} onClick={() => setRevokeTarget(null)}>Cancel</button>
-              <button
-                type="button"
-                className="btn btn-md !bg-[var(--error-500)] !text-white hover:!bg-[var(--error-700)]"
-                disabled={revoking}
-                onClick={() => { void handleRevoke(); }}
-              >
-                {revoking ? 'Revoking…' : 'Revoke Selection'}
-              </button>
-            </div>
+      <ConfirmModal
+        open={Boolean(revokeTarget)}
+        title={revokeTarget ? `Revoke ${revokeTarget.fullName}'s selection?` : ''}
+        tone="destructive"
+        confirmLabel="Revoke Selection"
+        loading={revoking}
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={() => { void handleRevoke(); }}
+        message={revokeTarget && (
+          <p className="!mb-0">
+            They did not report by {formatDisplayDate(revokeTarget.signingDeadline)}. {revokeTarget.positionLabel} reopens, and you
+            can select another applicant on the For Hiring tab. Their application goes back to the For Hiring list.
+          </p>
+        )}
+      />
+
+      {/* Result: credentials + print (option A cut-out cards). Not dismissible:
+          the temporary passwords are shown once, so closing is an explicit Done. */}
+      <Modal
+        open={credentials.length > 0 || failures.length > 0}
+        onClose={() => { setCredentials([]); setFailures([]); }}
+        dismissible={false}
+        size="lg"
+        icon={<CheckCircle strokeWidth={1.75} />}
+        title="Employee Records Created"
+        subtitle={`${credentials.length} account${credentials.length === 1 ? '' : 's'} generated. Credentials were emailed where an address was on file.`}
+        footer={(
+          <>
+            <button
+              type="button"
+              className="btn btn-md btn-secondary"
+              disabled={credentials.length === 0}
+              onClick={() => printCredentialCards(credentials)}
+            >
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              Print Credentials
+            </button>
+            <button type="button" className="btn btn-md btn-primary" onClick={() => { setCredentials([]); setFailures([]); }}>
+              Done
+            </button>
+          </>
+        )}
+      >
+        {failures.length > 0 && (
+          <div role="alert" className="mb-4 rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-3 text-sm text-[var(--neutral-800)]">
+            <p className="font-semibold">Some steps need attention:</p>
+            <ul className="mt-1 list-disc pl-5">{failures.map((f) => <li key={f}>{f}</li>)}</ul>
           </div>
+        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--neutral-200)] text-left text-[13px] font-semibold text-[var(--color-primary-900)]">
+                <th scope="col" className="pb-2">Name</th>
+                <th scope="col" className="pb-2">Position / Office</th>
+                <th scope="col" className="pb-2">Employee ID</th>
+                <th scope="col" className="pb-2">Temporary Password</th>
+                <th scope="col" className="pb-2">Email</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--neutral-200)]">
+              {credentials.map((c) => (
+                <tr key={c.employeeId}>
+                  <td className="py-3 pr-4">
+                    <p className="font-semibold text-[var(--color-primary-900)]">{c.fullName}</p>
+                    <p className="text-xs text-[var(--neutral-600)]">{c.email || '—'}</p>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <p>{c.position || '—'}{c.plantilla ? ` · ${c.plantilla}` : ''}</p>
+                    <p className="text-xs text-[var(--neutral-600)]">{c.department || '—'}</p>
+                  </td>
+                  <td className="py-3 pr-4 font-mono font-semibold text-[var(--color-primary-900)]">{c.employeeId}</td>
+                  <td className="py-3 pr-4 font-mono">{c.tempPassword}</td>
+                  <td className="py-3">
+                    {!c.email ? (
+                      <span className="text-xs text-[var(--neutral-600)]">No email</span>
+                    ) : c.emailSent ? (
+                      <span className="badge badge-success"><span className="badge-dot" aria-hidden="true" />Sent</span>
+                    ) : (
+                      <span className="badge badge-warning"><span className="badge-dot" aria-hidden="true" />Not sent</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-
-      {/* Result: credentials + print (option A cut-out cards) */}
-      {(credentials.length > 0 || failures.length > 0) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] px-4" role="dialog" aria-modal="true" aria-labelledby="credentials-title">
-          <div className="flex max-h-[90vh] w-full max-w-[880px] flex-col rounded-2xl bg-white shadow-[var(--shadow-3)]">
-            <div className="flex items-center gap-3 border-b border-[var(--neutral-200)] px-6 py-5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--success-100)]">
-                <CheckCircle className="h-5 w-5 text-[var(--success-500)]" aria-hidden="true" />
-              </div>
-              <div className="flex-1">
-                <h2 id="credentials-title" className="text-lg font-semibold text-[var(--color-primary-900)]">Employee Records Created</h2>
-                <p className="text-sm text-[var(--neutral-600)]">
-                  {credentials.length} account{credentials.length === 1 ? '' : 's'} generated. Credentials were emailed where an address was on file.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-auto px-6 py-4">
-              {failures.length > 0 && (
-                <div role="alert" className="mb-4 rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-3 text-sm text-[var(--neutral-800)]">
-                  <p className="font-semibold">Some steps need attention:</p>
-                  <ul className="mt-1 list-disc pl-5">{failures.map((f) => <li key={f}>{f}</li>)}</ul>
-                </div>
-              )}
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--neutral-200)] text-left text-[13px] font-semibold text-[var(--color-primary-900)]">
-                    <th scope="col" className="pb-2">Name</th>
-                    <th scope="col" className="pb-2">Position / Office</th>
-                    <th scope="col" className="pb-2">Employee ID</th>
-                    <th scope="col" className="pb-2">Temporary Password</th>
-                    <th scope="col" className="pb-2">Email</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--neutral-200)]">
-                  {credentials.map((c) => (
-                    <tr key={c.employeeId}>
-                      <td className="py-3 pr-4">
-                        <p className="font-semibold text-[var(--color-primary-900)]">{c.fullName}</p>
-                        <p className="text-xs text-[var(--neutral-600)]">{c.email || '—'}</p>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <p>{c.position || '—'}{c.plantilla ? ` · ${c.plantilla}` : ''}</p>
-                        <p className="text-xs text-[var(--neutral-600)]">{c.department || '—'}</p>
-                      </td>
-                      <td className="py-3 pr-4 font-mono font-semibold text-[var(--color-primary-900)]">{c.employeeId}</td>
-                      <td className="py-3 pr-4 font-mono">{c.tempPassword}</td>
-                      <td className="py-3">
-                        {!c.email ? (
-                          <span className="text-xs text-[var(--neutral-600)]">No email</span>
-                        ) : c.emailSent ? (
-                          <span className="badge badge-success"><span className="badge-dot" aria-hidden="true" />Sent</span>
-                        ) : (
-                          <span className="badge badge-warning"><span className="badge-dot" aria-hidden="true" />Not sent</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-4 text-xs text-[var(--neutral-600)]">
-                Employees must change their temporary password at first login. Keep this list confidential.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-[var(--neutral-200)] px-6 py-4">
-              <button
-                type="button"
-                className="btn btn-md btn-secondary"
-                disabled={credentials.length === 0}
-                onClick={() => printCredentialCards(credentials)}
-              >
-                <Printer className="h-4 w-4" aria-hidden="true" />
-                Print Credentials
-              </button>
-              <button type="button" className="btn btn-md btn-primary" onClick={() => { setCredentials([]); setFailures([]); }}>
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        <p className="mt-4 text-xs text-[var(--neutral-600)]">
+          Employees must change their temporary password at first login. Keep this list confidential.
+        </p>
+      </Modal>
     </div>
   );
 };

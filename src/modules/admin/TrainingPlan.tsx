@@ -45,6 +45,7 @@ import {
 } from '../../lib/api/trainingPlan';
 import { NoDeptHeadNotice } from './components/NoDeptHeadNotice';
 import { TRAINING_CATEGORIES, categoryColor, type TrainingCategory } from './trainingCategories';
+import { Modal } from '../../components/modal';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -182,21 +183,29 @@ const WindowSettingsModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <form onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-xl p-6 space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Planning window</h2>
-            <p className="mt-0.5 text-xs text-gray-500">
-              Page 4 accepts edits only while this window is open.
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      size="sm"
+      title="Planning Window"
+      subtitle="Page 4 accepts edits only while this window is open."
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="btn btn-md btn-secondary">Cancel</button>
+          <button
+            type="submit"
+            form="planning-window-form"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            className={`btn btn-md btn-primary${busy ? ' is-loading' : ''}`}
+          >
+            Save Window
           </button>
-        </div>
-
+        </>
+      )}
+    >
+      <form id="planning-window-form" onSubmit={submit} className="space-y-5">
         <div>
           <label className={labelClass}>Mode</label>
           <select value={mode} onChange={(e) => setMode(e.target.value as PhaseMode)} className={inputClass}>
@@ -221,17 +230,8 @@ const WindowSettingsModal = ({
         </p>
 
         {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        <div className="flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            Cancel
-          </button>
-          <button type="submit" disabled={busy} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
-            {busy ? 'Saving…' : 'Save window'}
-          </button>
-        </div>
       </form>
-    </div>
+    </Modal>
   );
 };
 
@@ -319,19 +319,27 @@ const EntryFormModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-2xl">
-          <h2 className="text-lg font-bold text-gray-900">
-            {isEdit ? 'Edit Planned Training' : 'New Planned Training'}
-          </h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
-            <X className="h-5 w-5" />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      title={isEdit ? 'Edit Planned Training' : 'New Planned Training'}
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="btn btn-md btn-secondary">Cancel</button>
+          <button
+            type="submit"
+            form="planned-training-form"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            className={`btn btn-md btn-primary${busy ? ' is-loading' : ''}`}
+          >
+            {isEdit ? 'Save Changes' : 'Add to Plan'}
           </button>
-        </div>
-
-        <form onSubmit={submit} className="p-6 space-y-5">
+        </>
+      )}
+    >
+        <form id="planned-training-form" onSubmit={submit} className="space-y-5">
           {rec && (
             <div className="flex items-start gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
@@ -407,17 +415,8 @@ const EntryFormModal = ({
 
           {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-          <div className="flex justify-end gap-3 pt-1">
-            <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              Cancel
-            </button>
-            <button type="submit" disabled={busy} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
-              {busy ? 'Saving…' : isEdit ? 'Save Changes' : 'Add to Plan'}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -483,53 +482,45 @@ const EntryDetail = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 pt-6 pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${color}1a`, color }}>
-                  {entry.category}
-                </span>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${PLAN_STATUS_BADGE[entry.planStatus]}`}>
-                  {entry.planStatus}
-                </span>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${SOURCE_BADGE[entry.recommendedFrom]}`}>
-                  From: {entry.recommendedFrom}
-                </span>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">{entry.title}</h2>
-              <p className="mt-1 text-xs text-gray-500">
-                {formatDate(entry.startDate)}
-                {entry.endDate ? ` – ${formatDate(entry.endDate)}` : ''}
-                {entry.location ? ` · ${entry.location}` : ''}
-                {entry.speaker ? ` · ${entry.speaker}` : ''}
-              </p>
-              <p className="mt-0.5 text-xs text-gray-400">
-                {entry.departmentName ?? 'No department assigned'} · Plan year {entry.planYear}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {editable && !entry.promotedDraftId && (
-                <>
-                  <button type="button" onClick={onEdit} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    Edit
-                  </button>
-                  <button type="button" onClick={handleDelete} disabled={busy} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60">
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                  </button>
-                </>
-              )}
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                <X className="h-5 w-5" />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      size="lg"
+      title={entry.title}
+      subtitle={`${formatDate(entry.startDate)}${entry.endDate ? ` – ${formatDate(entry.endDate)}` : ''}${entry.location ? ` · ${entry.location}` : ''}${entry.speaker ? ` · ${entry.speaker}` : ''}`}
+      footer={(
+        <>
+          {editable && !entry.promotedDraftId && (
+            <>
+              <button type="button" onClick={handleDelete} disabled={busy} className="btn btn-md btn-destructive-outline mr-auto">
+                <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete
               </button>
-            </div>
+              <button type="button" onClick={onEdit} className="btn btn-md btn-secondary">Edit</button>
+            </>
+          )}
+          <button type="button" onClick={onClose} className="btn btn-md btn-secondary">Close</button>
+        </>
+      )}
+    >
+        <div className="mb-5">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${color}1a`, color }}>
+              {entry.category}
+            </span>
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${PLAN_STATUS_BADGE[entry.planStatus]}`}>
+              {entry.planStatus}
+            </span>
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${SOURCE_BADGE[entry.recommendedFrom]}`}>
+              From: {entry.recommendedFrom}
+            </span>
           </div>
+          <p className="!mb-0 text-xs text-[var(--neutral-600)]">
+            {entry.departmentName ?? 'No department assigned'} · Plan year {entry.planYear}
+          </p>
           {error && <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>}
         </div>
-
-        <div className="px-6 py-5 space-y-5">
+        <div className="space-y-5">
           <section className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Objectives</h3>
             {entry.objectives.length === 0 ? (
@@ -598,8 +589,7 @@ const EntryDetail = ({
             </section>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
@@ -633,10 +623,28 @@ const DismissModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <form onSubmit={submit} className="relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-xl p-6 space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">Dismiss this suggestion</h2>
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!busy}
+      size="sm"
+      title="Dismiss This Suggestion"
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="btn btn-md btn-secondary">Cancel</button>
+          <button
+            type="submit"
+            form="dismiss-suggestion-form"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            className={`btn btn-md btn-primary${busy ? ' is-loading' : ''}`}
+          >
+            Dismiss
+          </button>
+        </>
+      )}
+    >
+      <form id="dismiss-suggestion-form" onSubmit={submit} className="space-y-4">
         <p className="text-sm text-gray-600">
           "{rec.title}" — requested by {rec.employeeName}. The request itself is not rejected; it just
           leaves this feed. You can restore it later.
@@ -646,16 +654,8 @@ const DismissModal = ({
           <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} placeholder="Why is this not being planned?" />
         </div>
         {error && <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            Cancel
-          </button>
-          <button type="submit" disabled={busy} className="rounded-lg bg-slate-800 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60">
-            {busy ? 'Dismissing…' : 'Dismiss'}
-          </button>
-        </div>
       </form>
-    </div>
+    </Modal>
   );
 };
 

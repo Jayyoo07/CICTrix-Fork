@@ -48,6 +48,7 @@
 
   /* Gradients (§3.5) */
   --gradient-hero: linear-gradient(180deg, #363EE8 0%, #040E6B 100%);
+  --gradient-modal-header: linear-gradient(135deg, #363EE8 0%, #040E6B 100%);  /* §9.10 */
   --gradient-soft: linear-gradient(135deg, #C8D1FF 0%, #363EE8 100%);
   --gradient-button: linear-gradient(180deg, #363EE8 0%, #191FA8 100%);
 
@@ -233,3 +234,24 @@ html:not([data-theme='dark']) :is(.fixed.inset-0, [role='dialog'], [aria-modal='
    beside the tabs; overflow-y:hidden removes that. */
 .scrollbar-hidden { overflow-y: hidden; scrollbar-width: none; }
 .scrollbar-hidden::-webkit-scrollbar { display: none; }
+
+/* Printable modals (§9.10, `<Modal printable>`): window.print() prints only the
+   modal body. The page, overlay, header and footer are left off the paper, and
+   the body's inner scroll areas are unrolled so every page prints. */
+@media print {
+  body:has(> .abyan-modal-printable) > :not(.abyan-modal-printable) { display: none !important; }
+  .abyan-modal-printable,
+  .abyan-modal-printable * { visibility: visible !important; }
+  .abyan-modal-printable {
+    position: static !important; inset: auto !important; display: block !important;
+    padding: 0 !important; background: #fff !important;
+  }
+  .abyan-modal-printable [role='dialog'] {
+    max-width: none !important; max-height: none !important; height: auto !important;
+    overflow: visible !important; border-radius: 0 !important; box-shadow: none !important;
+  }
+  .abyan-modal-printable .abyan-modal-chrome { display: none !important; }
+  .abyan-modal-printable .abyan-modal-body,
+  .abyan-modal-printable .abyan-modal-body * { overflow: visible !important; max-height: none !important; }
+  .abyan-modal-printable .abyan-modal-body { padding: 0 !important; }
+}

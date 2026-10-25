@@ -60,6 +60,7 @@ import {
 } from '../../lib/api/officeRoles';
 import '../../styles/admin.css';
 import { SkeletonList, useTableLoading } from '../../components/table-loading';
+import { ConfirmModal } from '../../components/modal';
 
 // Session lives in the shared per-tab module so every screen reads one identity.
 const getCurrentAdminEmail = (): string => getAdminEmail();
@@ -1164,124 +1165,28 @@ export const AppointmentConfirmDialog: React.FC<AppointmentConfirmDialogProps> =
   onBack,
   onConfirm,
 }) => {
-  if (!open) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Confirm Department Head Appointment"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(4, 14, 107, 0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 60,
-        padding: '16px',
-      }}
-      onClick={onBack}
-    >
-      <div
-        style={{
-          background: '#ffffff',
-          borderRadius: '16px',
-          padding: '24px',
-          maxWidth: '480px',
-          width: '100%',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: '#e0e7ff',
-              color: '#363ee8',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Check size={20} strokeWidth={2.5} style={{ color: '#363ee8' }} />
-          </div>
-          <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#040E6B' }}>
-            Confirm Department Head Appointment
-          </h3>
-        </div>
-
-        <p data-testid="confirm-prompt" style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5, marginBottom: '16px' }}>
+    <ConfirmModal
+      open={open}
+      icon={<Check strokeWidth={1.75} />}
+      title="Confirm Department Head Appointment"
+      cancelLabel="Back"
+      confirmLabel="Confirm Appointment"
+      loading={saving}
+      onCancel={onBack}
+      onConfirm={onConfirm}
+      message={(
+        <p data-testid="confirm-prompt" className="!mb-0">
           Appoint <strong>{employeeName}</strong> as the Department Head of <strong>{officeName}</strong>?
         </p>
-
-        <div
-          style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            padding: '12px 14px',
-            fontSize: '12px',
-            color: '#475569',
-            marginBottom: '18px',
-            lineHeight: 1.6,
-          }}
-        >
-          <div style={{ marginBottom: '4px' }}>
-            • Official title updated to <strong>{mappedTitle}</strong>
-          </div>
-          <div style={{ marginBottom: '4px' }}>
-            • Promotion recorded in <code style={{ fontSize: '11px', background: '#e2e8f0', padding: '1px 4px', borderRadius: '3px' }}>position_history</code>
-          </div>
-          <div>
-            • Immediate portal access granted via current account switcher
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={saving}
-            style={{
-              padding: '8px 20px',
-              border: '1.5px solid #cbd5e1',
-              background: '#ffffff',
-              borderRadius: '999px',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: '#475569',
-              cursor: saving ? 'not-allowed' : 'pointer',
-            }}
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={saving}
-            style={{
-              padding: '8px 22px',
-              background: 'linear-gradient(180deg, #363EE8, #191FA8)',
-              border: 'none',
-              borderRadius: '999px',
-              fontSize: '13px',
-              fontWeight: 700,
-              color: '#ffffff',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              boxShadow: '0 2px 4px rgba(4, 14, 107, 0.15)',
-              opacity: saving ? 0.7 : 1,
-            }}
-          >
-            {saving ? 'Confirming…' : 'Confirm Appointment'}
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+    >
+      <ul className="!m-0 list-disc space-y-1 rounded-xl border border-[var(--neutral-200)] bg-[var(--bg-page)] py-3 pl-8 pr-4 text-xs leading-relaxed text-[var(--neutral-800)]">
+        <li>Official title updated to <strong>{mappedTitle}</strong></li>
+        <li>Promotion recorded in <code className="rounded bg-[var(--neutral-200)] px-1 text-[11px]">position_history</code></li>
+        <li>Immediate portal access granted via current account switcher</li>
+      </ul>
+    </ConfirmModal>
   );
 };
 
@@ -1367,7 +1272,7 @@ export const AppointDepartmentHeadModal = ({
       <Dialog
         open
         onClose={onClose}
-        title={isSuccess ? undefined : 'Appoint Department Head'}
+        title={isSuccess ? 'Department Head Appointed' : 'Appoint Department Head'}
         subtitle={
           isSuccess
             ? undefined
@@ -1375,9 +1280,9 @@ export const AppointDepartmentHeadModal = ({
         }
         headerIcon={
           isSuccess ? (
-            <CheckCircle2 size={20} style={{ color: '#047857', flexShrink: 0 }} />
+            <CheckCircle2 size={20} strokeWidth={1.75} />
           ) : (
-            <Building2 size={20} style={{ color: '#040E6B', flexShrink: 0 }} />
+            <Building2 size={20} strokeWidth={1.75} />
           )
         }
       >
@@ -1632,9 +1537,6 @@ export const AppointDepartmentHeadModal = ({
             >
               <CheckCircle2 size={32} style={{ color: '#047857' }} />
             </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#040E6B', margin: '0 0 10px 0' }}>
-              Department Head Appointed
-            </h3>
             <p data-testid="success-description" style={{ fontSize: '14px', color: '#475569', lineHeight: 1.5, margin: '0 auto 24px auto', maxWidth: '380px' }}>
               Successfully appointed <strong>{appointedDetails?.employeeName}</strong> as Department Head of <strong>{appointedDetails?.officeName}</strong>. They can access their office dashboard immediately using their current account switcher.
             </p>

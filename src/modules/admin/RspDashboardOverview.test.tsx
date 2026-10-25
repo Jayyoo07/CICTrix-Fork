@@ -1,21 +1,24 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RspDashboardOverview, type OverviewApplicant, type OverviewFunnelStage, type OverviewJob } from './RspDashboardOverview';
+
+const BASE_POSITIONS = [
+  { id: 'p3', title: 'HRMO Head', departmentId: 'd-hr', departmentName: 'HR', incumbentName: 'C', incumbentLeavingDate: null, successorCount: 2 },
+  { id: 'p2', title: 'City Treasurer', departmentId: 'd-fin', departmentName: 'Finance', incumbentName: 'B', incumbentLeavingDate: null, successorCount: 1 },
+  { id: 'p4', title: 'City Assessor', departmentId: 'd-fin', departmentName: 'Finance', incumbentName: 'D', incumbentLeavingDate: null, successorCount: null },
+  { id: 'p1', title: 'City Engineer', departmentId: 'd-eng', departmentName: 'Engineering', incumbentName: 'A', incumbentLeavingDate: '2027-03-01', successorCount: 0 },
+];
+
+// Swapped per test: the View all modal needs more rows than the card shows.
+const succession = vi.hoisted(() => ({ positions: [] as unknown[] }));
 
 vi.mock('../../lib/api/succession', () => ({
   getSuccessionDashboardOverview: () =>
     Promise.resolve({
       ok: true,
       data: {
-        positions: [
-          { id: 'p1', title: 'City Engineer', departmentName: 'Engineering', incumbentName: 'A', incumbentLeavingDate: '2027-03-01', requiredSuccessorsCount: 1, successorCount: 0 },
-          { id: 'p2', title: 'City Treasurer', departmentName: 'Finance', incumbentName: 'B', incumbentLeavingDate: null, requiredSuccessorsCount: 2, successorCount: 1 },
-          { id: 'p3', title: 'HRMO Head', departmentName: 'HR', incumbentName: 'C', incumbentLeavingDate: null, requiredSuccessorsCount: 1, successorCount: 2 },
-        ],
-        talentPool: [
-          { employeeId: 'e1', departmentName: 'Finance' },
-          { employeeId: 'e2', departmentName: 'HR' },
-        ],
+        positions: succession.positions,
       },
     }),
 }));
@@ -40,10 +43,12 @@ const handlers = {
   onOpenApplicants: vi.fn(),
   onOpenQualified: vi.fn(),
   onOpenNewHired: vi.fn(),
+  onOpenSuccessionPosition: vi.fn(),
 };
 
 const renderOverview = (applicants: OverviewApplicant[], evaluated = new Set<string>()) =>
   render(
+    <MemoryRouter>
     <RspDashboardOverview
       jobs={[
         job(1, 'Engineering', 'Open', '2026-10-10', '2026-10-20'),
@@ -57,8 +62,10 @@ const renderOverview = (applicants: OverviewApplicant[], evaluated = new Set<str
       onOpenApplicants={handlers.onOpenApplicants}
       onOpenQualified={handlers.onOpenQualified}
       onOpenSuccession={() => {}}
+      onOpenSuccessionPosition={handlers.onOpenSuccessionPosition}
       onOpenNewHired={handlers.onOpenNewHired}
-    />,
+    />
+    </MemoryRouter>,
   );
 
 const statValue = (label: string) => {
@@ -73,6 +80,9 @@ describe('RspDashboardOverview', () => {
     vi.setSystemTime(new Date(2026, 9, 15, 9, 0));
   });
   afterAll(() => vi.useRealTimers());
+  beforeEach(() => {
+    succession.positions = BASE_POSITIONS;
+  });
 
   it('derives posting KPIs from status, deadline and posted date', () => {
     renderOverview([]);
@@ -135,15 +145,49 @@ describe('RspDashboardOverview', () => {
     expect(screen.getByText('Scores missing')).toBeTruthy();
   });
 
-  it('shows succession coverage and risk', async () => {
+  it('lists key positions with ranked successor counts, fewest first', async () => {
     renderOverview([]);
-    await waitFor(() => expect(statValue('Key positions')).toBe('3'));
-    expect(statValue('No successor')).toBe('1');
-    expect(statValue('Leaving ≤ 24 mo')).toBe('1');
-    expect(statValue('Talent pool')).toBe('2');
-    const tables = document.querySelectorAll('.rd-table');
-    const firstRow = tables[tables.length - 1].querySelector('tbody tr') as HTMLElement;
-    expect(firstRow.textContent).toContain('City Engineer');
-    expect(firstRow.textContent).toContain('High');
+    await screen.findByRole('link', { name: /Open City Engineer/ });
+    const rows = screen.getAllByRole('link', { name: /^Open / }).map((row) => [
+      row.querySelector('.rd-pri')?.textContent,
+      row.querySelector('td.n')?.textContent?.trim(),
+    ]);
+    // A count the engine could not compute shows "—" and sorts last.
+    expect(rows).toEqual([['City Engineer', '0'], ['City Treasurer', '1'], ['HRMO Head', '2'], ['City Assessor', '—']]);
+    const headers = [...document.querySelectorAll('.rd-table')].pop()!.querySelectorAll('th');
+    expect([...headers].map((th) => th.textContent)).toEqual(['Key position', 'Incumbent leaves', 'Successors', 'Open']);
+    expect(document.querySelector('.rd-sec:last-child .rd-stat')).toBeNull();
+    expect(screen.queryByRole('button', { name: /View all/ })).toBeNull();
+  });
+
+  it('opens a key position on the Succession Planning page', async () => {
+    handlers.onOpenSuccessionPosition.mockClear();
+    renderOverview([]);
+    fireEvent.click(await screen.findByRole('link', { name: /Open City Treasurer/ }));
+    expect(handlers.onOpenSuccessionPosition).toHaveBeenCalledWith('d-fin', 'p2');
+    fireEvent.keyDown(screen.getByRole('link', { name: /Open HRMO Head/ }), { key: 'Enter' });
+    expect(handlers.onOpenSuccessionPosition).toHaveBeenLastCalledWith('d-hr', 'p3');
+  });
+
+  it('lists every key position in the View all modal with search and pages', async () => {
+    handlers.onOpenSuccessionPosition.mockClear();
+    succession.positions = [
+      ...BASE_POSITIONS,
+      ...Array.from({ length: 9 }, (_, i) => ({
+        id: `x${i}`, title: `Engineer ${i + 1}`, departmentId: 'd-eng', departmentName: 'Engineering',
+        incumbentName: null, incumbentLeavingDate: null, successorCount: 3,
+      })),
+    ];
+    renderOverview([]);
+    fireEvent.click(await screen.findByRole('button', { name: 'View all (13) →' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Showing 1–8 of 13 entries')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: '2' }));
+    expect(within(dialog).getByText('Showing 9–13 of 13 entries')).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByRole('searchbox'), { target: { value: 'treasurer' } });
+    expect(within(dialog).getByText('Showing 1–1 of 1 entries')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('link', { name: /Open City Treasurer/ }));
+    expect(handlers.onOpenSuccessionPosition).toHaveBeenCalledWith('d-fin', 'p2', { replace: true });
   });
 });

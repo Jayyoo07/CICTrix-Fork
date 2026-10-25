@@ -117,6 +117,37 @@
   transform: scale(0.98);
 }
 
+/* Loading (DESIGN_IDENTITY §9.1): label stays, spinner joins it. Repeated here
+   rather than only in abyan-tokens.css, because the shared Button is also used
+   outside the .abyan-ds / .rsp-ds scopes, e.g. on the admin login. */
+.btn.is-loading {
+  opacity: 0.7;
+  cursor: progress;
+  pointer-events: none;
+}
+
+.btn.is-loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.btn.is-loading:active {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-loading::before {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: var(--font-size-sm);

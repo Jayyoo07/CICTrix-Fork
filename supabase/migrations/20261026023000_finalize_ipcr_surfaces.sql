@@ -27,6 +27,13 @@
 -- Run with `set app.ipcr_dry_run = 'on';` first to roll everything back at the
 -- final assertion and confirm the counts.
 
+-- `security definer` because the fan-out must write four tables no matter how
+-- their RLS policies are configured, and a trigger must not fail because the
+-- invoking role lacks a grant. It is safe only because of two properties that
+-- must stay true: the only caller-supplied value is a uuid, and every row it
+-- writes is derived from that record. It never trusts the caller for content.
+-- EXECUTE is therefore limited to authenticated and service_role below; the
+-- trigger path needs no grant at all.
 create or replace function public.finalize_ipcr_surfaces(p_target_setting_id uuid)
 returns void
 language plpgsql
@@ -40,6 +47,8 @@ declare
   v_office_id      uuid;
   v_office_name    text;
   v_position       text;
+  v_position_id    integer;
+  v_plantilla_num  integer;
   v_title          text;
   v_period         text;
   v_final_score    numeric;
@@ -62,13 +71,15 @@ begin
     return;
   end if;
 
-  -- Employee identity. Only columns the employees_with_department view exposes
-  -- are used, so this cannot break on schema drift in the base table.
+  -- Employee identity. Verified present on the base table 2026-10-26; there is no
+  -- department_id, so the office is resolved by name below.
   select e.employee_number,
          coalesce(e.last_name, '') || ', ' || coalesce(e.first_name, ''),
          e.department,
-         e.position
-    into v_employee_num, v_employee_name, v_office_name, v_position
+         e.position,
+         e.position_id,
+         e.plantilla_num
+    into v_employee_num, v_employee_name, v_office_name, v_position, v_position_id, v_plantilla_num
     from public.employees e
    where e.id = v_ts.employee_id;
 
@@ -123,9 +134,9 @@ begin
     select 'IPCR-TS-' || v_period || '-' || v_employee_num,
            'ROW-' || lpad((row_number() over (order by m.sort_order, si.sort_order))::text, 4, '0'),
            v_employee_num,
-           null,
+           v_position_id,
            v_position,
-           null,
+           v_plantilla_num,
            v_period,
            upper(m.function_type),
            si.description,
@@ -216,8 +227,12 @@ begin
 end;
 $$;
 
+-- Not anon: an unauthenticated caller has no business re-syncing an IPCR, and a
+-- `security definer` function in `public` is reachable by every role by default.
+-- The admin portals authenticate with Supabase Auth, so `authenticated` covers
+-- the explicit call; the triggers cover everything else without a grant.
 revoke all on function public.finalize_ipcr_surfaces(uuid) from public;
-grant execute on function public.finalize_ipcr_surfaces(uuid) to anon, authenticated, service_role;
+grant execute on function public.finalize_ipcr_surfaces(uuid) to authenticated, service_role;
 
 comment on function public.finalize_ipcr_surfaces(uuid) is
   'Fan one finalized Phase 1/2 IPCR out to ipcr_performance, performance_evaluations, ipcr_submissions and locked_targets. Idempotent; called by trigger and by the app at Phase 2 finalization.';

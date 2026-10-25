@@ -77,7 +77,7 @@ The seed migration wrote 1 and 2 (without accomplishments) and none of 3 to 7.
 6. Untagged legacy rows for the same employee and period — skip the whole key so the employee's own filing wins.
 7. Trigger recursion — the function must not update `target_settings`.
 8. `security definer` without a pinned `search_path` — set `search_path = public, pg_temp`.
-9. Grants — the app calls with the anon key, so `EXECUTE` is needed for `anon` and `authenticated`.
+9. Grants — the admin portals authenticate with Supabase Auth, so `EXECUTE` goes to `authenticated` and `service_role`, never `anon`. A `security definer` function in `public` is reachable by every role by default, and nothing stops an anonymous caller passing an arbitrary uuid.
 10. RLS — running as owner bypasses it; that is why the previous writes as anon worked when their policies were permissive.
 11. `check:migrations` — create both files with `npx supabase migration new`, never by hand.
 12. Backfill inside the migration — assert counts and raise on mismatch rather than leaving half-written stores.
@@ -87,10 +87,17 @@ The seed migration wrote 1 and 2 (without accomplishments) and none of 3 to 7.
 
 ## Verified against production (2026-10-26)
 
-- Finalized IPCRs by cycle, from `target_settings` where approved and phase2 completed: January–June 2025 holds 78, July–December 2025 holds 80, January–June 2026 holds 114. **272 in total**, and in each cycle the IPCR count equals the distinct employee count, so no employee has two records in one cycle. Expect 114 of 130 on the Summary of Ratings once the mirror runs.
-- `select count(*) from public.ipcr_performance` returns **0**. The legacy table is genuinely empty, which is why the Summary of Ratings shows 0 of 130 and the archive has nothing to list.
+Read over the Data API with the publishable key `sb_publishable_…`, so the numbers are current, not remembered.
+
+- Row counts: `target_settings` 272, `success_indicator_ratings` 760, `success_indicators` 760, `mfos` 760. Everything else is empty: `ipcr_performance` 0, `performance_evaluations` 0, `ipcr_submissions` 0, `locked_targets` 0, `employee_competencies` 0, `ipcr_competency_matches` 0, `v_competency_gap_analysis` 0.
+- One indicator per MFO, so the mirror writes 760 `ipcr_performance` rows across the three semesters, and the accomplishment fill touches the same 760 rating rows.
+- Finalized IPCRs by cycle: January–June 2025 holds 78, July–December 2025 holds 80, January–June 2026 holds 114. **272 in total**, and in each cycle the IPCR count equals the distinct employee count, so no employee has two records in one cycle. Expect 114 of 130 on the Summary of Ratings once the mirror runs.
+- Cycles are ids 7, 5, 6, 2 with the expected dates; the derived legacy labels match the canonical list once `Jan 1-Jun 30 2026` is added.
+- `employees` has `employee_number`, `first_name`, `last_name`, `department`, `position`, `position_id` and `plantilla_num`. It has **no `department_id`** — the office resolves by name. `departments.id` is a uuid, matching `locked_targets.office_id`.
+- `finalize_ipcr_surfaces` does not exist yet (`PGRST202`), so the app's RPC call will fail until this migration applies. The fan-out is idempotent, so a retry after it lands is safe.
 - The 805 `ipcr_performance` rows recorded in `IPCR_DATA_INTEGRITY_CHECKLIST.md` on 2026-07-19 are gone, most likely truncated by the dataset reset. That history cannot be recovered; the archive will hold only the three semesters this work mirrors.
+- The `VITE_SUPABASE_ANON_KEY` in `.env` is the legacy JWT anon key, disabled on 2026-09-24. Every request with it returns 401, so local `npm run dev` cannot read the project until it is replaced with the publishable key.
 
 ## Not verified here
 
-- Nothing outstanding. Every load-bearing claim in this document was either read from the repo or queried against production on 2026-10-26.
+- The migrations themselves have never run. No local Postgres, no Docker, and repo migrations are not hand-applied, so they are validated at merge time.

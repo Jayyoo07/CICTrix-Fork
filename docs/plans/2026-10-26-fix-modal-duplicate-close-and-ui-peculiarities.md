@@ -1,7 +1,7 @@
 ---
 title: Fix duplicate modal close buttons and UI peculiarities
 date: 2026-10-26
-status: In Progress
+status: Done
 summary: Unify IPCR phase open/close confirmation modals, eliminate duplicate X close buttons, fix non-existent Tailwind utility classes, and standardize modal patterns to ABYAN design tokens.
 ---
 

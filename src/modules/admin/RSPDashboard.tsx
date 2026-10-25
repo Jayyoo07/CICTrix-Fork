@@ -34,6 +34,8 @@ import { getAdminEmail } from '../../lib/adminSession';
 import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/applicantStatus';
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { RspArchives, type ArchiveRecord } from './rsp-archives';
+import { fetchWrittenExamTotals } from '../../lib/api/examTotalPoints';
+import { WRITTEN_EXAM_FORM_SHARE, convertExamScore, totalForPosition } from '../../lib/examTotalPoints';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
 import { RspDashboardOverview } from './RspDashboardOverview';
 import { EligibilityPointsPanel } from '../../components/EligibilityPointsPanel';
@@ -696,12 +698,6 @@ const pcptRawToConverted = (raw: number): number => {
   return Number(Math.max(0, Math.min(20, (raw / 30) * 20)).toFixed(2));
 };
 
-const normalizeWrittenScore = (value: number): number => {
-  // New flow stores written raw score (0-100). Legacy flow may store already-converted <= 30.
-  if (value <= 30) return Number(value.toFixed(2));
-  return Number((value * 0.3).toFixed(2));
-};
-
 // Rater assigned_positions live exclusively in Supabase (raters.assigned_positions).
 // No local cache — every read goes through the DB.
 
@@ -736,6 +732,14 @@ export const RSPDashboard = () => {
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [applicants, setApplicants] = useState<ApplicantRecord[]>([]);
+  // Written Exam total points per position, for the printed assessment form.
+  const [examTotals, setExamTotals] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchWrittenExamTotals().then((result) => { if (!cancelled) setExamTotals(result.totals); });
+    return () => { cancelled = true; };
+  }, []);
   // Applicants with at least one scored evaluation; the dashboard uses it to
   // flag interviews that were held but never scored.
   const [evaluatedApplicantIds, setEvaluatedApplicantIds] = useState<Set<string>>(new Set());
@@ -1627,8 +1631,12 @@ export const RSPDashboard = () => {
         const performance = Number(resolveScoreValue(stored?.performance).toFixed(2));
         const potential = Number(resolveScoreValue(stored?.potential).toFixed(2));
 
-        const writtenRawOrConverted = resolveScoreValue(stored?.writtenExam);
-        const written = Number(normalizeWrittenScore(writtenRawOrConverted).toFixed(2));
+        // The Applicant Score screen stores the raw score; convert it against the
+        // position's configured total, capped at the 30-point share.
+        const written = convertExamScore(
+          resolveScoreValue(stored?.writtenExam),
+          totalForPosition(examTotals, applicant.position),
+        ).points;
 
         const pcptRawOrConverted = resolveScoreValue(stored?.pcpt);
         const interview = Number((pcptRawOrConverted > 20 ? pcptRawToConverted(pcptRawOrConverted) : pcptRawOrConverted).toFixed(2));
@@ -1655,7 +1663,7 @@ export const RSPDashboard = () => {
       .sort((a, b) => b.total - a.total || a.fullName.localeCompare(b.fullName));
 
     return rows;
-  }, [activeRankingPosition, applicants, completedEvaluationIds, activeRankingCard, jobs, savedScoredApplicantIds, hiredApplicantIds]);
+  }, [activeRankingPosition, applicants, completedEvaluationIds, activeRankingCard, jobs, savedScoredApplicantIds, hiredApplicantIds, examTotals]);
 
   useEffect(() => {
     const syncSavedScores = () => setSavedScoredApplicantIds(getSavedScoredApplicantIdSet());
@@ -4781,7 +4789,6 @@ export const RSPDashboard = () => {
 
                           // Appointment type logic
                           const appointmentType = stored?.appointmentType || applicant.appointmentType || 'original';
-                          const positionType = stored?.positionType || applicant.positionType || 'rank-and-file';
 
                           // --- Education ---
                           // Assume educationLevel is a number 0-20 (or use mapping if needed)
@@ -4800,14 +4807,21 @@ export const RSPDashboard = () => {
 
                           // --- Written Exam (Original only) ---
                           let writtenExamScore = null;
+                          let writtenExceedsTotal = false;
+                          const writtenExamTotal = totalForPosition(examTotals, applicant.position);
                           if (appointmentType === 'original') {
                             let writtenRaw = resolveScoreValue(stored?.writtenExam);
                             // If missing, try interviewer evaluation
                             if ((!writtenRaw || writtenRaw <= 0) && typeof evalRow?.written_exam === 'number') {
                               writtenRaw = evalRow.written_exam;
                             }
-                            const maxRaw = positionType === 'executive' ? 35 : 30;
-                            writtenExamScore = typeof writtenRaw === 'number' && writtenRaw > 0 ? clamp20((writtenRaw / maxRaw) * 20) : null;
+                            // The configured total replaces the old fixed 30/35 maximum; a score
+                            // above it is capped at the 20-point share and flagged on the form.
+                            if (typeof writtenRaw === 'number' && writtenRaw > 0) {
+                              const converted = convertExamScore(writtenRaw, writtenExamTotal, WRITTEN_EXAM_FORM_SHARE);
+                              writtenExamScore = converted.points;
+                              writtenExceedsTotal = converted.exceedsTotal;
+                            }
                           }
 
                           // --- Oral Exam (Original only) ---
@@ -5006,7 +5020,12 @@ export const RSPDashboard = () => {
                                           <tr>
                                             <td className="border-b border-black px-3 py-2">Written Exam</td>
                                             <td className="border-b border-l-2 border-black px-3 py-2 text-center">20</td>
-                                            <td className="border-b border-l-2 border-black px-3 py-2 text-center font-semibold">{writtenExamScore !== null ? writtenExamScore.toFixed(2) : 'N/A'}</td>
+                                            <td className="border-b border-l-2 border-black px-3 py-2 text-center font-semibold">
+                                              {writtenExamScore !== null ? writtenExamScore.toFixed(2) : 'N/A'}
+                                              {writtenExceedsTotal && (
+                                                <span className="block text-xs font-semibold">Score exceeds total ({writtenExamTotal})</span>
+                                              )}
+                                            </td>
                                           </tr>
                                         </>
                                       )}

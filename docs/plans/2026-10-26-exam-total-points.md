@@ -24,7 +24,7 @@ RSP scores live in localStorage (`cictrix_exam_scores`, `cictrix_category_scores
 
 ## Steps
 
-1. Migration `supabase/migrations/20261026_written_exam_total_points.sql` (file only; not applied).
+1. Migration `supabase/migrations/20261026120000_written_exam_total_points.sql` (file only; not applied).
 2. Pure helpers in `src/lib/examTotalPoints.ts`: validate total, validate score, convert with cap, find affected applicants. Service call to read/update the column in `src/lib/`.
 3. Total Points control on the Applicant Score screen, per vacancy, with D4 block.
 4. Replace hard-coded 100 / ×0.30 everywhere scores are displayed, ranked, computed or exported; show "score / total".

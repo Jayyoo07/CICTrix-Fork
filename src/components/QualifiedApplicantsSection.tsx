@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Calculator,
   CheckCircle2,
   ChevronRight,
@@ -25,6 +26,21 @@ import {
   type EvaluationSnapshot,
 } from '../lib/evaluationScores';
 import { Modal } from './modal';
+import { getAdminRole } from '../lib/adminSession';
+import { fetchWrittenExamTotals, saveWrittenExamTotal, type SaveExamTotalResult } from '../lib/api/examTotalPoints';
+import {
+  DEFAULT_WRITTEN_EXAM_TOTAL,
+  WRITTEN_EXAM_SHARE,
+  canEditExamTotal,
+  convertExamScore,
+  describeBlockedTotal,
+  findScoresAboveTotal,
+  formatScoreOverTotal,
+  totalForPosition,
+  validateExamScore,
+  validateTotalPoints,
+  type ScoredApplicant,
+} from '../lib/examTotalPoints';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,9 +149,9 @@ const CAT_META: Record<CatKey, {
     guide: '51-60 = 12 pts | 61-70 = 14 pts | 71-80 = 16 pts | 81-90 = 18 pts | 91-100 = 20 pts',
   },
   writtenExam: {
-    roman: '—',   label: 'Written Exam',        maxOriginal: 100, maxPromotional: 100,
+    roman: '—',   label: 'Written Exam',        maxOriginal: DEFAULT_WRITTEN_EXAM_TOTAL, maxPromotional: DEFAULT_WRITTEN_EXAM_TOTAL,
     color: '#0E1789', bg: '#E5E7F5', border: '#9DA5E0', badgeBg: '#E5E7F5', rspOwned: false,
-    guide: 'Raw score 0–100. Contributes 30% to overall score.',
+    guide: `Raw score from 0 to the exam's total points. Contributes ${WRITTEN_EXAM_SHARE} points to the overall score.`,
   },
   oralExam: {
     roman: 'V',   label: 'Oral Examination',    maxOriginal: 20,  maxPromotional: 0,
@@ -257,11 +273,14 @@ const deriveInitial = (
   };
 };
 
-const calcOverall = (scores: ApplicantCategoryScores): { value: number | null; pct: string | null } => {
+const calcOverall = (
+  scores: ApplicantCategoryScores,
+  examTotal: number = DEFAULT_WRITTEN_EXAM_TOTAL,
+): { value: number | null; pct: string | null } => {
   for (const k of BASE_CATS) if ((scores[k]?.finalScore ?? null) === null) return { value: null, pct: null };
   if ((scores.writtenExam?.finalScore ?? null) === null) return { value: null, pct: null };
   const base = BASE_CATS.reduce((s, k) => s + (scores[k]?.finalScore ?? 0), 0);
-  const val = +(base + (scores.writtenExam?.finalScore ?? 0) * 0.30).toFixed(2);
+  const val = +(base + writtenExamRawToConvertedScore(scores.writtenExam?.finalScore ?? 0, examTotal)).toFixed(2);
   return { value: val, pct: ((val / MAX_TOTAL) * 100).toFixed(1) };
 };
 
@@ -300,7 +319,9 @@ const pcptRawToConvertedScore = (raw: number) => {
   return +Math.max(0, Math.min(20, (raw / 30) * 20)).toFixed(1);
 };
 
-const writtenExamRawToConvertedScore = (raw: number) => +((raw || 0) * 0.30).toFixed(2);
+// Capped at the 30-point share: a saved score above the current total (e.g.
+// entered in another browser) never yields more than WRITTEN_EXAM_SHARE.
+const writtenExamRawToConvertedScore = (raw: number, examTotal: number) => convertExamScore(raw, examTotal).points;
 
 const oralRawToConvertedScore = (raw: number) => +Math.min(20, Math.max(0, (raw / 5) * 20)).toFixed(2);
 
@@ -412,23 +433,63 @@ const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
 interface ExamScoresModalProps {
   folder:         PositionFolder;
   existingScores: Record<string, string>;
+  /** Written exam scores saved outside this modal (interviewer evaluations), checked before lowering the total. */
+  knownScores:    ScoredApplicant[];
+  total:          number;
+  canEditTotal:   boolean;
+  onSaveTotal:    (total: number) => Promise<SaveExamTotalResult>;
   onClose:        () => void;
   onSave:         (scores: Record<string, string>) => void;
 }
 
-const ExamScoresModal = ({ folder, existingScores, onClose, onSave }: ExamScoresModalProps) => {
+const ExamScoresModal = ({ folder, existingScores, knownScores, total, canEditTotal, onSaveTotal, onClose, onSave }: ExamScoresModalProps) => {
   const [scores, setScores] = useState<Record<string, string>>(() => ({
     ...Object.fromEntries(folder.applicants.map((a) => [a.id, ''])),
     ...existingScores,
   }));
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [totalInput,  setTotalInput]  = useState(String(total));
+  const [totalError,  setTotalError]  = useState<string | null>(null);
+  const [savingTotal, setSavingTotal] = useState(false);
+  const [totalSaved,  setTotalSaved]  = useState(false);
 
-  const isValid = (v: string) => v === '' || (!isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 100);
+  useEffect(() => { setTotalInput(String(total)); }, [total]);
+
+  const scoreError = (v: string) => validateExamScore(v, total);
   const allFilled = folder.applicants.every((a) => {
     const v = scores[a.id] ?? '';
-    return v !== '' && isValid(v);
+    return v !== '' && !scoreError(v);
   });
+  const totalChanged = totalInput.trim() !== String(total);
+
+  // Lowering the total below a score already entered is blocked (plan D4), so
+  // no saved score is ever left above its exam's total by this screen.
+  const handleSaveTotal = async () => {
+    const invalid = validateTotalPoints(totalInput);
+    if (invalid) { setTotalError(invalid); return; }
+    const next = Number(totalInput);
+    const entered: ScoredApplicant[] = folder.applicants.map((a) => {
+      const v = scores[a.id] ?? '';
+      return { id: a.id, name: a.full_name, score: v !== '' && !isNaN(Number(v)) ? Number(v) : null };
+    });
+    const enteredIds = new Set(entered.filter((e) => e.score !== null).map((e) => e.id));
+    const affected = findScoresAboveTotal([...entered, ...knownScores.filter((k) => !enteredIds.has(k.id))], next);
+    const blocked = describeBlockedTotal(affected, next);
+    if (blocked) { setTotalError(blocked); return; }
+
+    setTotalError(null);
+    setSavingTotal(true);
+    const result = await onSaveTotal(next);
+    setSavingTotal(false);
+    if (!result.ok) {
+      setTotalError(result.columnMissing
+        ? "We couldn't save the total points because the database hasn't been updated for this feature yet. The total was not changed. Contact the HR administrator."
+        : "We couldn't save the total points. The total was not changed. Check your connection and try again.");
+      return;
+    }
+    setTotalSaved(true);
+  };
 
   const ranked = useMemo(() =>
     [...folder.applicants].sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0)),
@@ -470,16 +531,48 @@ const ExamScoresModal = ({ folder, existingScores, onClose, onSave }: ExamScores
         </>
       )}
     >
-        <div style={{ marginBottom: '0.85rem' }}>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            Enter the written examination score (0–100) for each applicant.
+        <div style={{ marginBottom: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Total points
+              <input
+                type="number" min={1} step={1}
+                value={totalInput}
+                readOnly={!canEditTotal}
+                aria-invalid={totalError ? true : undefined}
+                aria-describedby="exam-total-help"
+                onChange={(e) => { setTotalInput(e.target.value); setTotalError(null); setTotalSaved(false); }}
+                style={{ width: 110, border: `1.5px solid ${totalError ? 'var(--status-error)' : 'var(--border-subtle)'}`, borderRadius: 8, padding: '0.45rem 0.65rem', fontSize: '0.95rem', outline: 'none', background: canEditTotal ? 'var(--bg-control)' : 'var(--bg-sidebar)', textAlign: 'right', color: 'var(--text-primary)' }}
+              />
+            </label>
+            {canEditTotal && (
+              <button type="button" onClick={handleSaveTotal} disabled={!totalChanged || savingTotal} className="btn btn-sm btn-secondary">
+                {savingTotal ? 'Saving…' : 'Update Total'}
+              </button>
+            )}
+          </div>
+          <p id="exam-total-help" style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+            {canEditTotal
+              ? `Enter the written examination score (0–${total}) for each applicant.`
+              : `Total points are set by RSP. Scores run from 0 to ${total}.`}
           </p>
+          {totalError && (
+            <p role="alert" style={{ margin: 0, fontSize: '0.875rem', color: 'var(--status-error)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" /> {totalError}
+            </p>
+          )}
+          {totalSaved && !totalChanged && (
+            <p role="status" style={{ margin: 0, fontSize: '0.875rem', color: 'var(--status-success)' }}>
+              Total points updated to {total}.
+            </p>
+          )}
         </div>
         {/* List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {ranked.map((a, i) => {
             const val = scores[a.id] ?? '';
-            const valid = isValid(val);
+            const error = scoreError(val);
+            const valid = !error;
             const prev = existingScores[a.id];
             return (
               <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', background: 'var(--bg-sidebar)', border: `1px solid var(--border-subtle)`, borderRadius: 10, padding: '0.8rem 1rem' }}>
@@ -491,16 +584,24 @@ const ExamScoresModal = ({ folder, existingScores, onClose, onSave }: ExamScores
                   <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                     Eval score: {typeof a.total_score === 'number' ? `${a.total_score.toFixed(0)}/100` : '—'}
                   </p>
+                  {error && (
+                    <p id={`exam-score-error-${a.id}`} role="alert" style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--status-error)' }}>
+                      {error}
+                    </p>
+                  )}
                 </div>
                 {prev && prev !== '' && (
                   <span style={{ background: 'var(--status-pending-light)', color: 'var(--accent-purple)', fontWeight: 700, fontSize: '0.875rem', padding: '0.2rem 0.7rem', borderRadius: 999, flexShrink: 0 }}>
-                    {prev}
+                    {formatScoreOverTotal(Number(prev), total)}
                   </span>
                 )}
                 <input
-                  type="number" min={0} max={100} step={1}
+                  type="number" min={0} max={total} step={1}
                   value={val}
                   onChange={(e) => setScores(p => ({ ...p, [a.id]: e.target.value }))}
+                  aria-label={`Written exam score for ${a.full_name}, out of ${total}`}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? `exam-score-error-${a.id}` : undefined}
                   placeholder="Score"
                   style={{ width: 85, border: `1.5px solid ${val !== '' && !valid ? 'var(--status-error)' : 'var(--border-subtle)'}`, borderRadius: 8, padding: '0.45rem 0.65rem', fontSize: '0.95rem', outline: 'none', background: val !== '' && !valid ? 'var(--status-error-light)' : 'var(--bg-control)', textAlign: 'right', flexShrink: 0, color: 'var(--text-primary)' }}
                 />
@@ -530,11 +631,13 @@ interface ApplicantScoringModalProps {
   savedScores:  Record<string, ApplicantCategoryScores>;
   allApplicants: ApplicantRecord[];
   evaluation?:  EvaluationSnapshot | null;
+  /** Written Exam total points for this applicant's position. */
+  examTotal:    number;
   onClose:      () => void;
   onSave:       (applicantId: string, scores: ApplicantCategoryScores) => void;
 }
 
-const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluation, onClose, onSave }: ApplicantScoringModalProps) => {
+const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluation, examTotal, onClose, onSave }: ApplicantScoringModalProps) => {
   // Current employees (verified at wizard time via employee auth) submit with
   // application_type === 'promotion'. Their evaluation must be locked to a
   // Promotional Appointment — Original is invalid for an existing employee.
@@ -1135,8 +1238,9 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                   const convertedScore =
                     catKey === 'pcpt'     ? (typeof cat.finalScore === 'number' ? cat.finalScore : 0) :
                     catKey === 'oralExam' ? (typeof cat.finalScore === 'number' ? cat.finalScore : oralRawToConvertedScore(cat.initialScore ?? 0)) :
-                                           writtenExamRawToConvertedScore(typeof cat.finalScore === 'number' ? cat.finalScore : 0);
-                  const convertedMax = catKey === 'writtenExam' ? 30 : max;
+                                           writtenExamRawToConvertedScore(typeof cat.finalScore === 'number' ? cat.finalScore : 0, examTotal);
+                  const convertedMax = catKey === 'writtenExam' ? WRITTEN_EXAM_SHARE : max;
+                  const exceedsTotal = catKey === 'writtenExam' && convertExamScore(cat.finalScore, examTotal).exceedsTotal;
                   return (
                     <div key={catKey} style={{ ...SM_CARD, padding: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -1169,6 +1273,11 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--color-primary-900)', fontWeight: 700 }}>
                         Converted Score: {convertedScore}/{convertedMax}
                       </p>
+                      {exceedsTotal && (
+                        <p role="alert" style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 600, color: 'var(--error-700)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertTriangle size={12} aria-hidden="true" /> Score exceeds total ({examTotal}). Counted as {WRITTEN_EXAM_SHARE} points.
+                        </p>
+                      )}
 
                       <button
                         type="button"
@@ -1222,16 +1331,19 @@ interface ApplicantsListViewProps {
   savedCatScores:         Record<string, ApplicantCategoryScores>;
   evaluationsByApplicant?: Record<string, EvaluationSnapshot>;
   examScores?:            Record<string, Record<string, string>>;
+  /** Written Exam total points for this folder's position. */
+  examTotal:              number;
   onUpdateScores:         (applicant: ApplicantRecord) => void;
 }
 
 // Score columns per appointment track. Original and Promotional applicants are
 // judged against different qualification sets, so each tab shows only its own.
+// The Written column's label is completed with the configured total at render.
 type ScoreCol = { key: CatKey; label: string };
 const ORIGINAL_SCORE_COLS: ScoreCol[] = [
   { key: 'education',   label: 'Educ /20' },
   { key: 'experience',  label: 'Exp /25' },
-  { key: 'writtenExam', label: 'Written /100' },
+  { key: 'writtenExam', label: 'Written' },
   { key: 'oralExam',    label: 'Oral /20' },
 ];
 const PROMOTIONAL_SCORE_COLS: ScoreCol[] = [
@@ -1248,6 +1360,7 @@ const ApplicantsListView = ({
   savedCatScores,
   evaluationsByApplicant,
   examScores,
+  examTotal,
   onUpdateScores,
 }: ApplicantsListViewProps) => {
   const [search, setSearch] = useState('');
@@ -1264,9 +1377,9 @@ const ApplicantsListView = ({
       const posExam = examScores?.[folder.position]?.[a.id];
       const cs = deriveInitial(a, savedCatScores, evalSnapshot, posExam);
       const apptType: AppointmentType = cs.appointmentType ?? 'original';
-      return { ...a, overallScore: calcModalScore(cs, apptType) ?? calcOverall(cs).value, catScores: cs, apptType };
+      return { ...a, overallScore: calcModalScore(cs, apptType) ?? calcOverall(cs, examTotal).value, catScores: cs, apptType };
     }),
-    [folder.applicants, folder.position, savedCatScores, evaluationsByApplicant, examScores],
+    [folder.applicants, folder.position, savedCatScores, evaluationsByApplicant, examScores, examTotal],
   );
 
   const originalCount = useMemo(() => typed.filter(t => t.apptType !== 'promotional').length, [typed]);
@@ -1287,7 +1400,7 @@ const ApplicantsListView = ({
       <div>
         <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{folder.position}</h2>
         <p style={{ margin: '0.15rem 0 0', fontSize: '0.875rem', color: '#64748b' }}>
-          {folder.office} &middot; {activeCount} {scoreTab === 'promotional' ? 'Promotional' : 'Original'} qualified applicant{activeCount !== 1 ? 's' : ''}
+          {folder.office} &middot; {activeCount} {scoreTab === 'promotional' ? 'Promotional' : 'Original'} qualified applicant{activeCount !== 1 ? 's' : ''} &middot; Written exam total: {examTotal} points
         </p>
       </div>
 
@@ -1340,7 +1453,7 @@ const ApplicantsListView = ({
               <th style={{ padding: '0.75rem 0.75rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Exam Schedule</th>
               <th style={{ padding: '0.75rem 0.75rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Interview Schedule</th>
               {scoreCols.map(c => (
-                <th key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{c.label}</th>
+                <th key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{c.key === 'writtenExam' ? `${c.label} /${examTotal}` : c.label}</th>
               ))}
               <th style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Status</th>
             </tr>
@@ -1404,9 +1517,23 @@ const ApplicantsListView = ({
                       <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>—</span>
                     )}
                   </td>
-                  {scoreCols.map(c => (
-                    <td key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{sv(c.key)}</td>
-                  ))}
+                  {scoreCols.map(c => {
+                    if (c.key !== 'writtenExam') {
+                      return <td key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{sv(c.key)}</td>;
+                    }
+                    const raw = cs.writtenExam?.finalScore ?? cs.writtenExam?.initialScore ?? 0;
+                    const { exceedsTotal } = convertExamScore(raw, examTotal);
+                    return (
+                      <td key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                        {raw > 0 ? formatScoreOverTotal(raw, examTotal) : '—'}
+                        {exceedsTotal && (
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 2, fontSize: '0.72rem', fontWeight: 700, color: 'var(--error-700)', whiteSpace: 'nowrap' }}>
+                            <AlertTriangle size={11} aria-hidden="true" /> Score exceeds total
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
                   <td style={{ padding: '0.75rem 0.75rem', textAlign: 'center' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.2rem 0.65rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, background: isFinalized ? '#dcfce7' : '#fef3c7', color: isFinalized ? '#15803d' : '#92400e', border: `1px solid ${isFinalized ? '#bbf7d0' : '#fde68a'}` }}>
                       {isFinalized && <CheckCircle2 size={11} />}
@@ -1465,6 +1592,34 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
 
   const [examScores,  setExamScores]  = useState<Record<string, Record<string, string>>>(loadExamScores);
   const [catScores,   setCatScores]   = useState<Record<string, ApplicantCategoryScores>>(loadCatScores);
+  const [examTotals,  setExamTotals]  = useState<Record<string, number>>({});
+  const [examTotalsLoadFailed, setExamTotalsLoadFailed] = useState(false);
+  const canEditTotal = canEditExamTotal(getAdminRole());
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchWrittenExamTotals().then((result) => {
+      if (cancelled) return;
+      setExamTotals(result.totals);
+      setExamTotalsLoadFailed(!result.ok);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSaveExamTotal = useCallback(async (position: string, total: number) => {
+    const result = await saveWrittenExamTotal(position, total);
+    if (result.ok) setExamTotals((prev) => ({ ...prev, [position]: total }));
+    return result;
+  }, []);
+
+  // Written exam scores the interviewer saved, so lowering a total also checks them.
+  const knownExamScoresFor = useCallback((folder: PositionFolder): ScoredApplicant[] =>
+    folder.applicants.map((a) => {
+      const snap = evaluationsByApplicant?.[a.id];
+      return { id: a.id, name: a.full_name, score: typeof snap?.writtenExamRawScore === 'number' ? snap.writtenExamRawScore : null };
+    }),
+    [evaluationsByApplicant],
+  );
 
   const qualifiedBase = useMemo(() =>
     applicants.filter(a => {
@@ -1571,10 +1726,17 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
           savedCatScores={catScores}
           evaluationsByApplicant={evaluationsByApplicant}
           examScores={examScores}
+          examTotal={totalForPosition(examTotals, liveOpenFolder.position)}
           onUpdateScores={(a) => setScoresCtx({ applicant: a, folder: liveOpenFolder })}
         />
       ) : (
         <>
+          {examTotalsLoadFailed && (
+            <div role="alert" className="flex items-start gap-3 rounded-xl border-l-4 border-[var(--warning-500)] bg-[var(--warning-100)] p-4 text-sm text-[var(--neutral-800)]">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-[var(--warning-700)]" aria-hidden="true" />
+              <span>We couldn't load the written exam total points, so scores show out of {DEFAULT_WRITTEN_EXAM_TOTAL} for now. Reload the page to try again.</span>
+            </div>
+          )}
           {/* Stats row */}
           <section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <article className="rounded-2xl border border-[var(--border-color)] bg-white p-6">
@@ -1631,6 +1793,7 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Applicants</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Exam Status</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Written Exam</th>
+                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Points</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                   <th className="w-8 px-3 py-3" />
                 </tr>
@@ -1638,7 +1801,7 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
               <tbody className={tableBodyClass(false)}>
                 {folderLoad.initialLoading && (
                   <TableSkeletonRows show={folderLoad.showSkeleton}
-                    columns={['text', 'text', 'text', 'badge', 'text', 'button', 'text']} label="Loading applicant folders…" />
+                    columns={['text', 'text', 'text', 'badge', 'text', 'text', 'button', 'text']} label="Loading applicant folders…" />
                 )}
                 {!folderLoad.initialLoading && filteredFolders.map(folder => {
                   const es = EXAM_STYLES[folder.examStatus];
@@ -1680,6 +1843,9 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
                           </span>
                         </div>
                       </td>
+                      <td className="px-5 py-4 text-center text-sm font-semibold text-slate-800">
+                        {totalForPosition(examTotals, folder.position)}
+                      </td>
                       <td className="px-5 py-4 text-center">
                         <button
                           type="button"
@@ -1697,7 +1863,7 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
                 })}
                 {!folderLoad.initialLoading && filteredFolders.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-slate-500">
+                    <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
                       <FolderOpen size={40} className="mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold">No qualified applicant folders found</p>
                       <p className="mt-1 text-xs text-slate-400">Applicants appear here once their status is marked Qualified or Shortlisted.</p>
@@ -1715,6 +1881,10 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
         <ExamScoresModal
           folder={examModal}
           existingScores={examScores[examModal.position] ?? {}}
+          knownScores={knownExamScoresFor(examModal)}
+          total={totalForPosition(examTotals, examModal.position)}
+          canEditTotal={canEditTotal}
+          onSaveTotal={(total) => handleSaveExamTotal(examModal.position, total)}
           onClose={() => setExamModal(null)}
           onSave={scores => { handleSaveExam(examModal.position, scores); }}
         />
@@ -1726,6 +1896,7 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
           allApplicants={scoresCtx.folder.applicants}
           savedScores={catScores}
           evaluation={evaluationsByApplicant?.[scoresCtx.applicant.id]}
+          examTotal={totalForPosition(examTotals, scoresCtx.folder.position)}
           onClose={() => setScoresCtx(null)}
           onSave={handleSaveCatScores}
         />

@@ -1,7 +1,9 @@
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EDUCATION_LEVELS } from '../../constants/positions';
+import { ActionFeedback, useFeedback } from '../../components/action-feedback';
 import { updateApplicantDetails, type ApplicantDetailsPatch } from '../../lib/api/applicants';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 
 const MONTHS_PER_YEAR = 12;
 
@@ -31,7 +33,8 @@ export function EditApplicantDetailsModal({ applicant, onClose, onSaved }: Props
     experience_months: String(Math.round((startYears - Math.floor(startYears)) * MONTHS_PER_YEAR)),
   });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ message: string; nextStep: string } | null>(null);
+  const { success: notifySuccess } = useFeedback();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !saving) onClose(); };
@@ -44,7 +47,10 @@ export function EditApplicantDetailsModal({ applicant, onClose, onSaved }: Props
 
   const handleSave = async () => {
     if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim()) {
-      setError('First name, last name and email are required.');
+      setFailure({
+        message: 'First name, last name and email are required.',
+        nextStep: 'Fill in the missing fields, then save again.',
+      });
       return;
     }
     const years = Math.max(0, parseInt(form.experience_years || '0', 10) || 0);
@@ -64,13 +70,15 @@ export function EditApplicantDetailsModal({ applicant, onClose, onSaved }: Props
       years_of_experience: totalYears > 0 ? totalYears : null,
     };
     setSaving(true);
-    setError(null);
+    setFailure(null);
     const result = await updateApplicantDetails(String(applicant.id), patch);
     setSaving(false);
     if (!result.ok) {
-      setError(`We couldn't save the changes. ${result.error ?? ''} Try again.`.trim());
+      const described = describeActionFailure('save these changes', result.error);
+      setFailure({ message: described.message, nextStep: described.nextStep });
       return;
     }
+    notifySuccess('Applicant details saved', 'The applicant record now shows the new details.');
     onSaved(patch);
   };
 
@@ -155,17 +163,21 @@ export function EditApplicantDetailsModal({ applicant, onClose, onSaved }: Props
             </div>
           </section>
 
-          {error && (
-            <p role="alert" className="rounded-xl border-l-4 border-[var(--error-500)] bg-[var(--error-100)] px-4 py-3 text-sm text-[var(--error-700)]">
-              {error}
-            </p>
+          {failure && (
+            <ActionFeedback
+              title="We couldn't save these changes."
+              message={failure.message}
+              nextStep={failure.nextStep}
+              onDismiss={() => setFailure(null)}
+            />
           )}
         </div>
 
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
           <button type="button" className="btn btn-md btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
-          <button type="button" className="btn btn-md btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Changes'}
+          <button type="button" className="btn btn-md btn-primary" onClick={handleSave} disabled={saving} aria-busy={saving || undefined}>
+            {saving && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+            Save Changes
           </button>
         </div>
       </div>

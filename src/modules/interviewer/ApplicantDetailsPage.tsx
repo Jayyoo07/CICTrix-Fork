@@ -7,6 +7,7 @@ import {
   CircleX,
   Eye,
   FileText,
+  Loader2,
   Lock,
   Mail,
   Pencil,
@@ -21,6 +22,8 @@ import {
 } from 'lucide-react';
 import { AdminHeader } from '../../components/AdminHeader';
 import { Sidebar } from '../../components/Sidebar';
+import { ActionFeedback, useFeedback } from '../../components/action-feedback';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useHistoryBack } from '../../hooks/useHistoryBack';
@@ -795,7 +798,7 @@ function ApplicantDetailsPageView() {
 
   const [showSendEmailModal, setShowSendEmailModal] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<{ message: string; nextStep: string } | null>(null);
   const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
   const [emailTemplate, setEmailTemplate] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
@@ -811,13 +814,14 @@ function ApplicantDetailsPageView() {
   // meaningful when the reason is failure_to_attend.
   const [missedActivityKey, setMissedActivityKey] = useState('');
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const [confirmError, setConfirmError] = useState<{ message: string; nextStep: string } | null>(null);
 
   const [applicant, setApplicant] = useState<ApplicantRecord | null>(null);
   const [showEditDetails, setShowEditDetails] = useState(false);
   const [recruitmentApplicant, setRecruitmentApplicant] = useState<Applicant | null>(routeState?.applicant ?? null);
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
   const [evaluation, setEvaluation] = useState<EvaluationRecord | null>(null);
-  const [, setToast] = useState<string | null>(null);
+  const { success: notifySuccess, error: notifyError } = useFeedback();
   const [navQueue, setNavQueue] = useState<ReviewQueueEntry[] | null>(routeState?.navQueue ?? null);
   const [reviewComplete, setReviewComplete] = useState(false);
   const pendingDecision = usePendingDecision();
@@ -1358,7 +1362,10 @@ function ApplicantDetailsPageView() {
   const handleSendEmail = async () => {
     if (!emailSubject.trim() || !emailBody.trim()) return;
     if (!applicant?.email) {
-      setEmailError('This applicant has no email on file.');
+      setEmailError({
+        message: 'This applicant has no email address on file.',
+        nextStep: 'Ask RSP to add an email address, then try again.',
+      });
       return;
     }
 
@@ -1384,8 +1391,8 @@ function ApplicantDetailsPageView() {
         setEmailSuccess(null);
       }, 1200);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setEmailError(message);
+      const described = describeActionFailure('send this email', error);
+      setEmailError({ message: described.message, nextStep: described.nextStep });
     } finally {
       setEmailSending(false);
     }
@@ -1620,6 +1627,8 @@ function ApplicantDetailsPageView() {
         goBack(); // previous page/list, or the RSP home on a direct visit
       }, 500);
     }
+
+    return persisted;
   };
 
   const navIndex = navQueue && applicant ? navQueue.findIndex((entry) => entry.id === applicant.id) : -1;
@@ -1643,7 +1652,15 @@ function ApplicantDetailsPageView() {
       applicantName: fullName,
       label: action === 'disqualify' ? 'Disqualified' : 'Shortlisted',
       previousStatus: navQueue[navIndex].status,
-      commit: () => persistStatus(action, disqualifyDetails),
+      commit: async () => {
+        const saved = await persistStatus(action, disqualifyDetails);
+        if (saved === false) {
+          notifyError(
+            "We couldn't save that decision",
+            `${fullName} was not updated. Open the applicant again and retry the decision.`,
+          );
+        }
+      },
     });
     const nextIndex = nextUndecidedIndex(nextQueue, navIndex);
     if (nextIndex < 0) {
@@ -1670,7 +1687,13 @@ function ApplicantDetailsPageView() {
 
   const handleSubmitStatusEvaluation = async () => {
     if (!applicantStatus) return;
-    await persistStatus(applicantStatus);
+    const saved = await persistStatus(applicantStatus);
+    if (saved === false) {
+      notifyError(
+        "We couldn't update the application status",
+        'Nothing was saved. Check your connection, then try again.',
+      );
+    }
   };
 
   // ── Doc review helpers ────────────────────────────────────────────────────────
@@ -1696,8 +1719,10 @@ function ApplicantDetailsPageView() {
     const key = getDocReviewKey(fileUrl);
     persistDocReview(key, { status: 'resubmission_requested', remarks: remarks.trim(), reviewedAt: new Date().toISOString() });
     addDocTimeline(`Action Required: Resubmission requested for ${docType} — "${remarks.trim()}".`);
-    setToast('Resubmission requested.');
-    await persistStatus('action_required');
+    const statusSaved = await persistStatus('action_required');
+    if (statusSaved === false) {
+      throw new Error('The applicant status was not updated.');
+    }
   };
 
   const handleOpenDocument = async (filePath: string) => {
@@ -1728,20 +1753,19 @@ function ApplicantDetailsPageView() {
     // resubmit that they had passed it. Realtime fires on every write, so the
     // applicant's tracker really did show it. The single write below is the
     // only one this flow needs.
-
-    // Insert a resubmission_request row in Supabase for each selected document.
-    for (const slotLabel of resubmitSelectedSlots) {
-      const slot = DOCUMENT_SLOTS.find((s) => s.label === slotLabel);
-      if (!slot) continue;
-      const matchedAtt = attachments.find((a) => {
-        const resolvedType = a.document_type || FILE_NAME_TO_TYPE[a.file_name] || 'other';
-        return resolvedType === slot.type && a.document_type !== 'resubmission_request' && a.document_type !== 'resubmission_resolved' && a.document_type !== 'doc_validated';
-      });
-      if (matchedAtt) {
-        await handleRequestResubmission(matchedAtt.file_path, slotLabel, resubmitReason.trim());
-      }
-      try {
-        await (supabase as any).from('applicant_attachments').insert({
+    try {
+      // Insert a resubmission_request row in Supabase for each selected document.
+      for (const slotLabel of resubmitSelectedSlots) {
+        const slot = DOCUMENT_SLOTS.find((s) => s.label === slotLabel);
+        if (!slot) continue;
+        const matchedAtt = attachments.find((a) => {
+          const resolvedType = a.document_type || FILE_NAME_TO_TYPE[a.file_name] || 'other';
+          return resolvedType === slot.type && a.document_type !== 'resubmission_request' && a.document_type !== 'resubmission_resolved' && a.document_type !== 'doc_validated';
+        });
+        if (matchedAtt) {
+          await handleRequestResubmission(matchedAtt.file_path, slotLabel, resubmitReason.trim());
+        }
+        const { error: insertError } = await (supabase as any).from('applicant_attachments').insert({
           applicant_id: applicant.id,
           file_name: `RESUBMIT::${slotLabel}::${resubmitReason.trim()}`,
           file_path: resubmitNotes.trim() || '—',
@@ -1749,77 +1773,96 @@ function ApplicantDetailsPageView() {
           file_type: 'notice',
           file_size: 0,
         });
-      } catch (supaErr) {
-        console.warn('[handleSubmitResubmission] Supabase insert failed for', slotLabel, supaErr);
+        if (insertError) throw insertError;
+        const saved = await recordDocumentEvent({
+          applicantId: applicant.id,
+          eventType: 'resubmission_requested',
+          documentType: slot.type,
+          reason: resubmitNotes.trim() ? `${resubmitReason.trim()} — Note: ${resubmitNotes.trim()}` : resubmitReason.trim(),
+          actorEmail: getAdminEmail('RSP'),
+        });
+        if (!saved.ok) console.warn('[handleSubmitResubmission] history event not saved for', slotLabel, saved.error);
       }
-      const saved = await recordDocumentEvent({
-        applicantId: applicant.id,
-        eventType: 'resubmission_requested',
-        documentType: slot.type,
-        reason: resubmitNotes.trim() ? `${resubmitReason.trim()} — Note: ${resubmitNotes.trim()}` : resubmitReason.trim(),
-        actorEmail: getAdminEmail('RSP'),
-      });
-      if (!saved.ok) console.warn('[handleSubmitResubmission] history event not saved for', slotLabel, saved.error);
+      void reloadDocEvents();
+
+      addDocTimeline(`Action Required: Resubmission requested for ${resubmitSelectedSlots.join(', ')} — "${resubmitReason.trim()}".`);
+      await persistStatus('action_required');
+
+      // Attempt email; failure is non-blocking.
+      try {
+        const docList = resubmitSelectedSlots.map((s) => `• ${s}`).join('\n');
+        const notesSection = resubmitNotes.trim() ? `\n\nAdditional Notes from RSP:\n${resubmitNotes.trim()}` : '';
+        await sendEmail({
+          to: applicant.email,
+          subject: `Notice of Resubmission — ${resubmitSelectedSlots.join(', ')}`,
+          body: `Dear ${applicant.first_name},\n\nThe following submitted document(s) require resubmission:\n${docList}\n\nReason: ${resubmitReason.trim()}${notesSection}\n\nPlease log in to the Applicant Portal and re-upload the corrected document(s) at your earliest convenience.\n\nThank you,\nRecruitment Office`,
+          applicantId: applicant.id,
+        });
+      } catch (err) {
+        console.warn('[handleSubmitResubmission] Email failed:', err);
+      }
+
+      notifySuccess(
+        'Resubmission notice sent',
+        `${resubmitSelectedSlots.length} document${resubmitSelectedSlots.length === 1 ? '' : 's'} updated in the tracker.`,
+      );
+      // Auto-close modal and reset state.
+      setShowResubmitModal(false);
+      setResubmitSelectedSlots([]);
+      setResubmitReason('');
+      setResubmitNotes('');
+    } catch (error) {
+      console.error('[handleSubmitResubmission] failed', error);
+      const described = describeActionFailure('send the resubmission notice', error);
+      setResubmitError(
+        'The notice did not finish sending. Some document requests may already be recorded — check the document history before trying again.',
+      );
+      notifyError(described.title, 'Some document requests may already be recorded. Check the history before retrying.');
+    } finally {
+      setResubmitSending(false);
     }
-    void reloadDocEvents();
-
-    addDocTimeline(`Action Required: Resubmission requested for ${resubmitSelectedSlots.join(', ')} — "${resubmitReason.trim()}".`);
-    await persistStatus('action_required');
-
-    // Attempt email; failure is non-blocking.
-    try {
-      const docList = resubmitSelectedSlots.map((s) => `• ${s}`).join('\n');
-      const notesSection = resubmitNotes.trim() ? `\n\nAdditional Notes from RSP:\n${resubmitNotes.trim()}` : '';
-      await sendEmail({
-        to: applicant.email,
-        subject: `Notice of Resubmission — ${resubmitSelectedSlots.join(', ')}`,
-        body: `Dear ${applicant.first_name},\n\nThe following submitted document(s) require resubmission:\n${docList}\n\nReason: ${resubmitReason.trim()}${notesSection}\n\nPlease log in to the Applicant Portal and re-upload the corrected document(s) at your earliest convenience.\n\nThank you,\nRecruitment Office`,
-        applicantId: applicant.id,
-      });
-    } catch (err) {
-      console.warn('[handleSubmitResubmission] Email failed:', err);
-    }
-
-    setToast(`Resubmission notice sent for ${resubmitSelectedSlots.length} document(s). Tracker updated.`);
-    // Auto-close modal and reset state.
-    setShowResubmitModal(false);
-    setResubmitSelectedSlots([]);
-    setResubmitReason('');
-    setResubmitNotes('');
-    setResubmitSending(false);
   };
 
   const handleValidateAllDocs = async () => {
     if (!id || !applicant?.id) return;
-    const realDocs = attachments.filter(
-      (a) => a.document_type !== 'resubmission_request' &&
-        a.document_type !== 'resubmission_resolved' &&
-        a.document_type !== 'doc_validated',
-    );
-    const existingValidatedTypes = new Set(
-      attachments.filter((a) => a.document_type === 'doc_validated').map((a) => a.file_name),
-    );
-    for (const att of realDocs) {
-      const rawDocType = (att.document_type as string | null) || FILE_NAME_TO_TYPE[att.file_name] || 'other';
-      if (!existingValidatedTypes.has(rawDocType)) {
-        await (supabase as any).from('applicant_attachments').insert({
-          applicant_id: applicant.id,
-          file_name: rawDocType,
-          file_path: `validated::${rawDocType}`,
-          document_type: 'doc_validated',
-          file_type: 'validation',
-          file_size: 0,
-        });
-        existingValidatedTypes.add(rawDocType);
+    setValidationError(null);
+    try {
+      const realDocs = attachments.filter(
+        (a) => a.document_type !== 'resubmission_request' &&
+          a.document_type !== 'resubmission_resolved' &&
+          a.document_type !== 'doc_validated',
+      );
+      const existingValidatedTypes = new Set(
+        attachments.filter((a) => a.document_type === 'doc_validated').map((a) => a.file_name),
+      );
+      for (const att of realDocs) {
+        const rawDocType = (att.document_type as string | null) || FILE_NAME_TO_TYPE[att.file_name] || 'other';
+        if (!existingValidatedTypes.has(rawDocType)) {
+          const { error: insertError } = await (supabase as any).from('applicant_attachments').insert({
+            applicant_id: applicant.id,
+            file_name: rawDocType,
+            file_path: `validated::${rawDocType}`,
+            document_type: 'doc_validated',
+            file_type: 'validation',
+            file_size: 0,
+          });
+          if (insertError) throw insertError;
+          existingValidatedTypes.add(rawDocType);
+        }
       }
+      setDocsValidated(true);
+      addDocTimeline('Documents Validated: All submitted documents have been reviewed and validated.');
+      const saved = await recordDocumentEvent({ applicantId: applicant.id, eventType: 'validated', actorEmail: getAdminEmail('RSP') });
+      if (!saved.ok) console.warn('[handleValidateAllDocs] history event not saved:', saved.error);
+      void reloadDocEvents();
+      void (supabase as any).from('applicants').update({ updated_at: new Date().toISOString() }).eq('id', applicant.id);
+      notifySuccess('Documents validated', 'The applicant tracker now shows Verified.');
+    } catch (error) {
+      console.error('[handleValidateAllDocs] failed', error);
+      const described = describeActionFailure('validate these documents', error);
+      setValidationError('Some documents could not be validated. Refresh the page and check which ones still need review.');
+      notifyError(described.title, 'Some documents may not be validated. Refresh before retrying.');
     }
-    setDocsValidated(true);
-    addDocTimeline('Documents Validated: All submitted documents have been reviewed and validated.');
-    const saved = await recordDocumentEvent({ applicantId: applicant.id, eventType: 'validated', actorEmail: getAdminEmail('RSP') });
-    if (!saved.ok) console.warn('[handleValidateAllDocs] history event not saved:', saved.error);
-    void reloadDocEvents();
-    void (supabase as any).from('applicants').update({ updated_at: new Date().toISOString() }).eq('id', applicant.id);
-    setToast('Documents validated — applicant tracker updated to show Verified.');
   };
 
   const handleConfirmValidate = async () => {
@@ -1861,7 +1904,7 @@ function ApplicantDetailsPageView() {
     localStorage.setItem(DOC_REVIEW_KEY, JSON.stringify(remainingReviews));
     addDocTimeline('Document Validation Undone.');
     void reloadDocEvents();
-    setToast('Validation undone.');
+    notifySuccess('Validation undone', 'The applicant tracker is back to its previous state.');
   };
 
   const isDocLocked = () => {
@@ -1961,7 +2004,7 @@ function ApplicantDetailsPageView() {
     saveStoredDraftState(applicant.id, true);
 
     setIsScoreDraft(true);
-    setToast('Score draft saved. You can continue later.');
+    notifySuccess('Score draft saved', 'You can continue later.');
   };
 
   if (loading) {
@@ -2313,7 +2356,9 @@ function ApplicantDetailsPageView() {
                                           : 'Undo the document validation'
                                       }
                                     >
-                                      {isScheduledForAssessment ? <Lock size={16} /> : <RotateCcw size={16} />} Undo
+                                      {validationBusy
+                                        ? <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                                        : isScheduledForAssessment ? <Lock size={16} /> : <RotateCcw size={16} />} Undo
                                     </button>
                                   </span>
                                 </>
@@ -2350,8 +2395,8 @@ function ApplicantDetailsPageView() {
                                     <button type="button" className="btn btn-sm btn-secondary" onClick={() => setConfirmValidateOpen(false)} autoFocus>
                                       Cancel
                                     </button>
-                                    <button type="button" className="btn btn-sm btn-primary" disabled={validationBusy} onClick={() => void handleConfirmValidate()}>
-                                      Validate
+                                    <button type="button" className="btn btn-sm btn-primary" disabled={validationBusy} aria-busy={validationBusy || undefined} onClick={() => void handleConfirmValidate()}>
+                                      {validationBusy && <Loader2 size={14} className="animate-spin" aria-hidden="true" />} Validate
                                     </button>
                                   </div>
                                 </div>
@@ -2659,14 +2704,22 @@ function ApplicantDetailsPageView() {
               {/* Footer */}
               <div className="border-t border-slate-200 bg-white px-6 py-4">
                 {emailError && (
-                  <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {emailError}
-                  </p>
+                  <ActionFeedback
+                    className="mb-3"
+                    title="We couldn't send this email."
+                    message={emailError.message}
+                    nextStep={emailError.nextStep}
+                    onDismiss={() => setEmailError(null)}
+                  />
                 )}
                 {emailSuccess && (
-                  <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    {emailSuccess}
-                  </p>
+                  <ActionFeedback
+                    className="mb-3"
+                    tone="success"
+                    title="Email sent"
+                    message={emailSuccess}
+                    focusOnMount={false}
+                  />
                 )}
                 <div className="flex justify-end gap-3">
                   <button
@@ -2681,9 +2734,10 @@ function ApplicantDetailsPageView() {
                     type="button"
                     onClick={handleSendEmail}
                     disabled={!emailSubject.trim() || !emailBody.trim() || emailSending}
+                    aria-busy={emailSending || undefined}
                     className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Send size={15} /> {emailSending ? 'Sending…' : 'Send Email'}
+                    {emailSending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Send size={15} />} Send Email
                   </button>
                 </div>
               </div>
@@ -2802,7 +2856,7 @@ function ApplicantDetailsPageView() {
               {/* Footer */}
               <div className="border-t px-6 py-4" style={{ borderColor: '#C8D1FF' }}>
                 {resubmitError && (
-                  <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{resubmitError}</p>
+                  <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{resubmitError}</p>
                 )}
                 {resubmitSuccess && (
                   <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{resubmitSuccess}</p>
@@ -2826,7 +2880,9 @@ function ApplicantDetailsPageView() {
                         className="inline-flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ backgroundColor: '#363EE8' }}
                       >
-                        <Send size={14} /> {resubmitSending ? 'Sending…' : 'Send Notice'}
+                        {resubmitSending
+                          ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                          : <Send size={14} />} Send Notice
                       </button>
                     )}
                   </div>
@@ -3330,10 +3386,21 @@ function ApplicantDetailsPageView() {
                   </div>
                 )}
 
+                {confirmError && (
+                  <div className="px-6 pt-4">
+                    <ActionFeedback
+                      title="We couldn't update this application."
+                      message={confirmError.message}
+                      nextStep={confirmError.nextStep}
+                      onDismiss={() => setConfirmError(null)}
+                    />
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 px-6 pb-6 pt-5">
                   <button
                     type="button"
-                    onClick={() => setConfirmAction(null)}
+                    onClick={() => { setConfirmAction(null); setConfirmError(null); }}
                     disabled={confirmSubmitting}
                     className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -3344,6 +3411,7 @@ function ApplicantDetailsPageView() {
                     onClick={async () => {
                       if (!canConfirm) return;
                       setConfirmSubmitting(true);
+                      setConfirmError(null);
                       try {
                         const disqualifyDetails = isDisqualify
                           ? {
@@ -3356,7 +3424,14 @@ function ApplicantDetailsPageView() {
                         if (inReviewQueue) {
                           decideAndAdvance(confirmAction, disqualifyDetails);
                         } else {
-                          await persistStatus(confirmAction, disqualifyDetails);
+                          const saved = await persistStatus(confirmAction, disqualifyDetails);
+                          if (saved === false) {
+                            setConfirmError({
+                              message: 'The status was not saved, so the applicant record is unchanged.',
+                              nextStep: 'Check your connection, then try again. If it still fails, ask your administrator to check your RSP access.',
+                            });
+                            return;
+                          }
                         }
                         setConfirmAction(null);
                         setConfirmReason('');
@@ -3367,11 +3442,13 @@ function ApplicantDetailsPageView() {
                         setConfirmSubmitting(false);
                       }
                     }}
-                    disabled={!canConfirm}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${isDisqualify ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                    disabled={!canConfirm || confirmSubmitting}
+                    aria-busy={confirmSubmitting || undefined}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${isDisqualify ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
                       }`}
                   >
-                    {confirmSubmitting ? 'Saving…' : isDisqualify ? 'Confirm Disqualification' : 'OK'}
+                    {confirmSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                    {isDisqualify ? 'Confirm Disqualification' : 'OK'}
                   </button>
                 </div>
               </div>

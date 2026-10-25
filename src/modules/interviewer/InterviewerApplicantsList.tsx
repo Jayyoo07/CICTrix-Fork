@@ -5,6 +5,7 @@ import {
     CircleAlert,
     Download,
     FileText,
+    Loader2,
     Plane,
     Search,
     Star,
@@ -16,11 +17,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBackClosesView, useHistoryBack } from '../../hooks/useHistoryBack';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
+import { ActionFeedback, useFeedback } from '../../components/action-feedback';
 import { POSITION_TO_DEPARTMENT_MAP } from '../../constants/positions';
 import { getPreferredDataSourceMode } from '../../lib/dataSourceMode';
 import { isPositionAssignedToInterviewer, resolveAssignedPositionsForInterviewer } from '../../lib/interviewerAccess';
 import { getApplicantType, storeApplicantTypeForEval } from '../../lib/interviewerEvalNavigation';
 import { sendEmail } from '../../lib/email';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { mockDatabase } from '../../lib/mockDatabase';
 import { ensureRecruitmentSeedData, getAuthoritativeJobPostings, getApplicants as getRecruitmentApplicants } from '../../lib/recruitmentData';
 import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../../lib/supabase';
@@ -427,16 +430,20 @@ export function InterviewerApplicantsList({
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
   const [emailSending, setEmailSending] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<{ message: string; nextStep: string } | null>(null);
+  const { success: notifySuccess } = useFeedback();
 
   const handleSendApplicantEmail = async () => {
     if (!activeApplicant) {
-      setEmailError('No applicant selected.');
+      setEmailError({ message: 'No applicant is selected.', nextStep: 'Close this dialog and choose an applicant.' });
       return;
     }
     const recipient = String(activeApplicant.email ?? '').trim();
     if (!recipient) {
-      setEmailError('This applicant has no email on file.');
+      setEmailError({
+        message: 'This applicant has no email address on file.',
+        nextStep: 'Ask RSP to add an email address, then try again.',
+      });
       return;
     }
 
@@ -453,8 +460,10 @@ export function InterviewerApplicantsList({
       setShowMessageDialog(false);
       setEmailSubject('');
       setEmailMessage('');
+      notifySuccess('Message sent', `The email is on its way to ${recipient}.`);
     } catch (error) {
-      setEmailError(error instanceof Error ? error.message : String(error));
+      const described = describeActionFailure('send this message', error);
+      setEmailError({ message: described.message, nextStep: described.nextStep });
     } finally {
       setEmailSending(false);
     }
@@ -614,13 +623,9 @@ export function InterviewerApplicantsList({
       setApplicants(applicantsWithStatus);
       setActiveApplicant((prev) => prev ? applicantsWithStatus.find((a) => a.id === prev.id) ?? prev : prev);
       setJobDetails(resolvedJobDetails);
-
-      if (!matchingPosting && applicantsWithStatus.length === 0) {
-        setError('No applicants found for this job posting yet.');
-      }
-    } catch (err: any) {
-      console.error('Error fetching applicants:', err);
-      setError(err?.message || 'Failed to load applicants');
+    } catch (err) {
+      const described = describeActionFailure('load the applicants', err);
+      setError(described.message);
     } finally {
       setLoading(false);
     }
@@ -1319,9 +1324,12 @@ export function InterviewerApplicantsList({
 
             <div className="message-dialog-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '12px' }}>
               {emailError && (
-                <p style={{ margin: 0, padding: '8px 12px', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '13px' }}>
-                  {emailError}
-                </p>
+                <ActionFeedback
+                  title="We couldn't send this message."
+                  message={emailError.message}
+                  nextStep={emailError.nextStep}
+                  onDismiss={() => setEmailError(null)}
+                />
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                 <button
@@ -1337,8 +1345,10 @@ export function InterviewerApplicantsList({
                   className="dialog-btn-send"
                   onClick={handleSendApplicantEmail}
                   disabled={!emailSubject.trim() || !emailMessage.trim() || emailSending}
+                  aria-busy={emailSending || undefined}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                 >
-                  <Plane size={16} /> {emailSending ? 'Sending…' : 'Send Email'}
+                  {emailSending ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Plane size={16} />} Send Email
                 </button>
               </div>
             </div>

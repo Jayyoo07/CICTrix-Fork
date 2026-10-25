@@ -1,7 +1,7 @@
 ---
 title: Batch succession candidate loading per department
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Load the shared succession inputs once per department and evaluate every critical position in memory, replacing the per-position query fan-out.
 ---
 
@@ -43,3 +43,12 @@ Split the function into a context loader and a per-position evaluator:
 - `npm run lint`
 - `npm test`
 - `npm run dev`, expand one department with DevTools Network open: expect about 15 REST requests instead of about 140 for ten positions, and the same candidates as before.
+
+## Results
+
+- Live check against the largest department (Office of The City Health Officer, 10 critical positions), 2026-10-26:
+  - Before: 140 REST requests, 5.68 s, from ten parallel single-position calls.
+  - After: 14 REST requests, 1.26 s.
+  - Candidate output: 10 of 10 positions deep-equal to the old implementation.
+- The first batch version took 3.06 s because its shared reads still ran serially. Overlapping the independent reads brought it to 1.39 s, then 1.26 s on the comparison run.
+- `npx tsc --noEmit` passes and the full Vitest suite passes. `npm run lint` cannot run because the repo has no ESLint config (pre-existing).

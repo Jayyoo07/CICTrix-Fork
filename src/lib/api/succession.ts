@@ -486,7 +486,7 @@ export async function getLatestOverallScores(
   }
 
   const settingIds = [...latestByEmployee.values()].map((s) => s.id);
-  const [{ data: mfoRows }, titles] = await Promise.all([
+  const [{ data: mfoRows }, titles, { data: empDepts }] = await Promise.all([
     supabase
       .from('mfos')
       .select(
@@ -494,6 +494,10 @@ export async function getLatestOverallScores(
       )
       .in('target_setting_id', settingIds),
     cycleTitles([...latestByEmployee.values()].map((s) => s.cycle_id)),
+    supabase
+      .from('employees')
+      .select('id, department_id')
+      .in('id', [...latestByEmployee.keys()]),
   ]);
 
   const mfosBySetting = new Map<string, any[]>();
@@ -507,10 +511,6 @@ export async function getLatestOverallScores(
   // Core/Strategic/Support split, so two employees with identical ratings in
   // differently-configured offices score differently — which is the point of
   // the configuration.
-  const { data: empDepts } = await supabase
-    .from('employees')
-    .select('id, department_id')
-    .in('id', [...latestByEmployee.keys()]);
   const deptByEmployee = new Map<string, string | null>(
     ((empDepts ?? []) as any[]).map((e) => [String(e.id), e.department_id ?? null]),
   );
@@ -1497,42 +1497,53 @@ async function loadEligibilityScoring(employeeIds: string[]): Promise<{
   let types: EligibilityTypePoints[] = [];
   let cap = 100;
 
-  if (employeeIds.length > 0) {
-    try {
-      const { data } = await supabase
-        .from('employee_eligibility')
-        .select('employee_id, eligibility_type, validity_date')
-        .in('employee_id', employeeIds);
-      for (const row of (data ?? []) as any[]) {
-        const key = String(row.employee_id ?? '');
-        if (!key) continue;
-        const list = byEmployee.get(key) ?? [];
-        list.push({
-          type: String(row.eligibility_type ?? '').trim(),
-          validUntil: row.validity_date ? String(row.validity_date).slice(0, 10) : null,
-        });
-        byEmployee.set(key, list);
+  // Both reads are independent; one failing must not discard the other.
+  const [eligibilityRows, typeRows] = await Promise.all([
+    employeeIds.length
+      ? (async () => {
+          try {
+            const { data } = await supabase
+              .from('employee_eligibility')
+              .select('employee_id, eligibility_type, validity_date')
+              .in('employee_id', employeeIds);
+            return (data ?? []) as any[];
+          } catch {
+            // Table unreadable: fall back to the legacy column per employee.
+            return [] as any[];
+          }
+        })()
+      : Promise.resolve([] as any[]),
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('eligibility_types')
+          .select('name, points, is_active, points_for_full_marks');
+        return (data ?? []) as any[];
+      } catch {
+        // Unconfigured: records report as unconfigured and score zero.
+        return [] as any[];
       }
-    } catch {
-      /* table unreadable — fall back to the legacy column per employee */
-    }
+    })(),
+  ]);
+
+  for (const row of eligibilityRows) {
+    const key = String(row.employee_id ?? '');
+    if (!key) continue;
+    const list = byEmployee.get(key) ?? [];
+    list.push({
+      type: String(row.eligibility_type ?? '').trim(),
+      validUntil: row.validity_date ? String(row.validity_date).slice(0, 10) : null,
+    });
+    byEmployee.set(key, list);
   }
 
-  try {
-    const { data } = await supabase
-      .from('eligibility_types')
-      .select('name, points, is_active, points_for_full_marks');
-    const rows = (data ?? []) as any[];
-    types = rows.map((r) => ({
-      name: String(r.name ?? ''),
-      points: Number(r.points ?? 0),
-      isActive: r.is_active !== false,
-    }));
-    const firstCap = rows.find((r) => Number(r.points_for_full_marks) > 0);
-    if (firstCap) cap = Number(firstCap.points_for_full_marks);
-  } catch {
-    /* unconfigured — every record reports as unconfigured and scores zero */
-  }
+  types = typeRows.map((r) => ({
+    name: String(r.name ?? ''),
+    points: Number(r.points ?? 0),
+    isActive: r.is_active !== false,
+  }));
+  const firstCap = typeRows.find((r) => Number(r.points_for_full_marks) > 0);
+  if (firstCap) cap = Number(firstCap.points_for_full_marks);
 
   return { eligibilityByEmployee: byEmployee, eligibilityTypes: types, pointsForFullMarks: cap };
 }
@@ -1869,51 +1880,57 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function loadAutoSuccessorContext(
   positionIds: string[],
 ): Promise<AutoSuccessorContext> {
-  // ── SRP ranks (spec section C) ────────────────────────────────────────
-  // Resolve every position's rank once. Employees are matched by
-  // position_id where it is set, and by lower(name) otherwise —
-  // employees.position is free text and position_id is largely unpopulated,
-  // so the title match is what actually fires today. A miss yields an
-  // unranked candidate, which compareRank reports as 'unknown' and which
-  // therefore never excludes anyone: an SRP gap must not read as a judgement
-  // about a person.
+  // ── Everything that only needs the position ids starts together ────────
+  // SRP ranks (spec section C). Resolve every position's rank once.
+  // Employees are matched by position_id where it is set, and by
+  // lower(name) otherwise — employees.position is free text and position_id
+  // is largely unpopulated, so the title match is what actually fires today.
+  // A miss yields an unranked candidate, which compareRank reports as
+  // 'unknown' and which therefore never excludes anyone: an SRP gap must not
+  // read as a judgement about a person.
   const rankById = new Map<string, SrpRank>();
   const rankByName = new Map<string, SrpRank>();
-  {
-    const { data: srpRows } = await supabase
+
+  const [srpRes, empRes, manualRes, compRes] = await Promise.all([
+    supabase
       .from('positions')
-      .select('id, name, salary_grade, level_order');
-    for (const r of (srpRows ?? []) as any[]) {
-      const rank: SrpRank = {
-        salaryGrade: r.salary_grade != null ? Number(r.salary_grade) : null,
-        levelOrder: r.level_order != null ? Number(r.level_order) : null,
-      };
-      rankById.set(String(r.id), rank);
-      const key = String(r.name ?? '').trim().toLowerCase();
-      // First match wins: the same title can exist under several departments,
-      // and their grades agree far more often than not.
-      if (key && !rankByName.has(key)) rankByName.set(key, rank);
-    }
+      .select('id, name, salary_grade, level_order'),
+    supabase
+      .from('employees')
+      .select('id, first_name, middle_name, last_name, position, department, employment_status, status, highest_educational_attainment, eligibility, date_hired, position_id')
+      .eq('status', 'Active')
+      .in('employment_status', ['Regular', 'Permanent']),
+    supabase
+      .from('succession_candidates')
+      .select('*')
+      .in('critical_position_id', positionIds),
+    supabase
+      .from('critical_position_competency_requirements')
+      .select('critical_position_id, competency_id, competencies ( name )')
+      .in('critical_position_id', positionIds),
+  ]);
+
+  if (empRes.error) throw new Error(empRes.error.message);
+
+  for (const r of (srpRes.data ?? []) as any[]) {
+    const rank: SrpRank = {
+      salaryGrade: r.salary_grade != null ? Number(r.salary_grade) : null,
+      levelOrder: r.level_order != null ? Number(r.level_order) : null,
+    };
+    rankById.set(String(r.id), rank);
+    const key = String(r.name ?? '').trim().toLowerCase();
+    // First match wins: the same title can exist under several departments,
+    // and their grades agree far more often than not.
+    if (key && !rankByName.has(key)) rankByName.set(key, rank);
   }
 
-  // ── Load all Regular/Permanent, Active employees ───────────────────────
-  const { data: empRows, error: empErr } = await supabase
-    .from('employees')
-    .select('id, first_name, middle_name, last_name, position, department, employment_status, status, highest_educational_attainment, eligibility, date_hired, position_id')
-    .eq('status', 'Active')
-    .in('employment_status', ['Regular', 'Permanent']);
-  if (empErr) throw new Error(empErr.message);
-
+  const empRows = (empRes.data ?? []) as any[];
   const employeeById = new Map<string, any>();
-  for (const e of (empRows ?? []) as any[]) employeeById.set(String(e.id), e);
+  for (const e of empRows) employeeById.set(String(e.id), e);
 
   // ── Manual candidates for every position in the batch ─────────────────
   const manualCandidatesByPosition = new Map<string, any[]>();
-  const { data: manualRows } = await supabase
-    .from('succession_candidates')
-    .select('*')
-    .in('critical_position_id', positionIds);
-  for (const mc of (manualRows ?? []) as any[]) {
+  for (const mc of (manualRes.data ?? []) as any[]) {
     const key = String(mc.critical_position_id);
     const list = manualCandidatesByPosition.get(key) ?? [];
     list.push(mc);
@@ -1940,29 +1957,32 @@ async function loadAutoSuccessorContext(
 
   const allEmployeeIds = [...employeeById.keys()];
 
-  // ── Eligibility records and the configured points (spec §B–D) ─────────
-  // An employee may hold several; the single employees.eligibility column
-  // cannot express that and is used only as a fallback in the evaluator.
-  const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } =
-    await loadEligibilityScoring(allEmployeeIds);
+  // ── Everything that needs the employee ids starts together ────────────
+  // Eligibility records and the configured points (spec §B–D). An employee
+  // may hold several; the single employees.eligibility column cannot express
+  // that and is used only as a fallback in the evaluator.
+  //
+  // IPCR scores: the per-position version narrowed this to the keyword-
+  // matched pool for one position. Widening it to every active employee
+  // returns the same score for each employee and removes the repeated
+  // target_settings / mfos / performance_cycles reads.
+  //
+  // Training history is the third independent read.
+  const [eligibilityScoring, scores, trainingRes] = await Promise.all([
+    loadEligibilityScoring(allEmployeeIds),
+    getLatestOverallScores(allEmployeeIds),
+    allEmployeeIds.length
+      ? supabase
+          .from('employee_training')
+          .select('id, employee_id, training_title, training_type, number_of_hours, from_date')
+          .in('employee_id', allEmployeeIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } = eligibilityScoring;
 
-  // ── Latest completed IPCR scores for the whole pool ───────────────────
-  // The per-position version narrowed this to the keyword-matched pool for
-  // one position. Widening it to every active employee returns the same
-  // score for each employee and removes the repeated target_settings /
-  // mfos / performance_cycles reads.
-  const scores = await getLatestOverallScores(allEmployeeIds);
-
-  // ── Training history for the whole pool ───────────────────────────────
-  const { data: trainingRows } = allEmployeeIds.length
-    ? await supabase
-        .from('employee_training')
-        .select('id, employee_id, training_title, training_type, number_of_hours, from_date')
-        .in('employee_id', allEmployeeIds)
-    : { data: [] as any[] };
-
+  const trainingRows = (trainingRes.data ?? []) as any[];
   const trainingByEmployee = new Map<string, any[]>();
-  for (const t of (trainingRows ?? []) as any[]) {
+  for (const t of trainingRows) {
     const id = String(t.employee_id);
     const list = trainingByEmployee.get(id) ?? [];
     list.push(t);
@@ -1972,48 +1992,46 @@ async function loadAutoSuccessorContext(
   // ── Real competency tags from employee_training_competencies ──────────
   // (migration 20260828), replacing the title/keyword heuristic. Map each
   // employee → (competency_id → a satisfying training title), for the whole
-  // pool. Chunked because the training-id list is the largest `.in()` here.
+  // pool. Chunked because the training-id list is the largest `.in()` here;
+  // the chunks run together.
   const trainingTitleById = new Map<string, { empId: string; title: string }>();
-  for (const t of (trainingRows ?? []) as any[]) {
+  for (const t of trainingRows) {
     trainingTitleById.set(String(t.id), {
       empId: String(t.employee_id),
       title: String(t.training_title ?? ''),
     });
   }
   const taggedByEmployee = new Map<string, Map<string, string>>();
-  for (const part of chunk([...trainingTitleById.keys()], 150)) {
-    const { data: tagRows } = await supabase
-      .from('employee_training_competencies')
-      .select('employee_training_id, competency_id')
-      .in('employee_training_id', part);
-    for (const g of (tagRows ?? []) as any[]) {
-      const tr = trainingTitleById.get(String(g.employee_training_id));
-      if (!tr) continue;
-      if (!taggedByEmployee.has(tr.empId)) taggedByEmployee.set(tr.empId, new Map());
-      const m = taggedByEmployee.get(tr.empId)!;
-      if (!m.has(String(g.competency_id))) m.set(String(g.competency_id), tr.title);
-    }
+  const tagChunks = await Promise.all(
+    chunk([...trainingTitleById.keys()], 150).map(async (part) => {
+      const { data: tagRows } = await supabase
+        .from('employee_training_competencies')
+        .select('employee_training_id, competency_id')
+        .in('employee_training_id', part);
+      return (tagRows ?? []) as any[];
+    }),
+  );
+  for (const g of tagChunks.flat()) {
+    const tr = trainingTitleById.get(String(g.employee_training_id));
+    if (!tr) continue;
+    if (!taggedByEmployee.has(tr.empId)) taggedByEmployee.set(tr.empId, new Map());
+    const m = taggedByEmployee.get(tr.empId)!;
+    if (!m.has(String(g.competency_id))) m.set(String(g.competency_id), tr.title);
   }
 
   // ── Stage-2 required competencies for every position ──────────────────
   const competencyRequirementsByPosition = new Map<string, { id: string; name: string }[]>();
-  {
-    const { data: compRows } = await supabase
-      .from('critical_position_competency_requirements')
-      .select('critical_position_id, competency_id, competencies ( name )')
-      .in('critical_position_id', positionIds);
-    for (const r of (compRows ?? []) as any[]) {
-      const key = String(r.critical_position_id);
-      const list = competencyRequirementsByPosition.get(key) ?? [];
-      list.push({ id: String(r.competency_id), name: r.competencies?.name ?? 'Unknown' });
-      competencyRequirementsByPosition.set(key, list);
-    }
+  for (const r of (compRes.data ?? []) as any[]) {
+    const key = String(r.critical_position_id);
+    const list = competencyRequirementsByPosition.get(key) ?? [];
+    list.push({ id: String(r.competency_id), name: r.competencies?.name ?? 'Unknown' });
+    competencyRequirementsByPosition.set(key, list);
   }
 
   return {
     rankById,
     rankByName,
-    employees: (empRows ?? []) as any[],
+    employees: empRows,
     employeeById,
     eligibilityByEmployee,
     eligibilityTypes,

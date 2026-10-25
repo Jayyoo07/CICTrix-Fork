@@ -814,7 +814,7 @@ export function InterviewerDashboard({
         <div className="modal-header">
           <h2 className="modal-title">Confirm Delete</h2>
           <button 
-            onClick={() => setDeleteConfirmOpen(false)}
+            onClick={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}
             className="modal-close-btn"
             disabled={deleting}
           >

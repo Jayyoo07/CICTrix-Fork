@@ -5,7 +5,9 @@
 
 .afb-viewport {
   position: fixed;
-  top: 16px;
+  /* Clear the 64px portal top bar (§8.2) so a persistent error never sits over
+     the Logout control. Public pages keep the same top-right anchor. */
+  top: 76px;
   right: 16px;
   z-index: 600;
   display: flex;
@@ -160,7 +162,7 @@
 
 @media (max-width: 640px) {
   .afb-viewport {
-    top: 12px;
+    top: 64px;
     left: 12px;
     right: 12px;
     width: auto;

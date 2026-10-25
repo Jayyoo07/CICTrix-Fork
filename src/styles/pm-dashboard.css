@@ -83,15 +83,13 @@
 .pmdash .pd-empty { font-size: 13px; color: var(--pd-ink-2); padding: 12px 0; }
 .pmdash .pd-muted { color: var(--pd-muted); }
 
-/* ── KPI cards (§9.7) ─────────────────────────────────────────────────────── */
-/* auto-fill keeps the lone card at one column wide instead of stretching it across the page. */
-.pmdash .pd-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-.pmdash .pd-kpi { background: #fff; border: 1px solid var(--pd-line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.pmdash .pd-kpi-h { display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 16px; font-weight: 500; color: var(--pd-ink-2); }
-.pmdash .pd-kpi-v { display: flex; align-items: baseline; gap: 8px; font-size: 36px; line-height: 40px; font-weight: 700; color: var(--pd-ink); }
-.pmdash .pd-kpi-v small { font-size: 13px; font-weight: 500; color: var(--pd-ink-2); }
-.pmdash .pd-kpi-sub { font-size: 12px; line-height: 16px; color: var(--pd-ink-2); }
-.pmdash .pd-kpi-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; flex-wrap: wrap; }
+/* ── Submission summary strip (docs/mockups/2026-10-25-pm-submission-rate-merged.html) ── */
+.pmdash .pd-sum { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; margin-bottom: 20px; }
+.pmdash .pd-sum-v { min-width: 120px; font-size: 36px; line-height: 40px; font-weight: 700; color: var(--pd-ink); font-variant-numeric: tabular-nums; }
+.pmdash .pd-sum-v small { display: block; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--pd-ink-2); }
+/* The tint track stands for "not yet due"; filled segments sit on top of it. */
+.pmdash .pd-seg { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; background: var(--pd-tint); }
+.pmdash .pd-seg i { display: block; height: 100%; min-width: 3px; }
 .pmdash .pd-track { height: 6px; border-radius: 3px; background: var(--pd-accent-soft); overflow: hidden; }
 .pmdash .pd-track i { display: block; height: 100%; border-radius: 3px; background: var(--pd-accent); }
 
@@ -157,5 +155,6 @@
 @media (max-width: 760px) {
   .pmdash .pd-metrics { grid-template-columns: 1fr 1fr; }
   .pmdash .pd-desc { display: none; }
+  .pmdash .pd-sum { grid-template-columns: 1fr; gap: 12px; }
   .pmdash .pd-main, .pmdash .pd-hero { padding-left: 16px; padding-right: 16px; }
 }

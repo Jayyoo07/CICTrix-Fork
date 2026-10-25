@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Building2, ChevronDown, ClipboardCheck } from 'lucide-react';
+import { BarChart3, ChevronDown, ClipboardCheck } from 'lucide-react';
 import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../lib/api/competencyGapAnalysis';
 import {
   buildDeptCompletionRows,
@@ -7,24 +7,27 @@ import {
   groupByDept,
   RATED_PERIOD_LABEL,
   restrictToActiveOffices,
-  type DeptCompletionRow,
   type IPCRRatingRecord,
 } from './pm/SummaryOfRatings';
 import '../../styles/pm-dashboard.css';
 
 // PM dashboard overview, built to docs/mockups/2026-10-16-pm-dashboard.html.
-// Ratings and headcount come from the same sources as Summary of Ratings, so
-// both pages show the same numbers. Pending IPCRs (with due dates) are passed in
-// from PMDashboard, which already builds that list.
+// IPCR results come from the same sources as Summary of Ratings, so both pages
+// show the same numbers. IPCR submission comes from PMDashboard's per-employee
+// tracker (each Active employee's current period and phase), the same source as
+// its IPCR Submissions table.
 
-export interface PendingIpcr {
+/** One Active employee's current IPCR: their office, its due date, and whether it reached "Forwarded to PM". */
+export interface IpcrStatus {
   dept: string;
-  type: 'Probationary' | 'Regular';
   dueDate: Date;
+  forwarded: boolean;
 }
 
 interface Props {
-  pending: PendingIpcr[];
+  /** null = the tracker failed to load. */
+  statuses: IpcrStatus[] | null;
+  statusesLoading: boolean;
   onOpenSummary: () => void;
 }
 
@@ -54,6 +57,14 @@ const INFLATION_MIN_RATED = 5;
 const INFLATION_FACTOR = 2;
 const MAX_INTERVENTION_ROWS = 5;
 
+/** Submission bar segments in order; together they cover every employee. */
+const SUBMISSION_SEGMENTS: { key: 'completed' | 'overdue' | 'dueSoon' | 'notYetDue'; label: string; color: string }[] = [
+  { key: 'completed', label: 'Submitted', color: 'var(--pd-accent)' },
+  { key: 'overdue', label: 'Overdue', color: 'var(--pd-risk)' },
+  { key: 'dueSoon', label: `Due in ${DUE_SOON_DAYS} days`, color: 'var(--pd-warn)' },
+  { key: 'notYetDue', label: 'Not yet due', color: 'var(--pd-tint)' },
+];
+
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 /** Some ratings and employees carry no office; show that as a state, not a blank. */
 const deptLabel = (name: string | null | undefined) => String(name ?? '').trim() || 'No department';
@@ -66,50 +77,67 @@ const dueStatus = (dueDate: Date, today: Date): 'overdue' | 'soon' | null => {
   return null;
 };
 
-export interface SubmissionDeptRow extends DeptCompletionRow {
+interface SubmissionCounts {
+  /** Current IPCR forwarded to PM. */
+  completed: number;
   overdue: number;
   dueSoon: number;
+  notYetDue: number;
+  total: number;
 }
 
-export interface SubmissionSummary {
-  completed: number;
-  total: number;
+export interface SubmissionDeptRow extends SubmissionCounts {
+  department: string;
+  /** The row for employees with no office or an inactive one. */
+  other: boolean;
+}
+
+export interface SubmissionSummary extends SubmissionCounts {
   rate: number | null;
-  overdue: number;
-  dueSoon: number;
   rows: SubmissionDeptRow[];
 }
 
-/** Office-wide and per-office IPCR submission, lowest rate first. */
-export function summarizeSubmission(rows: DeptCompletionRow[], pending: PendingIpcr[], today: Date): SubmissionSummary {
-  const byDept = new Map<string, { overdue: number; dueSoon: number }>();
-  let overdue = 0;
-  let dueSoon = 0;
-  for (const p of pending) {
-    const status = dueStatus(p.dueDate, today);
-    if (!status) continue;
-    const key = normDeptKey(p.dept);
-    const entry = byDept.get(key) ?? { overdue: 0, dueSoon: 0 };
-    if (status === 'overdue') {
-      entry.overdue++;
-      overdue++;
-    } else {
-      entry.dueSoon++;
-      dueSoon++;
-    }
-    byDept.set(key, entry);
-  }
+export const OTHER_OFFICE_LABEL = 'Unassigned or inactive office';
+const OTHER_KEY = '';
 
-  const counted = rows.filter((r) => r.total > 0);
-  const completed = counted.reduce((sum, r) => sum + r.completed, 0);
-  const total = counted.reduce((sum, r) => sum + r.total, 0);
+const emptyCounts = (): SubmissionCounts => ({ completed: 0, overdue: 0, dueSoon: 0, notYetDue: 0, total: 0 });
+
+/** Lowest rate first; ties go to the offices with the most to chase, so a 0% office list still has an order. The other row goes last. */
+const bySubmissionUrgency = (a: SubmissionDeptRow, b: SubmissionDeptRow) =>
+  Number(a.other) - Number(b.other) ||
+  a.completed / a.total - b.completed / b.total ||
+  b.overdue - a.overdue ||
+  b.dueSoon - a.dueSoon ||
+  b.total - b.completed - (a.total - a.completed) ||
+  a.department.localeCompare(b.department);
+
+/**
+ * Office-wide and per-office IPCR submission. Every employee lands in exactly one
+ * bucket (forwarded, else overdue, due soon or not yet due), so the four counts
+ * add up to the total and the office totals add up to the rows. `activeOffices`
+ * null means the office list failed to load: every named office gets a row.
+ */
+export function summarizeSubmission(statuses: IpcrStatus[], activeOffices: Map<string, string> | null, today: Date): SubmissionSummary {
+  const byOffice = new Map<string, SubmissionDeptRow>();
+  const totals = emptyCounts();
+  for (const s of statuses) {
+    const raw = normDeptKey(s.dept);
+    const key = raw && (!activeOffices || activeOffices.has(raw)) ? raw : OTHER_KEY;
+    const row =
+      byOffice.get(key) ??
+      { ...emptyCounts(), department: key === OTHER_KEY ? OTHER_OFFICE_LABEL : activeOffices?.get(key) ?? s.dept.trim(), other: key === OTHER_KEY };
+    const due = s.forwarded ? null : dueStatus(s.dueDate, today);
+    const bucket = s.forwarded ? 'completed' : due === 'overdue' ? 'overdue' : due === 'soon' ? 'dueSoon' : 'notYetDue';
+    row[bucket]++;
+    row.total++;
+    totals[bucket]++;
+    totals.total++;
+    byOffice.set(key, row);
+  }
   return {
-    completed,
-    total,
-    rate: total > 0 ? pct(completed, total) : null,
-    overdue,
-    dueSoon,
-    rows: counted.map((r) => ({ ...r, ...(byDept.get(normDeptKey(r.department)) ?? { overdue: 0, dueSoon: 0 }) })),
+    ...totals,
+    rate: totals.total > 0 ? pct(totals.completed, totals.total) : null,
+    rows: [...byOffice.values()].sort(bySubmissionUrgency),
   };
 }
 
@@ -201,9 +229,10 @@ const RatingStack = ({ distribution, total, label, large = false }: { distributi
 const describeMix = (distribution: Record<Rating, number>) =>
   RATINGS.filter((r) => distribution[r] > 0).map((r) => `${r} ${distribution[r]}`).join(', ');
 
-export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
+export const PmDashboardOverview = ({ statuses, statusesLoading, onOpenSummary }: Props) => {
   const [records, setRecords] = useState<IPCRRatingRecord[]>([]);
   const [headcount, setHeadcount] = useState<Map<string, { name: string; count: number }>>(new Map());
+  const [activeOffices, setActiveOffices] = useState<Map<string, string> | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [department, setDepartment] = useState('all');
@@ -226,6 +255,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
         const scoped = restrictToActiveOffices(data, roster, activeOffices);
         setRecords(scoped.records);
         setHeadcount(scoped.headcount);
+        setActiveOffices(activeOffices);
       } catch (err) {
         console.error('Error loading PM dashboard ratings:', err);
         if (!cancelled) setLoadError(true);
@@ -239,18 +269,21 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
   }, []);
 
   const allRows = useMemo(() => buildDeptCompletionRows(records, headcount, true), [records, headcount]);
-  const departments = useMemo(
-    () => allRows.filter((r) => r.total > 0 && String(r.department ?? '').trim()).map((r) => r.department).sort((a, b) => a.localeCompare(b)),
-    [allRows],
-  );
+  const allSubmission = useMemo(() => summarizeSubmission(statuses ?? [], activeOffices, today), [statuses, activeOffices, today]);
+  const departments = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const r of allRows) if (r.total > 0 && String(r.department ?? '').trim()) names.set(normDeptKey(r.department), r.department);
+    for (const r of allSubmission.rows) if (!r.other) names.set(normDeptKey(r.department), r.department);
+    return [...names.values()].sort((a, b) => a.localeCompare(b));
+  }, [allRows, allSubmission]);
 
   const inDept = (name: string | null | undefined) => department === 'all' || normDeptKey(name) === normDeptKey(department);
 
-  const scopedPending = useMemo(() => pending.filter((p) => inDept(p.dept)), [pending, department]);
   const submission = useMemo(
-    () => summarizeSubmission(allRows.filter((r) => inDept(r.department)), scopedPending, today),
-    [allRows, scopedPending, department, today],
+    () => (department === 'all' ? allSubmission : summarizeSubmission((statuses ?? []).filter((s) => inDept(s.dept)), activeOffices, today)),
+    [allSubmission, statuses, activeOffices, department, today],
   );
+  const submissionLoading = statusesLoading || loading;
   const results = useMemo(() => summarizeResults(records.filter((r) => inDept(r.department))), [records, department]);
 
   const dueBadge = (overdue: number, soon: number) =>
@@ -262,7 +295,6 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
 
   const lowCount = results.distribution.Unsatisfactory + results.distribution.Poor;
   const vsOrHigher = results.distribution.Outstanding + results.distribution['Very Satisfactory'];
-  const dash = loading ? '…' : '—';
 
   return (
     <div className="pmdash">
@@ -271,7 +303,8 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
           <p className="pd-crumbs">Performance Management › <b>Dashboard</b></p>
           {/* Not an <h1>: admin.css forces .admin-content h1 to brand blue with !important. */}
           <div className="pd-hero-title" role="heading" aria-level={1}>PM Dashboard</div>
-          <p className="pd-hero-sub">Performance evaluation overview · {RATED_PERIOD_LABEL}</p>
+          {/* No period here: the submission card counts each employee's current period, the results card all rated periods. */}
+          <p className="pd-hero-sub">Performance evaluation overview</p>
         </div>
         <div className="pd-filters">
           <label className="pd-select">
@@ -291,35 +324,47 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
       <div className="pd-main">
         {loadError && <p className="pd-error" role="alert">We couldn't load IPCR ratings. Refresh the page to try again.</p>}
 
-        <section className="pd-kpis" aria-label="Key metrics">
-          <div className="pd-kpi">
-            <div className="pd-kpi-h"><span className="pd-ico"><ClipboardCheck size={20} aria-hidden="true" /></span>IPCR submission rate</div>
-            <div className="pd-kpi-v">
-              {submission.rate !== null ? `${submission.rate}%` : dash}
-              {submission.total > 0 && <small>{submission.completed} of {submission.total}</small>}
-            </div>
-            <div className="pd-track" role="img" aria-label={`${submission.rate ?? 0} percent submitted`}><i style={{ width: `${submission.rate ?? 0}%` }} /></div>
-            <div className="pd-kpi-foot">
-              {submission.overdue > 0 && <span className="pd-pill pd-p-risk">{submission.overdue} overdue</span>}
-              <span className="pd-kpi-sub">{submission.dueSoon} due in {DUE_SOON_DAYS} days</span>
-            </div>
-          </div>
-        </section>
-
+        {/* Office total first, then the offices behind it (docs/mockups/2026-10-25-pm-submission-rate-merged.html). */}
         <section className="pd-card">
           <div className="pd-card-h">
-            <span className="pd-ico"><Building2 size={18} aria-hidden="true" /></span>
+            <span className="pd-ico"><ClipboardCheck size={18} aria-hidden="true" /></span>
             <div>
-              <h2>IPCR submission by department</h2>
-              <p className="pd-desc">Rated IPCRs over active employees · lowest rate first</p>
+              <h2>IPCR submission</h2>
+              <p className="pd-desc">Current IPCR forwarded to PM, Active employees · lowest rate first</p>
             </div>
             <button type="button" className="pd-link" onClick={onOpenSummary}>Summary of Ratings ›</button>
           </div>
-          {loading ? (
+          {submissionLoading ? (
             <p className="pd-empty">Loading submissions…</p>
-          ) : submission.rows.length === 0 ? (
-            <p className="pd-empty">No offices with active employees yet.</p>
+          ) : statuses === null ? (
+            <p className="pd-error" role="alert">We couldn't load IPCR submissions. Refresh the page to try again.</p>
+          ) : submission.total === 0 ? (
+            <p className="pd-empty">No Active employees to track yet.</p>
           ) : (
+          <>
+          <div className="pd-sum">
+            <div className="pd-sum-v">
+              {submission.rate}%
+              <small>{submission.completed} of {submission.total} submitted</small>
+            </div>
+            <div>
+              <div
+                className="pd-seg"
+                role="img"
+                aria-label={`Submitted ${submission.completed}, overdue ${submission.overdue}, due in ${DUE_SOON_DAYS} days ${submission.dueSoon}, not yet due ${submission.notYetDue}`}
+              >
+                {submission.total > 0 &&
+                  SUBMISSION_SEGMENTS.map(({ key, color }) =>
+                    submission[key] > 0 ? <i key={key} style={{ width: `${(submission[key] / submission.total) * 100}%`, background: color }} /> : null,
+                  )}
+              </div>
+              <div className="pd-legend">
+                {SUBMISSION_SEGMENTS.map(({ key, label, color }) => (
+                  <span key={key} style={{ ['--c' as string]: color }}>{label} <b>{submission[key]}</b></span>
+                ))}
+              </div>
+            </div>
+          </div>
             <div className="pd-tbl">
               <table>
                 <thead>
@@ -336,7 +381,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
                     const rate = pct(r.completed, r.total);
                     return (
                       <tr key={r.department}>
-                        <td className="pd-pri">{deptLabel(r.department)}</td>
+                        <td className={r.other ? 'pd-muted' : 'pd-pri'}>{r.department}</td>
                         <td>
                           <div className="pd-rate">
                             <div className="pd-track"><i style={{ width: `${rate}%` }} /></div>
@@ -352,6 +397,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
                 </tbody>
               </table>
             </div>
+          </>
           )}
         </section>
 

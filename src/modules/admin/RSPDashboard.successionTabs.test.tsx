@@ -8,7 +8,7 @@ vi.mock('../../components/SuccessionPlanningPage', () => ({ SuccessionPlanningPa
 vi.mock('../../components/EligibilityPointsPanel', () => ({ EligibilityPointsPanel: () => <p>points view</p> }));
 vi.mock('./RspDashboardOverview', () => ({ RspDashboardOverview: () => null }));
 vi.mock('../../components/QualifiedApplicantsSection', () => ({ QualifiedApplicantsSection: () => null }));
-vi.mock('../../components/NotSelectedArchive', () => ({ NotSelectedArchive: () => null }));
+vi.mock('./rsp-archives', () => ({ RspArchives: () => null }));
 vi.mock('../../hooks/useRealtimeRefresh', () => ({ useRealtimeRefresh: () => undefined }));
 vi.mock('../../hooks/useDepartmentOptions', () => ({ useDepartmentNames: () => [], useDepartmentOptions: () => [] }));
 

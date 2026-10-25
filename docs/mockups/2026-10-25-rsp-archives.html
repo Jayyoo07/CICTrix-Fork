@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RSP Archives</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<style>
+/* Tokens: copied from src/styles/abyan-tokens.css (DESIGN_IDENTITY.md §14.1) */
+:root {
+  --color-primary:#363EE8; --color-primary-700:#191FA8; --color-primary-900:#040E6B; --color-primary-200:#C8D1FF; --color-primary-50:#EEF0FF;
+  --bg-page:#F1F5F9; --bg-surface:#FFFFFF; --bg-row-hover:#F8FAFF; --bg-disabled:#F8FAFC;
+  --neutral-900:#101E29; --neutral-800:#28343D; --neutral-600:#515F69; --neutral-500:#64748B; --neutral-400:#94A3B8; --neutral-300:#CBD5E1; --neutral-200:#E2E8F0; --neutral-100:#F1F5F9;
+  --success-100:#DCFCE7; --success-500:#16A85A; --success-700:#0F7A40;
+  --error-100:#FDE2E2; --error-500:#E05252; --error-700:#B42323;
+  --info-100:#E0E5FF; --info-500:#363EE8; --info-700:#191FA8;
+  --gradient-hero:linear-gradient(180deg,#363EE8 0%,#040E6B 100%);
+  --gradient-button:linear-gradient(180deg,#363EE8 0%,#191FA8 100%);
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px; --radius-pill:999px; --radius-chip:10px;
+  --shadow-1:0 1px 2px rgba(16,30,41,.06),0 1px 3px rgba(16,30,41,.08);
+  --shadow-2:0 4px 12px rgba(16,30,41,.10); --shadow-3:0 12px 32px rgba(16,30,41,.16);
+  --shadow-focus:0 4px 14px rgba(54,62,232,.40); --ring-input:0 0 0 3px rgba(54,62,232,.15);
+  --overlay:rgba(4,14,107,.45); --on-blue-active:rgba(255,255,255,.18);
+  --font-sans:'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --control-h:40px; --control-h-compact:36px; --table-head-pad-y:10px; --table-cell-pad-y:12px; --table-cell-pad-x:16px;
+  --rail-collapsed:72px; --dur-base:200ms; --ease-standard:cubic-bezier(.2,.8,.2,1);
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:var(--font-sans); color:var(--neutral-800); background:var(--bg-page); }
+::selection { background:var(--color-primary-200); color:var(--color-primary-900); }
+button { font-family:inherit; }
+svg.i { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+svg.i20 { width:20px; height:20px; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+:where(button,a,[tabindex]):focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; }
+input:focus-visible, select:focus-visible { outline:none; border-color:var(--color-primary); box-shadow:var(--ring-input); }
+[hidden] { display:none !important; }
+
+/* §8.2 top bar + §9.12 rail */
+.topbar { position:sticky; top:0; z-index:10; height:64px; background:var(--color-primary); display:flex; align-items:center; justify-content:space-between; padding:0 24px; color:#fff; }
+.lockup { display:flex; align-items:center; gap:12px; } .lockup b { font:700 20px/1 var(--font-sans); } .lockup span { font:400 16px/1 var(--font-sans); }
+.who { display:flex; align-items:center; gap:12px; }
+.avatar { width:36px; height:36px; border-radius:50%; background:var(--on-blue-active); display:grid; place-items:center; }
+.who small { display:block; font:400 12px/16px var(--font-sans); color:rgba(255,255,255,.8); } .who strong { display:block; font:600 14px/18px var(--font-sans); color:#fff; }
+.divider { width:1px; height:28px; background:rgba(255,255,255,.25); }
+.logout { height:44px; padding:0 16px; border-radius:12px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.35); color:#fff; font:600 14px var(--font-sans); display:flex; align-items:center; gap:8px; }
+@media (max-width:1023px){ .lockup span{display:none} }
+@media (max-width:639px){ .who-text,.divider{display:none} .logout span{display:none} .logout{padding:0;width:44px;justify-content:center} .topbar{padding:0 16px;height:56px} }
+.shell { display:flex; min-height:calc(100vh - 64px); }
+.rail { width:var(--rail-collapsed); flex:none; background:var(--gradient-hero); padding:16px 0 16px 12px; display:flex; flex-direction:column; gap:8px; }
+.rail a { width:40px; height:40px; margin-left:4px; border-radius:50%; display:grid; place-items:center; color:rgba(255,255,255,.85); background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); }
+.rail a[aria-current] { background:var(--bg-page); border-color:transparent; color:var(--color-primary); width:48px; height:48px; margin-left:0; }
+.main { flex:1; min-width:0; padding:24px; }
+@media (max-width:639px){ .main{padding:16px} }
+
+/* §4 type */
+.title-l { font:700 24px/32px var(--font-sans); color:var(--color-primary-900); margin:0; }
+.title-m { font:600 20px/28px var(--font-sans); color:var(--color-primary-900); margin:0; }
+.title-s { font:600 16px/24px var(--font-sans); color:var(--color-primary-900); margin:0; }
+.body-l { font:400 14px/22px var(--font-sans); color:var(--neutral-600); margin:0; }
+.body-s { font:500 12px/16px var(--font-sans); letter-spacing:.1px; color:var(--neutral-600); }
+.caption { font:500 13px/16px var(--font-sans); color:var(--neutral-600); }
+
+/* Page head */
+.head { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+.head .body-l { margin-top:2px; }
+.search { position:relative; width:min(380px,100%); }
+.search > svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--neutral-400); pointer-events:none; }
+.search input { width:100%; height:var(--control-h); border:1px solid var(--neutral-200); border-radius:var(--radius-md); padding:0 12px 0 40px; font:500 14px var(--font-sans); color:var(--neutral-800); background:var(--bg-surface); }
+.search input:hover { border-color:var(--color-primary-200); }
+.search input::placeholder { color:var(--neutral-600); }
+
+/* Cards */
+.card { background:var(--bg-surface); border:1px solid var(--neutral-200); border-radius:var(--radius-lg); }
+
+/* List */
+.panel { padding:0 20px 20px; }
+.tabs { display:flex; gap:28px; border-bottom:1px solid var(--neutral-200); overflow-x:auto; scrollbar-width:none; }
+.tab { font:500 14px/20px var(--font-sans); color:var(--neutral-600); background:none; border:0; border-bottom:2px solid transparent; padding:16px 0 12px; display:flex; gap:8px; align-items:center; cursor:pointer; white-space:nowrap; }
+.tab:hover { color:var(--color-primary-900); }
+.tab[aria-selected="true"] { color:var(--color-primary); border-bottom-color:var(--color-primary); font-weight:600; }
+.tab .n { font:500 13px var(--font-sans); color:var(--neutral-500); font-variant-numeric:tabular-nums; }
+.tab[aria-selected="true"] .n { color:var(--color-primary); }
+
+/* One-line toolbar */
+.toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px 0 12px; }
+.toolbar .spacer { flex:1; }
+select { height:var(--control-h-compact); border:1px solid var(--neutral-200); border-radius:var(--radius-md); padding:0 10px; font:500 14px var(--font-sans); color:var(--color-primary-900); background:var(--bg-surface); max-width:240px; }
+select:hover { border-color:var(--color-primary-200); }
+.pop-wrap { position:relative; }
+.pop { position:absolute; top:calc(100% + 6px); left:0; z-index:5; width:300px; background:var(--bg-surface); border:1px solid var(--neutral-200); border-radius:var(--radius-md); box-shadow:var(--shadow-2); padding:16px; display:grid; gap:12px; }
+.pop.right { left:auto; right:0; width:200px; padding:6px; gap:0; }
+.pop label { display:grid; gap:6px; font:500 13px/16px var(--font-sans); color:var(--neutral-800); }
+.pop select, .pop input { width:100%; max-width:none; height:var(--control-h-compact); border:1px solid var(--neutral-200); border-radius:var(--radius-md); padding:0 10px; font:500 14px var(--font-sans); color:var(--neutral-800); }
+.pop .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.pop footer { display:flex; justify-content:flex-end; gap:8px; }
+.mi { width:100%; display:flex; align-items:center; gap:10px; height:36px; padding:0 10px; border:0; border-radius:var(--radius-sm); background:transparent; font:500 14px var(--font-sans); color:var(--neutral-800); cursor:pointer; }
+.mi:hover { background:var(--color-primary-50); color:var(--color-primary); }
+.active-filters { display:flex; gap:8px; flex-wrap:wrap; margin:-4px 0 12px; }
+.fchip { height:28px; padding:0 6px 0 12px; border-radius:var(--radius-pill); background:var(--color-primary-50); color:var(--color-primary-700); font:500 12px var(--font-sans); display:inline-flex; align-items:center; gap:4px; border:0; cursor:pointer; }
+.fchip:hover { background:var(--color-primary-200); }
+
+/* §9.1 buttons */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-sans); font-weight:600; border-radius:var(--radius-pill); border:1.5px solid transparent; cursor:pointer; white-space:nowrap; transition:background .15s, box-shadow .15s; }
+.btn-sm { height:32px; padding:0 14px; font-size:13px; }
+.btn-md { height:36px; padding:0 20px; font-size:14px; }
+.btn-primary { background:var(--gradient-button); color:#fff; } .btn-primary:hover { background:var(--color-primary-700); }
+.btn-secondary { background:var(--bg-surface); color:var(--color-primary); border-color:var(--color-primary); } .btn-secondary:hover { background:var(--color-primary-50); }
+.btn-ghost { background:transparent; color:var(--color-primary-900); border-color:var(--neutral-200); } .btn-ghost:hover { background:var(--bg-page); }
+.btn-ghost .badge-n { min-width:20px; height:20px; border-radius:var(--radius-pill); background:var(--color-primary); color:#fff; font:600 11px/20px var(--font-sans); padding:0 6px; }
+.btn-danger-outline { background:var(--bg-surface); color:var(--error-700); border-color:var(--error-500); } .btn-danger-outline:hover { background:var(--error-100); }
+
+/* §9.5 table */
+.table-wrap { position:relative; border:1px solid var(--neutral-200); border-radius:var(--radius-lg); overflow:auto; }
+table { width:100%; border-collapse:collapse; min-width:640px; }
+th { background:var(--bg-page); font:600 13px/20px var(--font-sans); color:var(--color-primary-900); text-align:left; padding:var(--table-head-pad-y) var(--table-cell-pad-x); white-space:nowrap; }
+td { font:500 14px/18px var(--font-sans); color:var(--neutral-800); padding:var(--table-cell-pad-y) var(--table-cell-pad-x); border-top:1px solid var(--neutral-200); vertical-align:middle; }
+tbody tr { cursor:pointer; }
+tbody tr:hover td { background:var(--bg-row-hover); }
+tbody tr:focus-visible { outline:2px solid var(--color-primary); outline-offset:-2px; }
+.pc b { display:block; font:500 14px/20px var(--font-sans); color:var(--color-primary-900); }
+.pc span { display:block; }
+td.chev { width:40px; color:var(--neutral-400); }
+mark { background:var(--color-primary-200); color:var(--color-primary-900); border-radius:3px; }
+.empty td { text-align:center; padding:40px 16px; cursor:default; }
+.empty td:hover { background:none !important; }
+.badge { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 10px; border-radius:var(--radius-pill); font:500 12px/16px var(--font-sans); white-space:nowrap; }
+.badge .dot { width:6px; height:6px; border-radius:50%; }
+.b-neutral { background:var(--neutral-100); color:var(--neutral-800); } .b-neutral .dot { background:var(--neutral-500); }
+.b-error { background:var(--error-100); color:var(--error-700); } .b-error .dot { background:var(--error-500); }
+.tag { display:inline-flex; align-items:center; height:22px; padding:0 10px; border-radius:var(--radius-pill); background:var(--color-primary-50); color:var(--color-primary-700); font:500 12px/16px var(--font-sans); white-space:nowrap; }
+.pager { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
+.pages { display:flex; gap:8px; }
+.pg { min-width:36px; height:36px; padding:0 12px; border-radius:var(--radius-md); border:1px solid var(--neutral-200); background:var(--bg-surface); font:500 14px var(--font-sans); color:var(--neutral-800); display:flex; align-items:center; gap:6px; }
+.pg.on { background:var(--color-primary); color:#fff; border-color:var(--color-primary); }
+.pg[disabled] { color:var(--neutral-400); background:var(--bg-disabled); }
+
+/* Detail drawer */
+.scrim { position:fixed; inset:0; z-index:30; background:var(--overlay); }
+.drawer { position:fixed; top:0; right:0; bottom:0; z-index:31; width:min(480px,100vw); background:var(--bg-surface); box-shadow:var(--shadow-3); display:flex; flex-direction:column; }
+.drawer header { display:flex; justify-content:space-between; gap:12px; padding:20px 24px; border-bottom:1px solid var(--neutral-200); }
+.drawer .body { padding:20px 24px; overflow:auto; flex:1; }
+.drawer footer { padding:16px 24px; border-top:1px solid var(--neutral-200); display:flex; justify-content:flex-end; gap:12px; flex-wrap:wrap; }
+.x { width:36px; height:36px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--neutral-600); display:grid; place-items:center; cursor:pointer; flex:none; }
+.x:hover { background:var(--bg-page); }
+dl { display:grid; grid-template-columns:130px 1fr; gap:10px 16px; margin:0 0 24px; }
+dt { font:500 13px/20px var(--font-sans); color:var(--neutral-600); }
+dd { margin:0; font:500 14px/20px var(--font-sans); color:var(--neutral-800); }
+.timeline { list-style:none; margin:8px 0 0; padding:0; }
+.timeline li { display:grid; grid-template-columns:100px 1fr; gap:12px; padding:10px 0; border-top:1px solid var(--neutral-200); font:500 14px/20px var(--font-sans); }
+.timeline time { font-size:13px; color:var(--neutral-600); }
+.note { font:500 13px/18px var(--font-sans); color:var(--neutral-600); margin:0; }
+.toast { position:fixed; top:80px; right:24px; z-index:40; width:min(360px,calc(100vw - 32px)); background:var(--bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-3); padding:16px; font:500 14px/20px var(--font-sans); color:var(--neutral-800); }
+@media (max-width:639px){ dl{grid-template-columns:1fr; gap:2px} dd{margin-bottom:8px} .toolbar .spacer{display:none} }
+@media (prefers-reduced-motion:reduce){ *{transition-duration:0ms !important} }
+</style>
+</head>
+<body>
+<!-- Decision 2026-10-25: RSP Archives, layout B (quiet tabs). Groups: Employees, Applicants, Job posts, Evaluation records. -->
+
+<header class="topbar">
+  <div class="lockup"><svg class="i" style="width:32px;height:32px" viewBox="0 0 24 24" data-icon="mark"></svg><b>ABYAN</b><span>Human Resource Information System</span></div>
+  <div class="who"><div class="avatar"><svg class="i i20" viewBox="0 0 24 24" data-icon="circle-user"></svg></div><div class="who-text"><strong>RSP Admin</strong><small>RSP Division</small></div><div class="divider"></div><button class="logout" aria-label="Logout"><svg class="i" viewBox="0 0 24 24" data-icon="log-out"></svg><span>Logout</span></button></div>
+</header>
+<div class="shell">
+  <nav class="rail" aria-label="Main navigation">
+    <a href="#" aria-label="Dashboard"><svg class="i i20" viewBox="0 0 24 24" data-icon="layout-dashboard"></svg></a>
+    <a href="#" aria-label="Applications"><svg class="i i20" viewBox="0 0 24 24" data-icon="briefcase"></svg></a>
+    <a href="#" aria-label="Qualified Applicants"><svg class="i i20" viewBox="0 0 24 24" data-icon="clipboard-check"></svg></a>
+    <a href="#" aria-label="Employees"><svg class="i i20" viewBox="0 0 24 24" data-icon="users"></svg></a>
+    <a href="#" aria-label="Succession Planning"><svg class="i i20" viewBox="0 0 24 24" data-icon="git-branch"></svg></a>
+    <a href="#" aria-label="Archives" aria-current="page"><svg class="i i20" viewBox="0 0 24 24" data-icon="archive"></svg></a>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+<div id="layer"></div>
+
+<script>
+const ICONS = {
+  'mark':'<path d="M12 3 4 20h3l5-11 5 11h3Z"/>',
+  'circle-user':'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>',
+  'log-out':'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  'layout-dashboard':'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  'briefcase':'<rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  'clipboard-check':'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  'users':'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  'git-branch':'<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  'archive':'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  'search':'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'x':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  'chevron-right':'<path d="m9 18 6-6-6-6"/>', 'chevron-left':'<path d="m15 18-6-6 6-6"/>', 'chevron-down':'<path d="m6 9 6 6 6-6"/>',
+  'sliders':'<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+  'download':'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  'user-round-x':'<path d="M2 21a8 8 0 0 1 11.873-7"/><circle cx="10" cy="8" r="5"/><path d="m17 17 5 5"/><path d="m22 17-5 5"/>',
+  'id-card':'<path d="M16 10h2"/><path d="M16 14h2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
+  'file-text':'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  'rotate-ccw':'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  'trash-2':'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  'printer':'<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+};
+const svg = (n, c='i') => `<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+document.querySelectorAll('svg[data-icon]').forEach(s => { s.innerHTML = ICONS[s.dataset.icon]; s.setAttribute('aria-hidden','true'); });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = iso => new Date(iso+'T00:00').toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
+
+/* ─── Archive model: four kinds of finished history ─────────────────── */
+const R = (o) => o;
+const DATA = [
+  // Former employees (employees.status Resigned / Terminated / Separated; Retired needs a new status)
+  R({ g:'emp', t:'Retired', name:'Rosario Villanueva', id:'EMP-1998-0042', pos:'Administrative Officer V', dept:'Human Resource Management Office', date:'2026-09-30', why:'Compulsory retirement at 65', by:'M. Cruz', years:'28 years in service' }),
+  R({ g:'emp', t:'Resigned', name:'Eduardo Lacson', id:'EMP-2015-0310', pos:'Engineer III', dept:'City Engineer’s Office', date:'2026-08-15', why:'Moved to the private sector', by:'M. Cruz', years:'11 years in service' }),
+  R({ g:'emp', t:'Separated', name:'Grace Tiu', id:'EMP-2021-0518', pos:'Nurse II', dept:'City Health Office', date:'2026-06-30', why:'End of casual appointment', by:'J. Ledesma', years:'5 years in service' }),
+  R({ g:'emp', t:'Terminated', name:'Noel Bautista', id:'EMP-2019-0221', pos:'Driver II', dept:'General Services Office', date:'2026-03-12', why:'Dismissal upheld by CSC', by:'J. Ledesma', years:'7 years in service' }),
+  // Previous positions (employee_history: promoted / transferred)
+  R({ g:'emp', t:'Promoted', name:'Maria Santos', id:'EMP-2017-0144', pos:'Administrative Aide VI', dept:'Human Resource Management Office', to:'Administrative Assistant II', date:'2026-08-01', why:'Promoted through promotional application PA-2026-011', by:'M. Cruz', years:'4 years in this position' }),
+  R({ g:'emp', t:'Transferred', name:'Joel Ramos', id:'EMP-2012-0087', pos:'Engineer II', dept:'City Engineer’s Office', to:'Engineer II, City Planning Office', date:'2026-05-04', why:'Transfer at employee request', by:'M. Cruz', years:'6 years in this position' }),
+  // Applicants
+  R({ g:'app', t:'Disqualified', name:'Ana Reyes', id:'REF-2026-0141', pos:'Administrative Aide IV', dept:'Human Resource Management Office', date:'2026-10-24', why:'Did not attend the written exam', by:'M. Cruz', prev:'Interview/Exam Scheduled' }),
+  R({ g:'app', t:'Disqualified', name:'Carlo Dizon', id:'REF-2026-0137', pos:'Nurse I', dept:'City Health Office', date:'2026-10-23', why:'Scored below the qualifying 70', by:'M. Cruz', prev:'For Evaluation' }),
+  R({ g:'app', t:'Not Selected', name:'Mark Lim', id:'REF-2026-0098', pos:'Engineer II', dept:'City Engineer’s Office', date:'2026-10-21', why:'Plantilla 0412 filled', by:'System' }),
+  R({ g:'app', t:'Withdrawn', name:'Joy Santos', id:'REF-2026-0110', pos:'Nurse I', dept:'City Health Office', date:'2026-10-18', why:'Hired as Midwife II', by:'System' }),
+  // Job posts
+  R({ g:'job', t:'Closed', name:'Engineer II', id:'Plantilla 0412', pos:'Engineer II', dept:'City Engineer’s Office', date:'2026-10-21', why:'1 hired of 11 applicants', by:'System' }),
+  R({ g:'job', t:'Deleted', name:'Administrative Officer III', id:'Plantilla 0087', pos:'Administrative Officer III', dept:'General Services Office', date:'2026-10-15', why:'Posted in error; 11 applicants kept', by:'M. Cruz' }),
+  // Evaluation records
+  R({ g:'eval', t:'Ranking', name:'Engineer II', id:'Plantilla 0412', pos:'Engineer II', dept:'City Engineer’s Office', date:'2026-10-20', why:'11 ranked · top score 88.40', by:'Selection board' }),
+  R({ g:'eval', t:'Assessment form', name:'Joy Santos', id:'REF-2026-0110', pos:'Nurse I', dept:'City Health Office', date:'2026-10-16', why:'Score 84.20 · Qualified', by:'Dr. P. Gonzaga' }),
+];
+DATA.forEach((r,i) => r.key = 'r'+i);
+const GROUPS = [
+  { g:'emp', label:'Employees', icon:'id-card', desc:'Former employees and the positions people held before a promotion or transfer.',
+    types:[['Retired','Former'],['Resigned','Former'],['Separated','Former'],['Terminated','Former'],['Promoted','Previous position'],['Transferred','Previous position']],
+    who:'Employee', person:true },
+  { g:'app', label:'Applicants', icon:'user-round-x', desc:'Applications that ended. Disqualified applicants move here right away.',
+    types:[['Disqualified'],['Not Selected'],['Withdrawn']], who:'Applicant', person:true },
+  { g:'job', label:'Job posts', icon:'briefcase', desc:'Closed job posts, and deleted ones whose applicants were kept.',
+    types:[['Closed'],['Deleted']], who:'Position' },
+  { g:'eval', label:'Evaluation records', icon:'file-text', desc:'Ranking reports and each applicant’s assessment form.',
+    types:[['Ranking'],['Assessment form']], who:'Record' },
+];
+/* §10: Disqualified → Error; employee and closed outcomes → Neutral; previous-position kinds are categories → tint tag */
+const BADGE = { Disqualified:'b-error' };
+const pill = t => ['Promoted','Transferred','Ranking','Assessment form'].includes(t) ? `<span class="tag">${t}</span>` : `<span class="badge ${BADGE[t]||'b-neutral'}"><span class="dot"></span>${t}</span>`;
+const count = (g,t) => DATA.filter(r => r.g===g && (!t || r.t===t)).length;
+
+/* ─── State ───────────────────────────────────────────────────────── */
+const S = { g:'emp', type:'', q:'', dept:'', from:'', to:'', sort:'new', popover:'' };
+const match = r => !S.q || [r.name, r.id, r.pos, r.dept].join(' ').toLowerCase().includes(S.q.toLowerCase());
+const hl = s => { if (!S.q) return esc(s); const i = s.toLowerCase().indexOf(S.q.toLowerCase()); return i<0 ? esc(s) : esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+S.q.length))+'</mark>'+esc(s.slice(i+S.q.length)); };
+const rows = () => DATA.filter(r => r.g===S.g && match(r) && (!S.type || r.t===S.type) && (!S.dept || r.dept===S.dept) && (!S.from || r.date>=S.from) && (!S.to || r.date<=S.to))
+  .sort((a,b) => S.sort==='new' ? b.date.localeCompare(a.date) : S.sort==='old' ? a.date.localeCompare(b.date) : a.name.localeCompare(b.name));
+const main = document.getElementById('main');
+
+/* ─── Shared list (table + one-line toolbar) ───────────────────────── */
+function listHtml() {
+  const G = GROUPS.find(x=>x.g===S.g), rs = rows(), nF = [S.dept, S.from, S.to].filter(Boolean).length;
+  const typeOpts = G.types.map(([t,grp]) => ({t,grp}));
+  const groupsOf = [...new Set(typeOpts.map(o=>o.grp).filter(Boolean))];
+  const typeSelect = `<select aria-label="Type" data-k="type"><option value="">All types · ${count(S.g)}</option>${
+    groupsOf.length ? groupsOf.map(gr => `<optgroup label="${gr === 'Former' ? 'Former employees' : 'Previous positions'}">${typeOpts.filter(o=>o.grp===gr).map(o=>`<option value="${o.t}" ${S.type===o.t?'selected':''}>${o.t} · ${count(S.g,o.t)}</option>`).join('')}</optgroup>`).join('')
+    : typeOpts.map(o=>`<option value="${o.t}" ${S.type===o.t?'selected':''}>${o.t} · ${count(S.g,o.t)}</option>`).join('')}</select>`;
+  const depts = [...new Set(DATA.filter(r=>r.g===S.g).map(r=>r.dept))].sort();
+  return `
+    <div class="toolbar">
+      ${typeSelect}
+      <div class="pop-wrap">
+        <button class="btn btn-md btn-ghost" data-pop="filters" aria-expanded="${S.popover==='filters'}">${svg('sliders')}Filters${nF?`<span class="badge-n">${nF}</span>`:''}</button>
+        ${S.popover==='filters' ? `<div class="pop" role="dialog" aria-label="Filters">
+          <label>Department<select data-k="dept"><option value="">All departments</option>${depts.map(d=>`<option ${S.dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></label>
+          <div class="row"><label>Archived from<input type="date" data-k="from" value="${S.from}"></label><label>to<input type="date" data-k="to" value="${S.to}"></label></div>
+          <footer><button class="btn btn-sm btn-ghost" data-act="clear">Clear</button><button class="btn btn-sm btn-primary" data-pop="">Done</button></footer></div>` : ''}
+      </div>
+      <span class="spacer"></span>
+      <select aria-label="Sort" data-k="sort"><option value="new" ${S.sort==='new'?'selected':''}>Newest first</option><option value="old" ${S.sort==='old'?'selected':''}>Oldest first</option><option value="az" ${S.sort==='az'?'selected':''}>Name A–Z</option></select>
+      <div class="pop-wrap">
+        <button class="btn btn-md btn-ghost" data-pop="export" aria-expanded="${S.popover==='export'}">${svg('download')}Export</button>
+        ${S.popover==='export' ? `<div class="pop right" role="menu"><button class="mi" role="menuitem" data-act="export">${svg('file-text')}Download CSV</button><button class="mi" role="menuitem" data-act="export">${svg('download')}Download PDF</button><button class="mi" role="menuitem" data-act="export">${svg('printer')}Print view</button></div>` : ''}
+      </div>
+    </div>
+    ${nF ? `<div class="active-filters">${S.dept?`<button class="fchip" data-rm="dept" aria-label="Remove filter ${esc(S.dept)}">${esc(S.dept)}${svg('x')}</button>`:''}${S.from||S.to?`<button class="fchip" data-rm="date" aria-label="Remove date filter">${S.from?fmt(S.from):'Any'} – ${S.to?fmt(S.to):'today'}${svg('x')}</button>`:''}</div>` : ''}
+    <div class="table-wrap"><table>
+      <caption class="sr-only">${G.label}</caption>
+      <thead><tr><th scope="col">${G.who}</th><th scope="col">${G.g==='emp'?'Last position':'Position'}</th><th scope="col">Status</th><th scope="col">Date</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
+      <tbody>${rs.length ? rs.map(r => `<tr tabindex="0" data-open="${r.key}" aria-label="Open ${esc(r.name)}">
+        <td class="pc"><b>${hl(r.name)}</b><span class="body-s">${hl(r.id)}</span></td>
+        <td class="pc"><b>${hl(r.pos)}</b><span class="body-s">${esc(r.dept)}</span></td>
+        <td>${pill(r.t)}</td><td style="white-space:nowrap">${fmt(r.date)}</td><td class="chev">${svg('chevron-right')}</td></tr>`).join('')
+      : `<tr class="empty"><td colspan="5"><p class="title-s" style="margin:0">No records match</p><p class="body-l" style="margin:4px auto 12px">Try another type, widen the dates, or clear the search.</p><button class="btn btn-sm btn-secondary" data-act="clearall">Clear all</button></td></tr>`}</tbody>
+    </table></div>
+    <div class="pager"><span class="body-s">Showing ${rs.length?1:0}–${rs.length} of ${rs.length} entries</span>
+      <div class="pages"><button class="pg" disabled>${svg('chevron-left')}Previous</button><button class="pg on" aria-current="page">1</button><button class="pg" disabled>Next${svg('chevron-right')}</button></div></div>`;
+}
+
+/* ─── Page: quiet tabs over one list ───────────────────────────────── */
+function renderPage() {
+  main.innerHTML = `
+    <div class="head"><div><h1 class="title-l">Archives</h1><p class="body-l">Everything that has ended: people who left, past positions, closed applications and job posts.</p></div>
+      <label class="search"><span class="sr-only">Search all archives</span>${svg('search','i i20')}<input id="q" type="search" placeholder="Search a name, employee ID or REF number" value="${esc(S.q)}"></label></div>
+    <section class="card panel">
+      <div class="tabs" role="tablist" aria-label="Archive groups">${GROUPS.map(G => { const n = DATA.filter(r=>r.g===G.g && match(r)).length;
+        return `<button class="tab" role="tab" aria-selected="${S.g===G.g}" tabindex="${S.g===G.g?0:-1}" data-tab="${G.g}">${G.label}<span class="n">${n}</span></button>`; }).join('')}</div>
+      <div role="tabpanel">${listHtml()}</div>
+    </section>`;
+}
+
+function render() {
+  const focusId = document.activeElement?.id, caret = document.activeElement?.selectionStart;
+  renderPage();
+  if (focusId==='q') { const q = document.getElementById('q'); q.focus(); q.setSelectionRange(caret,caret); }
+}
+
+/* ─── Detail drawer: actions live here, not on every row ───────────── */
+let lastFocus;
+function openDrawer(r) {
+  lastFocus = document.activeElement;
+  const G = GROUPS.find(x=>x.g===r.g);
+  const facts = [
+    [G.who, `${esc(r.name)} · ${esc(r.id)}`],
+    [r.g==='emp' ? (r.to ? 'Previous position' : 'Last position') : 'Position', `${esc(r.pos)}<div class="body-s">${esc(r.dept)}</div>`],
+    ...(r.to ? [['Moved to', esc(r.to)]] : []),
+    ['Status', pill(r.t)], ['Reason', esc(r.why)], ...(r.years ? [['Service', esc(r.years)]] : []),
+    ['Date', fmt(r.date)], ['Archived by', esc(r.by)],
+  ];
+  const action = r.t==='Disqualified' ? `<button class="btn btn-md btn-secondary" data-act="restore">${svg('rotate-ccw')}Restore application</button>`
+    : r.t==='Deleted' ? `<button class="btn btn-md btn-danger-outline" data-act="purge">${svg('trash-2')}Permanently Delete</button>`
+    : r.g==='emp' ? `<button class="btn btn-md btn-secondary" data-act="sr">${svg('file-text')}Service record</button>` : '';
+  document.getElementById('layer').innerHTML = `<div class="scrim" data-act="close"></div>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="d-title">
+      <header><div><p class="caption" style="margin:0 0 2px">${G.label}</p><h2 class="title-m" id="d-title">${esc(r.name)}</h2></div><button class="x" data-act="close" aria-label="Close">${svg('x','i i20')}</button></header>
+      <div class="body"><dl>${facts.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+        <h3 class="title-s">History</h3><ol class="timeline"><li><time>${fmt(r.date)}</time><span>${esc(r.t)} · ${esc(r.why)}</span></li><li><time>Earlier</time><span>${r.g==='emp'?'Appointed to '+esc(r.pos):'Application submitted'}</span></li></ol>
+        ${r.t==='Retired' ? `<p class="note" style="margin-top:16px">“Retired” is not an employee status yet; the database only has Resigned, Terminated and Separated.</p>` : ''}</div>
+      <footer>${action}<button class="btn btn-md btn-ghost" data-act="close">Close</button></footer>
+    </aside>`;
+  document.querySelector('.drawer .x').focus();
+}
+function closeDrawer() { document.getElementById('layer').innerHTML=''; lastFocus?.focus(); }
+function toast(msg) { const t = document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.textContent = msg; document.body.append(t); setTimeout(()=>t.remove(), 4000); }
+
+/* ─── Events ──────────────────────────────────────────────────────── */
+document.addEventListener('input', e => { if (e.target.id==='q') { S.q = e.target.value; render(); } });
+document.addEventListener('change', e => { const k = e.target.dataset.k; if (k) { S[k] = e.target.value; render(); } });
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab],[data-open],[data-pop],[data-act],[data-rm]');
+  if (!t) { if (S.popover && !e.target.closest('.pop')) { S.popover=''; render(); } return; }
+  if (t.dataset.tab) { Object.assign(S,{g:t.dataset.tab, type:'', popover:''}); return render(); }
+  if (t.dataset.open) return openDrawer(DATA.find(r=>r.key===t.dataset.open));
+  if (t.dataset.pop !== undefined) { S.popover = S.popover===t.dataset.pop ? '' : t.dataset.pop; return render(); }
+  if (t.dataset.rm) { if (t.dataset.rm==='dept') S.dept=''; else { S.from=''; S.to=''; } return render(); }
+  const a = t.dataset.act;
+  if (a==='close') return closeDrawer();
+  if (a==='clear') { Object.assign(S,{dept:'',from:'',to:''}); return render(); }
+  if (a==='clearall') { Object.assign(S,{dept:'',from:'',to:'',type:'',q:''}); return render(); }
+  if (a==='export') { S.popover=''; render(); return toast('Exporting the records in view, with current filters.'); }
+  if (a==='restore') return toast('Opens the Restore confirmation from v3 (target status + required reason).');
+  if (a==='purge') return toast('Opens the type-to-confirm Permanently Delete dialog from v3.');
+  if (a==='sr') return toast('Opens the printable service record.');
+});
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') { if (document.querySelector('.drawer')) return closeDrawer(); if (S.popover) { S.popover=''; render(); } }
+  if (e.key==='Enter' && e.target.dataset?.open) openDrawer(DATA.find(r=>r.key===e.target.dataset.open));
+  if (e.target.getAttribute?.('role')==='tab' && /Arrow(Left|Right)/.test(e.key)) {
+    const keys = GROUPS.map(g=>g.g), i = keys.indexOf(S.g), n = e.key==='ArrowRight' ? (i+1)%keys.length : (i-1+keys.length)%keys.length;
+    S.g = keys[n]; S.type=''; render(); document.querySelector(`[data-tab="${keys[n]}"]`).focus();
+  }
+});
+render();
+</script>
+</body>
+</html>

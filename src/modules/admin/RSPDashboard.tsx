@@ -37,8 +37,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { getAdminEmail } from '../../lib/adminSession';
 import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/applicantStatus';
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
-import { fetchArchivedApplicants, type ArchivedApplicant } from '../../lib/hiringFlow';
-import { NotSelectedArchive } from '../../components/NotSelectedArchive';
+import { RspArchives, type ArchiveRecord } from './rsp-archives';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
 import { RspDashboardOverview } from './RspDashboardOverview';
 import { EligibilityPointsPanel } from '../../components/EligibilityPointsPanel';
@@ -365,6 +364,8 @@ const formatDate = (dateValue: string) => {
 
 /** How long a new hire keeps the "Newly Hired" badge in the Office Directory. */
 const NEWLY_HIRED_BADGE_DAYS = 14;
+/** Archive record key prefix for a deleted job post's preserved report. */
+const DELETED_JOB_KEY = 'deleted:';
 
 /**
  * True for the two weeks following someone's hire date. Returns false when the
@@ -873,7 +874,6 @@ export const RSPDashboard = () => {
   const [evaluatedApplicantIds, setEvaluatedApplicantIds] = useState<Set<string>>(new Set());
   const [raters, setRaters] = useState<RaterRecord[]>([]);
   const [deletedJobReports, setDeletedJobReports] = useState<DeletedJobReport[]>([]);
-  const [expandedArchiveIds, setExpandedArchiveIds] = useState<Record<string, boolean>>({});
   const [completedEvaluationIds, setCompletedEvaluationIds] = useState<Set<string>>(new Set());
 
   const [jobsSearch, setJobsSearch] = useState('');
@@ -885,21 +885,7 @@ export const RSPDashboard = () => {
   const [qualifiedSearch, setQualifiedSearch] = useState('');
   const [qualifiedPosition, setQualifiedPosition] = useState('all');
   const [qualifiedOffice, setQualifiedOffice] = useState('all');
-  const [reportsView, setReportsView] = useState<'overview' | 'ranking' | 'assessment' | 'documents' | 'closed' | 'temp' | 'notSelected'>('overview');
-  // Applicants archived when the plantilla they applied for was filled.
-  const [notSelectedRows, setNotSelectedRows] = useState<ArchivedApplicant[]>([]);
-  const [notSelectedLoading, setNotSelectedLoading] = useState(false);
-  useEffect(() => {
-    if (section !== 'reports') return;
-    let cancelled = false;
-    setNotSelectedLoading(true);
-    void fetchArchivedApplicants().then((rows) => {
-      if (cancelled) return;
-      setNotSelectedRows(rows);
-      setNotSelectedLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [section]);
+  const [reportsView, setReportsView] = useState<'overview' | 'documents'>('overview');
   const [activeRankingPosition, setActiveRankingPosition] = useState<string | null>(null);
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [showHireApplicantsModal, setShowHireApplicantsModal] = useState(false);
@@ -908,22 +894,7 @@ export const RSPDashboard = () => {
   const [showAssessmentFormsModal, setShowAssessmentFormsModal] = useState(false);
   const [assessmentStatusFilter, setAssessmentStatusFilter] = useState<AssessmentStatusFilter>('all');
   const [assessmentSearch, setAssessmentSearch] = useState('');
-  const [archivesSearch, setArchivesSearch] = useState('');
-  const [archivesAssessmentSearch, setArchivesAssessmentSearch] = useState('');
-  const [archivesAssessmentDeptFilter, setArchivesAssessmentDeptFilter] = useState('all');
-  const [archivesAssessmentPage, setArchivesAssessmentPage] = useState(0);
-  const [archivesRankingSearch, setArchivesRankingSearch] = useState('');
-  const [archivesRankingDeptFilter, setArchivesRankingDeptFilter] = useState('all');
-  const [archivesRankingPage, setArchivesRankingPage] = useState(0);
-  const [archivesClosedSearch, setArchivesClosedSearch] = useState('');
-  const [archivesClosedDeptFilter, setArchivesClosedDeptFilter] = useState('all');
-  const [archivesClosedPage, setArchivesClosedPage] = useState(0);
-  const [archivesTempSearch, setArchivesTempSearch] = useState('');
-  const [archivesTempDeptFilter, setArchivesTempDeptFilter] = useState('all');
-  const [archivesTempPage, setArchivesTempPage] = useState(0);
   const [rankingPositionFilter, setRankingPositionFilter] = useState<string>('all');
-  const [rankingNavDept, setRankingNavDept] = useState<string | null>(null);
-  const [rankingNavPos, setRankingNavPos] = useState<string | null>(null);
   const [activeDocumentTemplateId, setActiveDocumentTemplateId] = useState<EmployeeDocumentTemplateId | null>(null);
   const [expandedDocumentOffices, setExpandedDocumentOffices] = useState<Record<string, boolean>>({});
   const [selectedDocumentSubmissionIds, setSelectedDocumentSubmissionIds] = useState<string[]>([]);
@@ -947,8 +918,6 @@ export const RSPDashboard = () => {
   useBackClosesView(accountsView !== 'directory', () => setAccountsView('directory'), 'acct-office');
   useBackClosesView(accountsView === 'details', () => setAccountsView('office'), 'acct-details');
   useBackClosesView(reportsView !== 'overview', () => { setReportsView('overview'); setActiveDocumentTemplateId(null); }, 'archives-view');
-  useBackClosesView(rankingNavDept !== null, () => { setRankingNavDept(null); setRankingNavPos(null); }, 'ranking-dept');
-  useBackClosesView(rankingNavPos !== null, () => setRankingNavPos(null), 'ranking-pos');
 
   // Reset password flow for the Employee Accounts detail panel
   const [resetPwState, setResetPwState] = useState<'idle' | 'confirm' | 'working' | 'done' | 'error'>('idle');
@@ -1574,10 +1543,7 @@ export const RSPDashboard = () => {
       setExpandedDocumentOffices({});
       setSelectedDocumentSubmissionIds([]);
       setReportsView('overview');
-      setArchivesSearch('');
       setRankingPositionFilter('all');
-      setRankingNavDept(null);
-      setRankingNavPos(null);
     }
     if (section !== 'accounts') {
       setAccountsView('directory');
@@ -2968,31 +2934,63 @@ export const RSPDashboard = () => {
     }));
   };
 
-  const toggleArchiveDetails = (archiveId: string) => {
-    setExpandedArchiveIds((prev) => ({
-      ...prev,
-      [archiveId]: !prev[archiveId],
-    }));
-  };
-
-  const handleDeleteArchivePermanently = (archiveId: string, title: string) => {
-    const confirmed = window.confirm(
-      `Permanently delete archived report for \"${title}\"? This cannot be undone.`
-    );
-    if (!confirmed) return;
-
+  // Archives' type-to-confirm dialog has already asked; this only removes the data.
+  const purgeArchivedRecord = (key: string) => {
+    if (!key.startsWith(DELETED_JOB_KEY)) return;
+    const archiveId = key.slice(DELETED_JOB_KEY.length);
     setDeletedJobReports((prev) => {
       const next = prev.filter((report) => report.id !== archiveId);
       saveDeletedJobReports(next);
       return next;
     });
-
-    setExpandedArchiveIds((prev) => {
-      const next = { ...prev };
-      delete next[archiveId];
-      return next;
-    });
   };
+
+  // Job posts and evaluation records for Archives; employees and applicants
+  // are loaded by the module itself (docs/plans/2026-10-25-rsp-archives.md).
+  const archiveRecords = useMemo<ArchiveRecord[]>(() => {
+    const out: ArchiveRecord[] = [];
+    jobs.filter((job) => job.status === 'Closed').forEach((job) => out.push({
+      key: `job:${job.id}`, group: 'jobs', type: 'Closed', name: job.title,
+      ref: plantillaNameFor(job.item_number) || job.item_number || '',
+      position: job.title, department: job.department || '—', date: job.created_at,
+      facts: [{ label: 'Applicants', value: String(job.applicant_count ?? 0) }],
+    }));
+    deletedJobReports.forEach((report) => {
+      const documents = report.applicants.reduce((total, applicant) => total + applicant.documents.length, 0);
+      out.push({
+        key: `${DELETED_JOB_KEY}${report.id}`, group: 'jobs', type: 'Deleted', name: report.job.title,
+        ref: report.job.jobCode || '', position: report.job.title, department: report.job.department || '—',
+        date: report.deletedAt,
+        facts: [{ label: 'Deleted by', value: report.deletedBy || '—' }],
+        peopleTitle: 'Preserved applicants',
+        people: report.applicants.map((applicant) => ({
+          name: `${applicant.personalInfo.firstName} ${applicant.personalInfo.lastName}`.trim() || 'Unnamed',
+          detail: `${applicant.status} · ${applicant.documents.length} document${applicant.documents.length === 1 ? '' : 's'}`,
+        })),
+        action: { kind: 'purge', applicants: report.applicants.length, documents },
+      });
+    });
+    rankingHistoricalData.forEach((posMap, dept) => posMap.forEach((rows, pos) => {
+      const latest = rows.reduce((max, row) => (row.created_at > max ? row.created_at : max), '');
+      const ranked = rows.slice().sort((a, b) => (b.total_score ?? -1) - (a.total_score ?? -1));
+      const applicantsFact = { label: 'Applicants', value: String(rows.length) };
+      out.push({
+        key: `rank:${dept}:${pos}`, group: 'evaluations', type: 'Ranking', name: pos, ref: '',
+        position: pos, department: dept, date: latest, facts: [applicantsFact],
+        peopleTitle: 'Ranking',
+        people: ranked.map((row, i) => ({
+          name: `${i + 1}. ${row.full_name}`,
+          detail: `${normalizeStatus(row.status) ?? row.status} · ${row.total_score != null ? row.total_score.toFixed(2) : '—'}`,
+        })),
+      });
+      out.push({
+        key: `forms:${dept}:${pos}`, group: 'evaluations', type: 'Assessment forms', name: pos, ref: '',
+        position: pos, department: dept, date: latest, facts: [applicantsFact],
+        action: { kind: 'assessment', position: pos },
+      });
+    }));
+    return out;
+  }, [jobs, deletedJobReports, rankingHistoricalData, plantillaNameFor]);
 
   const openRankingReport = (position: string) => {
     setActiveRankingPosition(position);
@@ -3392,7 +3390,7 @@ export const RSPDashboard = () => {
               {section === 'new-hired' && 'Generate employee accounts for newly hired staff'}
               {section === 'raters' && 'Assign raters and define their evaluation access for specific job positions'}
               {section === 'accounts' && 'Browse and view employee records organized by position'}
-              {section === 'reports' && 'Assessment forms, application ranking records, and employee archive'}
+              {section === 'reports' && 'Former employees, past positions, closed applications, job posts and evaluation records'}
               {section === 'succession' && 'Build and manage the pipeline for critical roles and leadership continuity'}
               {section === 'settings' && 'Manage your personal information and account details'}
             </p>
@@ -4320,509 +4318,8 @@ export const RSPDashboard = () => {
 
             {section === 'reports' && (
               <>
-                {reportsView === 'overview' ? (
-                  <div className="flex flex-col gap-3">
-
-                    {/* ── Row 1: Application Ranking ── */}
-                    {(() => {
-                      const allRows: { dept: string; position: string }[] = [];
-                      rankingHistoricalData.forEach((posMap, dept) => {
-                        posMap.forEach((_rows, pos) => allRows.push({ dept, position: pos }));
-                      });
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setReportsView('ranking')}
-                          className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"
-                        >
-                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100">
-                            <BarChart2 size={20} className="text-blue-600" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-slate-900">Application Ranking</p>
-                            <p className="text-xs text-slate-500">Applicant rankings by position and department</p>
-                          </div>
-                          <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{allRows.length}</span>
-                          <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-blue-600 transition-colors" />
-                        </button>
-                      );
-                    })()}
-
-                    {/* ── Row 2: Assessment Forms ── */}
-                    <button
-                      type="button"
-                      onClick={() => setReportsView('assessment')}
-                      className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md"
-                    >
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
-                        <FileText size={20} className="text-emerald-600" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900">Assessment Forms</p>
-                        <p className="text-xs text-slate-500">Assessment reports and scores per position</p>
-                      </div>
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">{assessmentPositionCards.length}</span>
-                      <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                    </button>
-
-                    {/* ── Row 3: Closed Jobs ── */}
-                    {(() => {
-                      const closedCount = jobs.filter(j => j.status === 'Closed').length;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setReportsView('closed')}
-                          className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-slate-400 hover:shadow-md"
-                        >
-                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-                            <Briefcase size={20} className="text-slate-600" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-slate-900">Closed Jobs</p>
-                            <p className="text-xs text-slate-500">Archived job postings no longer accepting applications</p>
-                          </div>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">{closedCount}</span>
-                          <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-slate-700 transition-colors" />
-                        </button>
-                      );
-                    })()}
-
-                    {/* ── Row 4: Temporary Employee Account Generation ── */}
-                    <button
-                      type="button"
-                      onClick={() => setReportsView('temp')}
-                      className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-purple-300 hover:shadow-md"
-                    >
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-100">
-                        <UserPlus size={20} className="text-purple-600" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900">Temporary Employee Account Generation</p>
-                        <p className="text-xs text-slate-500">Hired applicants and temporary employee accounts</p>
-                      </div>
-                      <span className="rounded-full bg-purple-50 px-3 py-1 text-sm font-bold text-purple-700">{newlyHiredApplicants.length}</span>
-                      <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-purple-600 transition-colors" />
-                    </button>
-
-                    {/* ── Row 5: Not Selected Applicants (archived when a plantilla is filled) ── */}
-                    <button
-                      type="button"
-                      onClick={() => setReportsView('notSelected')}
-                      className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition hover:border-[var(--color-primary-200)] hover:shadow-md"
-                    >
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-50)]">
-                        <UserMinus size={20} className="text-[var(--color-primary)]" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900">Not Selected Applicants</p>
-                        <p className="text-xs text-slate-500">Applicants archived when their plantilla was filled</p>
-                      </div>
-                      <span className="badge badge-tint">{notSelectedRows.length}</span>
-                      <ChevronRight size={16} className="shrink-0 text-slate-400 group-hover:text-[var(--color-primary)] transition-colors" />
-                    </button>
-
-                  </div>
-
-                ) : reportsView === 'notSelected' ? (
-                  <NotSelectedArchive rows={notSelectedRows} loading={notSelectedLoading} />
-
-                ) : reportsView === 'closed' ? (
-                  <section className="space-y-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-[var(--text-primary)]">Closed Jobs</h2>
-                      <p className="text-sm text-[var(--text-secondary)]">Job postings that are no longer accepting applications.</p>
-                    </div>
-                    {(() => {
-                      const PAGE = 10;
-                      const closedJobs = jobs.filter(j => j.status === 'Closed');
-                      const t = archivesClosedSearch.trim().toLowerCase();
-                      const depts = [...new Set(closedJobs.map(j => j.department || 'Unassigned'))].sort();
-                      const filtered = closedJobs.filter(j =>
-                        (!t || j.title.toLowerCase().includes(t) || j.department.toLowerCase().includes(t)) &&
-                        (archivesClosedDeptFilter === 'all' || j.department === archivesClosedDeptFilter)
-                      );
-                      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
-                      const page = Math.min(archivesClosedPage, totalPages - 1);
-                      const sliced = filtered.slice(page * PAGE, (page + 1) * PAGE);
-                      const fmtDt = (iso: string) => { try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return iso; } };
-                      return (
-                        <>
-                          <div className="flex flex-wrap gap-2">
-                            <div className="relative flex-1 min-w-[180px]">
-                              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                              <input value={archivesClosedSearch} onChange={e => { setArchivesClosedSearch(e.target.value); setArchivesClosedPage(0); }} placeholder="Search by job title or department…" className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:outline-none" />
-                            </div>
-                            <select value={archivesClosedDeptFilter} onChange={e => { setArchivesClosedDeptFilter(e.target.value); setArchivesClosedPage(0); }} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                              <option value="all">All Departments</option>
-                              {depts.map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                            <table className="w-full min-w-full">
-                              <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50">
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position Title</th>
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plantilla</th>
-                                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {sliced.length === 0 ? (
-                                  <tr><td colSpan={5} className="px-5 py-10 text-center text-sm text-slate-500">{closedJobs.length === 0 ? 'No closed jobs on record.' : 'No results match your search.'}</td></tr>
-                                ) : sliced.map(j => (
-                                  <tr key={j.id} className="border-b border-slate-100 last:border-0">
-                                    <td className="px-5 py-3 text-sm font-semibold text-slate-900">{j.title}</td>
-                                    <td className="px-5 py-3 text-sm text-slate-600">{j.department}</td>
-                                    <td className="px-5 py-3 text-sm text-slate-500">{plantillaNameFor(j.item_number) || '—'}</td>
-                                    <td className="px-5 py-3 text-center text-sm text-slate-500">{fmtDt(j.created_at)}</td>
-                                    <td className="px-5 py-3 text-center">
-                                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">Closed</span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {filtered.length > PAGE && (
-                            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                              <span>Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, filtered.length)} of {filtered.length}</span>
-                              <div className="flex gap-1.5">
-                                <button onClick={() => setArchivesClosedPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rsp-pager rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Previous</button>
-                                <button onClick={() => setArchivesClosedPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rsp-pager rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </section>
-
-                ) : reportsView === 'temp' ? (
-                  <section className="space-y-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-[var(--text-primary)]">Temporary Employee Account Generation</h2>
-                      <p className="text-sm text-[var(--text-secondary)]">Hired applicants and their generated temporary accounts.</p>
-                    </div>
-                    {(() => {
-                      const PAGE = 10;
-                      const t = archivesTempSearch.trim().toLowerCase();
-                      const depts = [...new Set(newlyHiredApplicants.map(a => a.office || 'Unassigned'))].sort();
-                      const filtered = newlyHiredApplicants.filter(a =>
-                        (!t || a.full_name.toLowerCase().includes(t) || (a.email || '').toLowerCase().includes(t)) &&
-                        (archivesTempDeptFilter === 'all' || a.office === archivesTempDeptFilter)
-                      );
-                      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
-                      const page = Math.min(archivesTempPage, totalPages - 1);
-                      const sliced = filtered.slice(page * PAGE, (page + 1) * PAGE);
-                      const fmtDt = (iso: string) => { try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return iso; } };
-                      return (
-                        <>
-                          <div className="flex flex-wrap gap-2">
-                            <div className="relative flex-1 min-w-[180px]">
-                              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                              <input value={archivesTempSearch} onChange={e => { setArchivesTempSearch(e.target.value); setArchivesTempPage(0); }} placeholder="Search by employee name or email…" className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm focus:outline-none" />
-                            </div>
-                            <select value={archivesTempDeptFilter} onChange={e => { setArchivesTempDeptFilter(e.target.value); setArchivesTempPage(0); }} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                              <option value="all">All Departments</option>
-                              {depts.map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                          </div>
-                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                            <table className="w-full min-w-full">
-                              <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50">
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Employee Name</th>
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
-                                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department / Office</th>
-                                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Date Hired</th>
-                                  <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {sliced.length === 0 ? (
-                                  <tr><td colSpan={5} className="px-5 py-10 text-center text-sm text-slate-500">{newlyHiredApplicants.length === 0 ? 'No hired employees on record.' : 'No results match your search.'}</td></tr>
-                                ) : sliced.map(a => (
-                                  <tr key={a.id} className="border-b border-slate-100 last:border-0">
-                                    <td className="px-5 py-3">
-                                      <p className="!mb-0 text-sm font-semibold text-slate-900">{a.full_name}</p>
-                                      <p className="!mb-0 text-xs text-slate-400">{a.email || '—'}</p>
-                                    </td>
-                                    <td className="px-5 py-3 text-sm text-slate-600">{a.position || '—'}</td>
-                                    <td className="px-5 py-3 text-sm text-slate-600">{a.office || '—'}</td>
-                                    <td className="px-5 py-3 text-center text-sm text-slate-500">{fmtDt(a.created_at)}</td>
-                                    <td className="px-5 py-3 text-center">
-                                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${a.status.toLowerCase().includes('hired') || a.status.toLowerCase().includes('accept') ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                                        {a.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                          {filtered.length > PAGE && (
-                            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                              <span>Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, filtered.length)} of {filtered.length}</span>
-                              <div className="flex gap-1.5">
-                                <button onClick={() => setArchivesTempPage(p => Math.max(0, p - 1))} disabled={page === 0} className="rsp-pager rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Previous</button>
-                                <button onClick={() => setArchivesTempPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rsp-pager rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </section>
-
-                ) : reportsView === 'documents' ? null : reportsView === 'ranking' ? (
-                  <section className="space-y-4">
-                    {/* ── Header bar ─────────────────────────────────────────── */}
-                    <div>
-                      <h2 className="text-xl font-bold text-[var(--text-primary)]">
-                        {rankingNavPos ? rankingNavPos : rankingNavDept ? rankingNavDept : 'Application Ranking Reports'}
-                      </h2>
-                    </div>
-
-                    {/* ── Level 1: Department table ─────────────────────────── */}
-                    {!rankingNavDept && (
-                      rankingHistoricalData.size === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-[var(--border-color)] bg-white p-6 text-center">
-                          <p className="!mb-0 text-base text-[var(--text-secondary)]">No applicant records available yet.</p>
-                        </div>
-                      ) : (
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                          <table className="w-full min-w-full">
-                            <thead>
-                              <tr className="border-b border-slate-200 bg-slate-50">
-                                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department / Office</th>
-                                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Positions</th>
-                                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Applicants</th>
-                                <th className="w-10 px-5 py-3" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Array.from(rankingHistoricalData.entries())
-                                .sort(([a], [b]) => a.localeCompare(b))
-                                .map(([dept, posMap]) => {
-                                  const totalApplicants = Array.from(posMap.values()).reduce((s, arr) => s + arr.length, 0);
-                                  return (
-                                    <tr
-                                      key={dept}
-                                      onClick={() => setRankingNavDept(dept)}
-                                      className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-blue-50/40 transition-colors group"
-                                    >
-                                      <td className="px-5 py-4">
-                                        <div className="flex items-center gap-3">
-                                          <div className="shrink-0 rounded-xl bg-[#363EE8]/10 p-2 text-[#363EE8]">
-                                            <Building2 size={18} />
-                                          </div>
-                                          <span className="text-sm font-semibold text-slate-900">{dept}</span>
-                                        </div>
-                                      </td>
-                                      <td className="px-5 py-4 text-center text-sm text-slate-600">{posMap.size}</td>
-                                      <td className="px-5 py-4 text-center">
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-[#363EE8]/10 px-2.5 py-0.5 text-xs font-semibold text-[#363EE8]">
-                                          {totalApplicants}
-                                        </span>
-                                      </td>
-                                      <td className="px-5 py-4 text-slate-400 group-hover:text-[#363EE8] transition-colors">
-                                        <ChevronRight size={16} />
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )
-                    )}
-
-                    {/* ── Level 2: Positions in selected department ─────────── */}
-                    {rankingNavDept && !rankingNavPos && (() => {
-                      const posMap = rankingHistoricalData.get(rankingNavDept);
-                      if (!posMap) return null;
-                      return (
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                          <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
-                            <p className="!mb-0 text-sm font-bold uppercase tracking-wider text-slate-500">{rankingNavDept}</p>
-                          </div>
-                          <table className="w-full min-w-full">
-                            <thead>
-                              <tr className="border-b border-slate-200 bg-white">
-                                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
-                                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Applicants</th>
-                                <th className="w-10 px-5 py-3" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Array.from(posMap.entries())
-                                .sort(([a], [b]) => a.localeCompare(b))
-                                .map(([pos, rows]) => (
-                                  <tr
-                                    key={pos}
-                                    onClick={() => setRankingNavPos(pos)}
-                                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-blue-50/40 transition-colors group"
-                                  >
-                                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">{pos}</td>
-                                    <td className="px-5 py-4 text-center">
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-[#363EE8]/10 px-2.5 py-0.5 text-xs font-semibold text-[#363EE8]">
-                                        {rows.length}
-                                      </span>
-                                    </td>
-                                    <td className="px-5 py-4 text-slate-400 group-hover:text-[#363EE8] transition-colors">
-                                      <ChevronRight size={16} />
-                                    </td>
-                                  </tr>
-                                ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── Level 3: Applicants in selected position ──────────── */}
-                    {rankingNavDept && rankingNavPos && (() => {
-                      const posMap = rankingHistoricalData.get(rankingNavDept);
-                      const rows = (posMap?.get(rankingNavPos) ?? [])
-                        .slice()
-                        .sort((a, b) => (b.total_score ?? -1) - (a.total_score ?? -1));
-                      const fmtScore = (v: number | null | undefined) => v != null ? v.toFixed(2) : '—';
-                      return (
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3">
-                            <p className="!mb-0 text-sm font-bold uppercase tracking-wider text-slate-500">
-                              {rankingNavDept} — {rankingNavPos}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => openRankingReport(rankingNavPos)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-color)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 transition"
-                            >
-                              <FileText size={12} /> Generate Ranking Report
-                            </button>
-                          </div>
-                          <table className="w-full min-w-full">
-                            <thead>
-                              <tr className="border-b border-slate-200 bg-white">
-                                <th className="w-12 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Rank</th>
-                                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Applicant Name</th>
-                                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Interview Score</th>
-                                <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Exam Score</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.length === 0 ? (
-                                <tr>
-                                  <td colSpan={5} className="px-5 py-8 text-center text-sm text-slate-500">No applicants found.</td>
-                                </tr>
-                              ) : rows.map((row, idx) => {
-                                const rank = idx + 1;
-                                const medalBg = rank === 1 ? 'bg-yellow-400 text-yellow-900' : rank === 2 ? 'bg-slate-300 text-slate-800' : rank === 3 ? 'bg-amber-500 text-amber-900' : 'bg-slate-100 text-slate-600';
-                                const statusLc = row.status.toLowerCase();
-                                // §10: check "disqualified" before "qualified" (substring).
-                                const statusColor = statusLc.includes('disqualified') || statusLc.includes('rejected') ? 'bg-red-100 text-red-700' : statusLc.includes('hired') || statusLc.includes('qualified') ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600';
-                                return (
-                                  <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                                    <td className="px-4 py-3 text-center">
-                                      <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalBg}`}>{rank}</span>
-                                    </td>
-                                    <td className="px-5 py-3">
-                                      <p className="!mb-0 text-sm font-semibold text-slate-900">{row.full_name}</p>
-                                      <p className="!mb-0 text-xs text-slate-400">{row.email}</p>
-                                    </td>
-                                    <td className="px-5 py-3">
-                                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor}`}>{row.status}</span>
-                                    </td>
-                                    <td className="px-5 py-3 text-center text-sm font-bold text-[#040E6B]">{fmtScore(row.total_score)}</td>
-                                    <td className="px-5 py-3 text-center text-sm font-bold text-[#040E6B]">{fmtScore(row.qualification_score)}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })()}
-                  </section>
-                ) : (
-                  <section className="space-y-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-[var(--text-primary)]">Assessment Forms</h2>
-                      <p className="text-sm text-[var(--text-secondary)]">Select a job position to view and print assessment forms.</p>
-                    </div>
-
-                    {assessmentPositionCards.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-[var(--border-color)] bg-white p-6 text-center">
-                        <p className="!mb-0 text-base text-[var(--text-secondary)]">No assessment forms available for current job postings.</p>
-                      </div>
-                    ) : (
-                      (() => {
-                        // Group by department
-                        const byDept = new Map<string, typeof assessmentPositionCards>();
-                        assessmentPositionCards.forEach((card) => {
-                          const dept = card.department || 'Unassigned Department';
-                          if (!byDept.has(dept)) byDept.set(dept, []);
-                          byDept.get(dept)!.push(card);
-                        });
-                        return (
-                          <div className="space-y-4">
-                            {Array.from(byDept.entries()).map(([dept, cards]) => (
-                              <div key={dept} className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-white">
-                                {/* Department header */}
-                                <div className="border-b border-[var(--border-color)] bg-slate-50 px-5 py-3">
-                                  <p className="!mb-0 text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">{dept}</p>
-                                </div>
-                                <table className="w-full min-w-full">
-                                  <thead>
-                                    <tr className="border-b border-slate-100 bg-white">
-                                      <th className="px-5 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Position</th>
-                                      <th className="px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Total</th>
-                                      <th className="px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Hired</th>
-                                      <th className="px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Qualified</th>
-                                      <th className="px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Disqualified</th>
-                                      <th className="px-5 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">Report</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {cards.map((card) => (
-                                      <tr key={card.position} className="border-b border-slate-100 last:border-0">
-                                        <td className="px-5 py-3">
-                                          <p className="!mb-0 text-sm font-semibold text-[var(--text-primary)]">{card.position}</p>
-                                          {plantillaNameFor(card.itemNumber) && <p className="!mb-0 text-xs text-[var(--text-secondary)]">{plantillaNameFor(card.itemNumber)}</p>}
-                                        </td>
-                                        <td className="px-5 py-3 text-center text-sm font-bold text-slate-700">{card.totalApplicants}</td>
-                                        <td className="px-5 py-3 text-center">
-                                          <span className="rounded-md bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">{card.hiredCount}</span>
-                                        </td>
-                                        <td className="px-5 py-3 text-center">
-                                          <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">{card.qualifiedCount}</span>
-                                        </td>
-                                        <td className="px-5 py-3 text-center">
-                                          <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{card.disqualifiedCount}</span>
-                                        </td>
-                                        <td className="px-5 py-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => openAssessmentForms(card.position)}
-                                            className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition-colors"
-                                          >
-                                            <FileText size={12} /> View
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()
-                    )}
-                  </section>
+                {reportsView !== 'documents' && (
+                  <RspArchives records={archiveRecords} onPurge={purgeArchivedRecord} onOpenAssessment={openAssessmentForms} />
                 )}
 
                 {reportsView === 'documents' && (
@@ -4975,110 +4472,6 @@ export const RSPDashboard = () => {
                   </section>
                 )}
 
-                {reportsView !== 'documents' && (
-                  <section className="rounded-2xl border border-[var(--border-color)] bg-white p-6">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <h2 className="!mb-1 !text-lg font-semibold">Deleted Job Archives</h2>
-                        <p className="!text-sm text-[var(--text-secondary)]">Applicants and document references preserved when a job post is deleted</p>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-base text-[var(--text-secondary)]">{deletedJobReports.length} archive{deletedJobReports.length === 1 ? '' : 's'}</span>
-                    </div>
-
-                    {deletedJobReports.length === 0 ? (
-                      <p className="!mb-0 text-base text-[var(--text-secondary)]">No deleted job archives yet.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {deletedJobReports.map((report) => {
-                          const isExpanded = Boolean(expandedArchiveIds[report.id]);
-                          const docCount = report.applicants.reduce((total, applicant) => total + applicant.documents.length, 0);
-                          return (
-                            <div key={report.id} className="rounded-xl border border-[var(--border-color)] bg-slate-50 p-4">
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <p className="!mb-0 text-lg font-semibold text-[var(--text-primary)]">{report.job.title}</p>
-                                <span className="rounded-full bg-white px-2 py-1 text-sm text-[var(--text-secondary)]">Deleted {formatDate(report.deletedAt)}</span>
-                              </div>
-                              <p className="!mb-0 text-base text-[var(--text-secondary)]">
-                                Applicants archived: <span className="font-semibold text-[var(--text-primary)]">{report.applicants.length}</span>
-                                {' • '}
-                                Documents archived: <span className="font-semibold text-[var(--text-primary)]">{docCount}</span>
-                              </p>
-
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleArchiveDetails(report.id)}
-                                  className="rounded-lg border border-[var(--border-color)] bg-white px-3 py-2 text-sm font-semibold text-[var(--text-primary)]"
-                                >
-                                  {isExpanded ? 'Hide Details' : 'View Details'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteArchivePermanently(report.id, report.job.title)}
-                                  className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                                >
-                                  Permanently Delete
-                                </button>
-                              </div>
-
-                              {isExpanded && (
-                                <div className="mt-4 space-y-3 rounded-xl border border-[var(--border-color)] bg-white p-4">
-                                  <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                                    <p className="!mb-0 text-sm text-[var(--text-secondary)]">Job Code: <span className="font-semibold text-[var(--text-primary)]">{report.job.jobCode || '--'}</span></p>
-                                    <p className="!mb-0 text-sm text-[var(--text-secondary)]">Department: <span className="font-semibold text-[var(--text-primary)]">{report.job.department || '--'}</span></p>
-                                    <p className="!mb-0 text-sm text-[var(--text-secondary)]">Deleted By: <span className="font-semibold text-[var(--text-primary)]">{report.deletedBy || '--'}</span></p>
-                                    <p className="!mb-0 text-sm text-[var(--text-secondary)]">Deleted At: <span className="font-semibold text-[var(--text-primary)]">{formatDate(report.deletedAt)}</span></p>
-                                  </div>
-
-                                  <div className="space-y-2">
-                                    {report.applicants.length === 0 ? (
-                                      <p className="!mb-0 text-sm text-[var(--text-secondary)]">No applicants archived for this job post.</p>
-                                    ) : (
-                                      report.applicants.map((applicant) => (
-                                        <div key={applicant.id} className="rounded-lg border border-[var(--border-color)] bg-slate-50 p-3">
-                                          <p className="!mb-1 text-base font-semibold text-[var(--text-primary)]">
-                                            {applicant.personalInfo.firstName} {applicant.personalInfo.lastName}
-                                          </p>
-                                          <p className="!mb-1 text-sm text-[var(--text-secondary)]">Email: {applicant.personalInfo.email || '--'}</p>
-                                          <p className="!mb-2 text-sm text-[var(--text-secondary)]">Status: {applicant.status}</p>
-                                          <div className="space-y-1">
-                                            {applicant.documents.length === 0 ? (
-                                              <p className="!mb-0 text-sm text-[var(--text-secondary)]">No documents archived.</p>
-                                            ) : (
-                                              applicant.documents.map((doc, index) => (
-                                                <div key={`${applicant.id}-${doc.type}-${index}`} className="flex flex-wrap items-center gap-2 text-sm">
-                                                  <span className="font-semibold text-[var(--text-primary)]">{doc.type}</span>
-                                                  {doc.url && doc.url !== '#' && /^(https?:|data:|blob:)/i.test(doc.url) ? (
-                                                    <a
-                                                      href={doc.url}
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      className="text-blue-700 underline"
-                                                    >
-                                                      Open File
-                                                    </a>
-                                                  ) : doc.url && doc.url !== '#' ? (
-                                                    <span className="text-[var(--text-secondary)]">Stored path: {doc.url}</span>
-                                                  ) : (
-                                                    <span className="text-[var(--text-secondary)]">No file URL</span>
-                                                  )}
-                                                </div>
-                                              ))
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-                )}
               </>
             )}
 

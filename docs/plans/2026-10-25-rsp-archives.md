@@ -12,7 +12,7 @@ RSP → Archives shows everything that has ended, in one place, without the wall
 
 - **Employees.** Former employees (Resigned, Terminated, Separated) and previous positions (the post someone held before a promotion or transfer).
 - **Applicants.** Disqualified (shown as soon as they are disqualified), Not Selected, and Withdrawn – Hired Elsewhere.
-- **Job posts.** Closed posts, and deleted posts whose applicants were kept.
+- **Job posts.** Deleted posts whose applicants were kept. (Revised 2026-10-25: closed posts were dropped; they stay on Job Posts.)
 - **Evaluation records.** Ranking reports and assessment forms per position.
 
 Mockup: `docs/mockups/2026-10-25-rsp-archives.html` (layout B, quiet tabs; the "Outcome" column is named "Status"). It supersedes the five archive cards, the separate Deleted Job Archives card and the Not Selected list on that page.
@@ -35,7 +35,6 @@ Mockup: `docs/mockups/2026-10-25-rsp-archives.html` (layout B, quiet tabs; the "
 
 **RSPDashboard wiring.** The `reports` section renders `<RspArchives>` instead of the overview cards and the closed, temp, notSelected, ranking and assessment sub-views. It passes the records the dashboard already holds:
 
-- closed jobs from `jobs`
 - `deletedJobReports`, with purge through `handleDeleteArchivePermanently`
 - ranking positions from `rankingHistoricalData`, opening the existing ranking report through `openRankingReport`
 - assessment positions from `assessmentPositionCards`, opening the existing forms modal through `openAssessmentForms`

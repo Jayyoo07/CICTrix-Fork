@@ -17,6 +17,12 @@ Everything in the plan's steps shipped:
 - **Ranking records are read-only.** The drawer lists the ranked applicants instead of opening the hiring ranking modal. That modal closes itself for positions outside the active ranking list.
 - **Export is CSV and Print.** There is no PDF option.
 
+## Follow-up (same day)
+
+- **Job posts** now lists deleted posts only. Closed posts are dropped from Archives and stay on Job Posts.
+- **Search** matches name, employee ID / REF number and position, as the placeholder says. It no longer matches department, which had made "engineer" return every record in the City Engineer's office. Department filtering stays in the Filters popover.
+- **Checks:** `npx tsc --noEmit`, `npx vitest run` and `npm run build`.
+
 ## Checks run
 
 - `npx tsc --noEmit`: clean.

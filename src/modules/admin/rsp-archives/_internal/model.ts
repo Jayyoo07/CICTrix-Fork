@@ -69,7 +69,7 @@ export const GROUPS: GroupDef[] = [
   },
   {
     id: 'jobs', label: 'Job posts', who: 'Position', where: 'Department',
-    types: [{ value: 'Closed' }, { value: 'Deleted' }],
+    types: [{ value: 'Deleted' }],
   },
   {
     id: 'evaluations', label: 'Evaluation records', who: 'Position', where: 'Department',
@@ -100,10 +100,15 @@ export interface ArchiveFilters {
 
 export const EMPTY_FILTERS: ArchiveFilters = { query: '', type: '', department: '', from: '', to: '', sort: 'new' };
 
+/**
+ * The search box promises "Name, employee ID or REF number", so it matches
+ * those plus the position. Department is left to the Filters popover: matching
+ * it here made "engineer" return every record in the City Engineer's office.
+ */
 export const matchesQuery = (r: ArchiveRecord, query: string): boolean => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [r.name, r.ref, r.position, r.department].some((v) => v.toLowerCase().includes(q));
+  return [r.name, r.ref, r.position].some((v) => v.toLowerCase().includes(q));
 };
 
 /** yyyy-mm-dd of an ISO value, for comparing with <input type="date">. */

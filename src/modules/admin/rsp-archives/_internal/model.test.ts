@@ -22,9 +22,10 @@ describe('filterRecords', () => {
     expect(filterRecords(records, 'applicants', EMPTY_FILTERS).map((r) => r.key)).toEqual(['a', 'b']);
   });
 
-  it('matches the search on name, ref, position or department', () => {
+  it('matches the search on name, ref or position, not department', () => {
     expect(filterRecords(records, 'applicants', { ...EMPTY_FILTERS, query: '0098' }).map((r) => r.key)).toEqual(['b']);
     expect(filterRecords(records, 'applicants', { ...EMPTY_FILTERS, query: 'aide' }).map((r) => r.key)).toEqual(['a', 'b']);
+    expect(filterRecords(records, 'applicants', { ...EMPTY_FILTERS, query: 'hrmo' })).toEqual([]);
   });
 
   it('filters by type, department and an inclusive date range', () => {

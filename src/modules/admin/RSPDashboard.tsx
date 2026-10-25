@@ -2949,12 +2949,7 @@ export const RSPDashboard = () => {
   // are loaded by the module itself (docs/plans/2026-10-25-rsp-archives.md).
   const archiveRecords = useMemo<ArchiveRecord[]>(() => {
     const out: ArchiveRecord[] = [];
-    jobs.filter((job) => job.status === 'Closed').forEach((job) => out.push({
-      key: `job:${job.id}`, group: 'jobs', type: 'Closed', name: job.title,
-      ref: plantillaNameFor(job.item_number) || job.item_number || '',
-      position: job.title, department: job.department || '—', date: job.created_at,
-      facts: [{ label: 'Applicants', value: String(job.applicant_count ?? 0) }],
-    }));
+    // Job posts holds deleted posts only; closed posts stay on Job Posts.
     deletedJobReports.forEach((report) => {
       const documents = report.applicants.reduce((total, applicant) => total + applicant.documents.length, 0);
       out.push({
@@ -2990,7 +2985,7 @@ export const RSPDashboard = () => {
       });
     }));
     return out;
-  }, [jobs, deletedJobReports, rankingHistoricalData, plantillaNameFor]);
+  }, [deletedJobReports, rankingHistoricalData]);
 
   const openRankingReport = (position: string) => {
     setActiveRankingPosition(position);

@@ -1,5 +1,7 @@
-import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { useState } from 'react';
+import { ActionFeedback } from '../../components/action-feedback';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import abyanLogo from '../../assets/abyan-logo.png';
 import iloiloCitySeal from '../../assets/iloilo-city-seal.png';
 import { readEmployeeSession } from '../../lib/employeeSession';
@@ -9,6 +11,8 @@ interface EmployeeLoginPageProps {
   isLoading?: boolean;
 }
 
+type LoginFailure = { message: string; nextStep: string };
+
 export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
   onLogin,
   isLoading = false,
@@ -16,19 +20,25 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<LoginFailure | null>(null);
   const [loading, setLoading] = useState(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFailure(null);
 
     if (!username.trim()) {
-      setError('Employee ID or username is required');
+      setFailure({
+        message: 'Enter your employee ID or username.',
+        nextStep: 'It is on your onboarding email. Enter it and try again.',
+      });
       return;
     }
 
     if (!password) {
-      setError('Password is required');
+      setFailure({
+        message: 'Enter your password.',
+        nextStep: 'Use the temporary password from your onboarding email, then try again.',
+      });
       return;
     }
 
@@ -39,9 +49,18 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
       if (!session) {
         setLoading(false);
       }
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.message || 'Invalid credentials. Please try again.');
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err ?? '');
+      if (/invalid username or password/i.test(raw)) {
+        console.error('Login error:', err);
+        setFailure({
+          message: "That username and password don't match an account.",
+          nextStep: "Check them and try again. If you were just onboarded, use the temporary password from your welcome email.",
+        });
+      } else {
+        const described = describeActionFailure('sign you in', err);
+        setFailure({ message: described.message, nextStep: described.nextStep });
+      }
       setLoading(false);
     }
   };
@@ -155,10 +174,13 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {error}
-                </div>
+              {failure && (
+                <ActionFeedback
+                  title="We couldn't sign you in."
+                  message={failure.message}
+                  nextStep={failure.nextStep}
+                  onDismiss={() => setFailure(null)}
+                />
               )}
 
               {/* Username */}
@@ -176,7 +198,7 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
                     type="text"
                     placeholder="Enter your username"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => { setUsername(e.target.value); setFailure(null); }}
                     disabled={loading || isLoading}
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
                   />
@@ -198,7 +220,7 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); setFailure(null); }}
                     disabled={loading || isLoading}
                     autoComplete="current-password"
                     className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
@@ -219,12 +241,15 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
               <button
                 type="submit"
                 disabled={loading || isLoading}
-                className="mt-2 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-busy={loading || isLoading || undefined}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ backgroundColor: '#363EE8' }}
                 onMouseEnter={(e) => { if (!loading && !isLoading) e.currentTarget.style.backgroundColor = '#2830c5'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#363EE8'; }}
               >
-                {loading || isLoading ? 'Signing in…' : 'Sign In'}
+                {loading || isLoading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sign In</>
+                  : 'Sign In'}
               </button>
             </form>
 

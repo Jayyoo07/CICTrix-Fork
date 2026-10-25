@@ -34,8 +34,10 @@ const deriveStatus = (sessionStatus: string | null, startDate: string): MyTraini
   return new Date(startDate).getTime() > Date.now() ? 'Upcoming' : 'Completed';
 };
 
-export async function listMyTrainings(employeeId: string): Promise<MyTraining[]> {
-  if (!employeeId) return [];
+export type MyTrainingsResult = { ok: boolean; data: MyTraining[]; error?: string };
+
+export async function listMyTrainings(employeeId: string): Promise<MyTrainingsResult> {
+  if (!employeeId) return { ok: true, data: [] };
   const { data, error } = await supabase
     .from('training_enrollments')
     .select(
@@ -45,10 +47,10 @@ export async function listMyTrainings(employeeId: string): Promise<MyTraining[]>
 
   if (error) {
     console.error('Error loading my trainings:', error);
-    return [];
+    return { ok: false, data: [], error: error.message };
   }
 
-  return (data ?? [])
+  const rows = (data ?? [])
     .filter((e: any) => isActive(e) && e.training_sessions)
     .map((e: any): MyTraining => {
       const s = e.training_sessions;
@@ -67,4 +69,6 @@ export async function listMyTrainings(employeeId: string): Promise<MyTraining[]>
       };
     })
     .sort((a: MyTraining, b: MyTraining) => b.startDate.localeCompare(a.startDate));
+
+  return { ok: true, data: rows };
 }

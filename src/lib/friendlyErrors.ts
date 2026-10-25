@@ -95,3 +95,91 @@ export const friendlyError = (
  * inference layer — useful when the call site already knows the context.
  */
 export const friendlyMessage = (context: ErrorContext): string => SPEC_MESSAGES[context];
+
+/** What a failed action says in the UI: what happened, did it complete, what next. */
+export interface ActionFailure {
+  title: string;
+  message: string;
+  nextStep: string;
+  context: ErrorContext;
+}
+
+/**
+ * Completion statement per cause. A returned API error means the write did not
+ * land. A network failure is ambiguous: the request may have reached the
+ * server, so the copy says we could not confirm instead of claiming nothing
+ * happened.
+ */
+const FAILURE_MESSAGES: Record<ErrorContext, string> = {
+  server: "The server couldn't accept the request, so nothing was saved.",
+  upload: "The file didn't finish uploading, so it isn't attached.",
+  validation: 'Some required details were missing or invalid, so nothing was saved.',
+  unauthorized: "You don't have permission for this, so nothing was saved.",
+  network: "The request didn't reach the server, so we couldn't confirm whether it completed.",
+  'not-found': 'The record could not be found, so nothing was changed.',
+  generic: "The action didn't complete, and nothing was saved.",
+};
+
+const NEXT_STEPS: Record<ErrorContext, string> = {
+  server: 'Try again in a moment. If it keeps failing, contact your administrator.',
+  upload: 'Check your connection, then choose the file again.',
+  validation: 'Check the highlighted fields, then try again.',
+  unauthorized: 'Sign in again. If you still see this, ask your administrator for access.',
+  network: 'Check your connection, then check the record before trying again.',
+  'not-found': 'Refresh the page to load the latest records, then try again.',
+  generic: 'Try again. If it keeps happening, contact your administrator.',
+};
+
+/** A failed read reports that no data loaded, not that nothing was saved. */
+const LOAD_MESSAGES: Record<ErrorContext, string> = {
+  server: "The server couldn't return this data.",
+  upload: "The file couldn't be loaded.",
+  validation: 'The request was invalid, so nothing was loaded.',
+  unauthorized: "You don't have permission to view this data.",
+  network: "The request didn't reach the server, so no data was loaded.",
+  'not-found': 'This record could not be found.',
+  generic: "This data couldn't be loaded.",
+};
+
+const LOAD_NEXT_STEPS: Record<ErrorContext, string> = {
+  server: 'Try again in a moment. If it keeps failing, contact your administrator.',
+  upload: 'Choose the file again.',
+  validation: 'Refresh the page and try again.',
+  unauthorized: 'Sign in again. If you still see this, ask your administrator for access.',
+  network: 'Check your connection, then try again.',
+  'not-found': 'Go back and choose another record, or refresh the page.',
+  generic: 'Try again. If it keeps happening, contact your administrator.',
+};
+
+export interface DescribeFailureOptions {
+  context?: ErrorContext;
+  /** `load` is for a failed read; `action` (default) is for a failed write. */
+  mode?: 'action' | 'load';
+}
+
+/**
+ * Build the three parts of a failed action or load. `action` is the verb phrase
+ * shown to the user, e.g. "save the training" or "load this data".
+ * The raw error is logged for admins and never returned.
+ */
+export const describeActionFailure = (
+  action: string,
+  error: unknown,
+  options?: DescribeFailureOptions,
+): ActionFailure => {
+  const context: ErrorContext = options?.context ?? inferContext(error);
+  const mode = options?.mode ?? 'action';
+  const verb = action.trim().replace(/[.!]+$/, '');
+  const title = verb ? `We couldn't ${verb}.` : "We couldn't complete that action.";
+
+  if (typeof console !== 'undefined') {
+    console.error(`[actionFailure:${context}] ${verb || 'action'}`, error);
+  }
+
+  return {
+    title,
+    message: (mode === 'load' ? LOAD_MESSAGES : FAILURE_MESSAGES)[context],
+    nextStep: (mode === 'load' ? LOAD_NEXT_STEPS : NEXT_STEPS)[context],
+    context,
+  };
+};

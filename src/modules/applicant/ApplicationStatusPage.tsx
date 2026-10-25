@@ -1,6 +1,8 @@
-import { AlertCircle, CheckCircle2, CircleX, FileText, Lock, Mail, RefreshCw, Search, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, CircleX, FileText, Loader2, Lock, Mail, RefreshCw, Search, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { ActionFeedback, useFeedback } from '../../components/action-feedback';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { ATTACHMENTS_BUCKET, supabase } from '../../lib/supabase';
 import { getApplicants, saveApplicants } from '../../lib/recruitmentData';
 import {
@@ -340,7 +342,8 @@ export const ApplicationStatusPage = () => {
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [docReviews, setDocReviews] = useState<Record<string, DocReview>>({});
   const [searched, setSearched] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ message: string; nextStep: string } | null>(null);
+  const { success: notifySuccess } = useFeedback();
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   /**
    * Per-plantilla outcome. One application can be in the running for several
@@ -523,11 +526,14 @@ export const ApplicationStatusPage = () => {
   const runSearch = async (rawQuery: string) => {
     const trimmed = rawQuery.trim();
     if (!trimmed) {
-      setError('Please enter your Reference No. or email.');
+      setError({
+        message: 'Enter your Reference No. or email.',
+        nextStep: 'Type the code from your submission, or the email address you applied with.',
+      });
       return;
     }
 
-    setError('');
+    setError(null);
     setLoading(true);
     setSearched(false);
     setRecord(null);
@@ -585,7 +591,8 @@ export const ApplicationStatusPage = () => {
       const allReviews = loadDocReviews();
       setDocReviews(allReviews);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to look up your application. Please try again.');
+      const described = describeActionFailure('look up your application', err);
+      setError({ message: described.message, nextStep: described.nextStep });
     } finally {
       setLoading(false);
       setSearched(true);
@@ -692,10 +699,11 @@ export const ApplicationStatusPage = () => {
         setSubmittedFileNames((prev) => ({ ...prev, [doc.document_type!]: file.name }));
       }
       setUploadSuccess(key);
+      notifySuccess('Document uploaded', 'RSP will review the new file.');
       setTimeout(() => setUploadSuccess(null), 5000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-      setUploadErrors((prev) => ({ ...prev, [key]: msg }));
+      const described = describeActionFailure('upload this document', err);
+      setUploadErrors((prev) => ({ ...prev, [key]: described.message }));
     } finally {
       setUploadingKey(null);
     }
@@ -853,7 +861,7 @@ export const ApplicationStatusPage = () => {
             <input
               type="text"
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setError(''); }}
+              onChange={(e) => { setQuery(e.target.value); setError(null); }}
               placeholder="e.g., ABYAN-123-456 or your.email@example.com"
               className="flex-1 rounded-xl px-4 py-3 text-sm outline-none ring-1 ring-transparent focus:ring-2"
               style={{ backgroundColor: '#C8D1FF', color: '#040E6B' }}
@@ -861,20 +869,26 @@ export const ApplicationStatusPage = () => {
             <button
               type="submit"
               disabled={loading}
+              aria-busy={loading || undefined}
               className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
               style={{ backgroundColor: '#363EE8' }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#252AB5'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#363EE8'}
             >
-              <Search size={16} />
-              {loading ? 'Searching…' : 'Search'}
+              {loading
+                ? <><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Search</>
+                : <><Search size={16} /> Search</>}
             </button>
           </form>
 
           {error && (
-            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-              {error}
-            </div>
+            <ActionFeedback
+              className="mt-4"
+              title="We couldn't look up your application."
+              message={error.message}
+              nextStep={error.nextStep}
+              onDismiss={() => setError(null)}
+            />
           )}
         </section>
 
@@ -1450,9 +1464,13 @@ export const ApplicationStatusPage = () => {
                             )}
 
                             {uploadError && (
-                              <p className="text-xs font-medium text-red-600">
-                                Upload failed: {uploadError} — please try again.
-                              </p>
+                              <ActionFeedback
+                                className="mt-2"
+                                title="We couldn't upload this document."
+                                message={uploadError}
+                                nextStep="Choose the file again, then confirm the upload."
+                                focusOnMount={false}
+                              />
                             )}
                           </div>
                         )}

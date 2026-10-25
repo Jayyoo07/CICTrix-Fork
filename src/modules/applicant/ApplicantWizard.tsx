@@ -32,6 +32,7 @@ import {
 } from '../../lib/employeePortalData';
 import { syncApplicantSubmissionToRecruitment, getAuthoritativeJobPostings, loadJobPostings } from '../../lib/recruitmentData';
 import { fetchEmployeeApplicationProfile } from '../../lib/api/employeeApplicationProfile';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { linkApplicationToSlots } from '../../lib/plantillaSlots';
 import { ATTACHMENTS_BUCKET, supabase } from '../../lib/supabase';
 import '../../styles/wizard.css';
@@ -1100,7 +1101,7 @@ export const ApplicantWizard: React.FC = () => {
         console.error('Submission error:', error);
         results[key] = {
           status: 'failed',
-          error: error instanceof Error ? error.message : 'An error occurred while submitting this application. Please try again.',
+          error: describeActionFailure('submit this application', error).message,
         };
       }
       setOutcomes((prev) => ({ ...prev, [key]: results[key] }));
@@ -1765,7 +1766,7 @@ export const ApplicantWizard: React.FC = () => {
                       {failedList.length === 1 ? '1 application was not submitted' : `${failedList.length} applications were not submitted`}
                     </p>
                     <div className="af-alert-body">
-                      The others went through. Retry only the ones below:
+                      The others went through. Your details are still here. Fix the cause below, then retry only the failed ones:
                       <ul>
                         {failedList.map((entry) => (
                           <li key={entry.key}><strong>{labelFor(entry.key)}:</strong> {entry.error}</li>

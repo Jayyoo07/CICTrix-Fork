@@ -75,9 +75,11 @@ const mean = (nums: number[]): number | null => {
   return scored.length ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 100) / 100 : null;
 };
 
+export type ArchiveResult = { ok: boolean; data: ArchiveSemester[]; error?: string };
+
 /** Every archived semester for one employee, most recent first. */
-export async function getEmployeeArchive(employeeNum: string): Promise<ArchiveSemester[]> {
-  if (!employeeNum) return [];
+export async function getEmployeeArchive(employeeNum: string): Promise<ArchiveResult> {
+  if (!employeeNum) return { ok: true, data: [] };
   const { data, error } = await supabase
     .from('ipcr_performance')
     .select('id, ipcr_id, ipcr_row_id, rating_period, position, function_type, target_text, accomplishment_text, q_rating, e_rating, t_rating, ave_rating, mapped_competency_standard')
@@ -86,7 +88,7 @@ export async function getEmployeeArchive(employeeNum: string): Promise<ArchiveSe
 
   if (error) {
     console.error('Error loading IPCR archive:', error);
-    return [];
+    return { ok: false, data: [], error: error.message };
   }
 
   const byPeriod = new Map<string, ArchiveSemester>();
@@ -112,13 +114,15 @@ export async function getEmployeeArchive(employeeNum: string): Promise<ArchiveSe
   }
 
   const order: Record<string, number> = { CORE: 0, STRATEGIC: 1, SUPPORT: 2 };
-  return [...byPeriod.values()]
+  const semesters = [...byPeriod.values()]
     .map((sem) => {
       sem.rows.sort((a, b) => (order[a.functionType] ?? 9) - (order[b.functionType] ?? 9));
       sem.overall = mean(sem.rows.map((r) => r.average).filter((n): n is number => n != null));
       return sem;
     })
     .sort((a, b) => periodSortKey(b.period) - periodSortKey(a.period));
+
+  return { ok: true, data: semesters };
 }
 
 /** Everyone who has archived IPCR history, for the PM Admin archive browser. */

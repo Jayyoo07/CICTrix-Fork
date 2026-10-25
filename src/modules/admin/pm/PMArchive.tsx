@@ -48,8 +48,8 @@ export const PMArchive = () => {
     setSelected(emp);
     setSemesters([]);
     setSemLoading(true);
-    const rows = await getEmployeeArchive(emp.employeeNum);
-    setSemesters(rows);
+    const result = await getEmployeeArchive(emp.employeeNum);
+    setSemesters(result.data);
     setSemLoading(false);
   };
 

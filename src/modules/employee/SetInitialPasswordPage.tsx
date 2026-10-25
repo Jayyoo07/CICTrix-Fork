@@ -1,5 +1,6 @@
-import { Eye, EyeOff, KeyRound, Lock } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Loader2, Lock } from 'lucide-react';
 import { useState } from 'react';
+import { ActionFeedback } from '../../components/action-feedback';
 import { changeEmployeePortalPassword } from '../../lib/employeePortalData';
 
 interface SetInitialPasswordPageProps {
@@ -7,6 +8,8 @@ interface SetInitialPasswordPageProps {
   fullName: string;
   onDone: () => void;
 }
+
+type PasswordFailure = { message: string; nextStep: string };
 
 export const SetInitialPasswordPage: React.FC<SetInitialPasswordPageProps> = ({
   username,
@@ -19,27 +22,39 @@ export const SetInitialPasswordPage: React.FC<SetInitialPasswordPageProps> = ({
   const [showTemp, setShowTemp] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<PasswordFailure | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setFailure(null);
 
     if (!tempPassword) {
-      setError('Enter the temporary password from your onboarding email.');
+      setFailure({
+        message: 'Enter the temporary password from your onboarding email.',
+        nextStep: 'Find it in that email, then paste it here.',
+      });
       return;
     }
     if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters.');
+      setFailure({
+        message: 'Your new password is too short.',
+        nextStep: 'Use at least 8 characters, then try again.',
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('New password and confirmation do not match.');
+      setFailure({
+        message: "The two new passwords don't match.",
+        nextStep: 'Retype both and try again.',
+      });
       return;
     }
     if (newPassword === tempPassword) {
-      setError('New password must differ from the temporary password.');
+      setFailure({
+        message: 'Your new password is the same as the temporary one.',
+        nextStep: 'Choose a different password, then try again.',
+      });
       return;
     }
 
@@ -48,7 +63,10 @@ export const SetInitialPasswordPage: React.FC<SetInitialPasswordPageProps> = ({
     setSaving(false);
 
     if (!result.ok) {
-      setError('error' in result ? result.error : 'Could not update password.');
+      setFailure({
+        message: 'error' in result ? result.error : 'We could not update your password.',
+        nextStep: 'Check the temporary password and try again. If it keeps failing, contact your administrator.',
+      });
       return;
     }
 
@@ -95,18 +113,24 @@ export const SetInitialPasswordPage: React.FC<SetInitialPasswordPageProps> = ({
             onToggle={() => setShowConfirm((v) => !v)}
           />
 
-          {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+          {failure && (
+            <ActionFeedback
+              title="We couldn't set your password."
+              message={failure.message}
+              nextStep={failure.nextStep}
+              onDismiss={() => setFailure(null)}
+            />
           )}
 
           <button
             type="submit"
             disabled={saving}
-            className="w-full rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-busy={saving || undefined}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving…' : 'Set Password and Continue'}
+            {saving
+              ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Set Password and Continue</>
+              : 'Set Password and Continue'}
           </button>
         </form>
       </div>

@@ -10,6 +10,7 @@ import { isPositionAssignedToInterviewer, resolveAssignedPositionsForInterviewer
 import { mockDatabase } from '../../lib/mockDatabase';
 import { getApplicants as getRecruitmentApplicants, saveApplicants as saveRecruitmentApplicants } from '../../lib/recruitmentData';
 import { isMockModeEnabled, supabase } from '../../lib/supabase';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { usePlantillaNames } from '../../hooks/usePlantillaNames';
 
 interface Applicant {
@@ -334,8 +335,8 @@ export function EvaluationForm() {
 
       setError(null);
     } catch (err) {
-      console.error('Error fetching applicant:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load applicant data');
+      const described = describeActionFailure('load this applicant', err);
+      setError(`${described.message} ${described.nextStep}`);
     } finally {
       setLoading(false);
     }
@@ -504,10 +505,8 @@ export function EvaluationForm() {
       //   navigate('/interviewer/dashboard');
       // }, 1500);
     } catch (err) {
-      console.error('Error submitting evaluation:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit evaluation';
-      console.error('Final error message:', errorMessage);
-      setError(errorMessage);
+      const described = describeActionFailure('submit this evaluation', err);
+      setError(`${described.message} ${described.nextStep}`);
     } finally {
       setSubmitting(false);
     }
@@ -518,7 +517,7 @@ export function EvaluationForm() {
       <div className="evaluation-container">
         <div className="loading-state">
           <div className="spinner"></div>
-          <p>Loading applicant data (ID: {id})...</p>
+          <p>Loading applicant data...</p>
         </div>
       </div>
     );
@@ -810,8 +809,8 @@ export function EvaluationForm() {
                   </div>
 
                   {error && (
-                    <div className="error-message">
-                      ❌ {error}
+                    <div className="error-message" role="alert">
+                      {error}
                     </div>
                   )}
 
@@ -819,8 +818,8 @@ export function EvaluationForm() {
                     <Button type="button" variant="secondary" onClick={goBack}>
                       Save Draft
                     </Button>
-                    <Button type="submit" disabled={submitting} className="submit-btn">
-                      {submitting ? 'Submitting...' : 'Submit Final Evaluation'}
+                    <Button type="submit" loading={submitting} className="submit-btn">
+                      Submit Final Evaluation
                     </Button>
                   </div>
                 </form>
@@ -1113,8 +1112,8 @@ export function EvaluationForm() {
                 </div>
 
                 {error && (
-                  <div className="error-message">
-                    ❌ {error}
+                  <div className="error-message" role="alert">
+                    {error}
                   </div>
                 )}
 
@@ -1122,8 +1121,8 @@ export function EvaluationForm() {
                   <Button type="button" variant="secondary" onClick={goBack}>
                     Save Draft
                   </Button>
-                  <Button type="submit" disabled={submitting} className="submit-btn">
-                    {submitting ? 'Submitting...' : 'Submit Final Evaluation'}
+                  <Button type="submit" loading={submitting} className="submit-btn">
+                    Submit Final Evaluation
                   </Button>
                 </div>
               </form>

@@ -1,0 +1,174 @@
+/* Toast and inline feedback, DESIGN_IDENTITY.md §9.9 and §3.6.
+   The toast renders above the app, outside `.abyan-ds` / `.rsp-ds`, so each
+   status colour has the guide's value as a fallback. Inside a portal scope the
+   tokens win. */
+
+.afb-viewport {
+  position: fixed;
+  /* Clear the 64px portal top bar (§8.2) so a persistent error never sits over
+     the Logout control. Public pages keep the same top-right anchor. */
+  top: 76px;
+  right: 16px;
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.afb-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--neutral-200, #e2e8f0);
+  border-left: 4px solid var(--neutral-400, #94a3b8);
+  border-radius: 12px;
+  box-shadow: var(--shadow-3, 0 12px 32px rgba(16, 30, 41, 0.16));
+  animation: afb-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.afb-toast--success { border-left-color: var(--success-500, #16a85a); }
+.afb-toast--info    { border-left-color: var(--info-500, #363ee8); }
+.afb-toast--warning { border-left-color: var(--warning-500, #e8821a); }
+.afb-toast--error   { border-left-color: var(--error-500, #e05252); }
+
+.afb-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.afb-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.afb-toast--success .afb-icon { color: var(--success-500, #16a85a); }
+.afb-toast--info .afb-icon    { color: var(--info-500, #363ee8); }
+.afb-toast--warning .afb-icon { color: var(--warning-500, #e8821a); }
+.afb-toast--error .afb-icon   { color: var(--error-500, #e05252); }
+
+.afb-title {
+  margin: 0;
+  color: var(--color-primary-900, #040e6b);
+  font: 600 14px/20px var(--font-sans, 'Poppins', system-ui, sans-serif);
+}
+
+.afb-message {
+  margin: 4px 0 0;
+  color: var(--neutral-600, #515f69);
+  font: 400 13px/18px var(--font-sans, 'Poppins', system-ui, sans-serif);
+}
+
+.afb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.afb-action {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--color-primary, #363ee8);
+  font: 600 13px/18px var(--font-sans, 'Poppins', system-ui, sans-serif);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.afb-action:hover { color: var(--color-primary-700, #191fa8); }
+.afb-action:focus-visible,
+.afb-close:focus-visible {
+  outline: 2px solid var(--color-primary, #363ee8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.afb-close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -2px -4px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neutral-600, #515f69);
+  cursor: pointer;
+}
+
+.afb-close:hover { background: var(--bg-page, #f1f5f9); }
+
+/* Inline alert (§9.9): 100 background, 500 left edge, title and body. */
+.afb-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-left: 4px solid var(--neutral-400, #94a3b8);
+  border-radius: 12px;
+  background: var(--bg-page, #f1f5f9);
+}
+
+.afb-inline--success { background: var(--success-100, #dcfce7); border-left-color: var(--success-500, #16a85a); }
+.afb-inline--info    { background: var(--info-100, #e0e5ff);    border-left-color: var(--info-500, #363ee8); }
+.afb-inline--warning { background: var(--warning-100, #fce8c8); border-left-color: var(--warning-500, #e8821a); }
+.afb-inline--error   { background: var(--error-100, #fde2e2);   border-left-color: var(--error-500, #e05252); }
+
+.afb-inline--success > .afb-icon { color: var(--success-500, #16a85a); }
+.afb-inline--info > .afb-icon    { color: var(--info-500, #363ee8); }
+.afb-inline--warning > .afb-icon { color: var(--warning-500, #e8821a); }
+.afb-inline--error > .afb-icon   { color: var(--error-500, #e05252); }
+
+.afb-inline-title {
+  margin: 0;
+  color: var(--color-primary-900, #040e6b);
+  font: 600 14px/20px var(--font-sans, 'Poppins', system-ui, sans-serif);
+}
+
+.afb-inline-message {
+  margin: 4px 0 0;
+  color: var(--neutral-800, #28343d);
+  font: 400 14px/20px var(--font-sans, 'Poppins', system-ui, sans-serif);
+}
+
+.afb-next {
+  margin: 8px 0 0;
+  color: var(--neutral-800, #28343d);
+  font: 400 13px/18px var(--font-sans, 'Poppins', system-ui, sans-serif);
+}
+
+.afb-next strong {
+  font-weight: 600;
+  color: var(--color-primary-900, #040e6b);
+}
+
+.afb-inline:focus { outline: none; }
+.afb-inline:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary, #363ee8);
+}
+
+@keyframes afb-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  .afb-viewport {
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .afb-toast { animation: none; }
+}

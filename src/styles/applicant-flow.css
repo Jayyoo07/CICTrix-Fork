@@ -284,16 +284,22 @@
 .af .btn { min-width: 0; }
 .af .btn-block { width: 100%; }
 .af .btn[aria-busy='true'] { cursor: progress; }
-/* Loading (§9.1): the label is replaced by a 16px spinner, width is kept. */
-.af .btn.af-loading { position: relative; color: transparent !important; }
-.af .btn.af-loading > * { visibility: hidden; }
-.af .btn.af-loading::after {
-  content: ''; position: absolute; top: 50%; left: 50%;
-  width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
-  border: 2px solid var(--color-white); border-right-color: transparent;
+/* Loading (§9.1): the label stays, a 16px spinner joins it, width is kept. */
+.af .btn.af-loading {
+  opacity: 0.7;
+  cursor: progress;
+  pointer-events: none;
+}
+.af .btn.af-loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
   animation: af-spin .75s linear infinite;
 }
-.af .btn-secondary.af-loading::after { border-color: var(--color-primary); border-right-color: transparent; }
 /* Destructive (§9.1) */
 .af .af-btn-destructive { background: var(--error-500); color: var(--color-white); }
 .af .af-btn-destructive:hover { background: var(--error-700); }

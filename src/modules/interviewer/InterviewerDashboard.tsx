@@ -3,6 +3,7 @@ import {
   Briefcase,
   Building2,
   CircleAlert,
+  Loader2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -10,7 +11,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBackClosesView } from '../../hooks/useHistoryBack';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
+import { ActionFeedback, useFeedback } from '../../components/action-feedback';
 import { Dialog } from '../../components/Dialog';
+import { describeActionFailure } from '../../lib/friendlyErrors';
 import { POSITION_TO_DEPARTMENT_MAP } from '../../constants/positions';
 import { isPositionAssignedToInterviewer, resolveAssignedPositionsForInterviewer } from '../../lib/interviewerAccess';
 import { storeApplicantTypeForEval } from '../../lib/interviewerEvalNavigation';
@@ -258,6 +261,8 @@ export function InterviewerDashboard({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [applicantToDelete, setApplicantToDelete] = useState<Applicant | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<{ message: string; nextStep: string } | null>(null);
+  const { success: notifySuccess } = useFeedback();
 
   useEffect(() => {
     const syncJobs = () => {
@@ -465,9 +470,11 @@ export function InterviewerDashboard({
 
   const handleDeleteConfirm = async () => {
     if (!applicantToDelete) return;
+    const name = getFullName(applicantToDelete);
 
     try {
       setDeleting(true);
+      setDeleteError(null);
       const { error: deleteError } = await supabase
         .from('applicants')
         .delete()
@@ -480,9 +487,10 @@ export function InterviewerDashboard({
 
       setDeleteConfirmOpen(false);
       setApplicantToDelete(null);
+      notifySuccess('Applicant deleted', `${name} and their attachments were removed.`);
     } catch (err) {
-      console.error('Error deleting applicant:', err);
-      alert('Failed to delete applicant. Please try again.');
+      const described = describeActionFailure('delete this applicant', err);
+      setDeleteError({ message: described.message, nextStep: described.nextStep });
     } finally {
       setDeleting(false);
     }
@@ -802,11 +810,11 @@ export function InterviewerDashboard({
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+      <Dialog open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}>
         <div className="modal-header">
           <h2 className="modal-title">Confirm Delete</h2>
           <button 
-            onClick={() => setDeleteConfirmOpen(false)}
+            onClick={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}
             className="modal-close-btn"
             disabled={deleting}
           >
@@ -822,6 +830,15 @@ export function InterviewerDashboard({
             <p className="delete-warning-subtext">
               This action cannot be undone. All applicant data and attachments will be permanently removed.
             </p>
+            {deleteError && (
+              <ActionFeedback
+                className="mt-3"
+                title="We couldn't delete this applicant."
+                message={deleteError.message}
+                nextStep={deleteError.nextStep}
+                onDismiss={() => setDeleteError(null)}
+              />
+            )}
             <div className="delete-confirm-actions">
               <button
                 className="cancel-delete-btn"
@@ -834,18 +851,10 @@ export function InterviewerDashboard({
                 className="confirm-delete-btn"
                 onClick={handleDeleteConfirm}
                 disabled={deleting}
+                aria-busy={deleting || undefined}
               >
-                {deleting ? (
-                  <>
-                    <div className="spinner-small"></div>
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={18} />
-                    <span>Delete Applicant</span>
-                  </>
-                )}
+                {deleting ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : <Trash2 size={18} />}
+                <span>Delete Applicant</span>
               </button>
             </div>
           </div>

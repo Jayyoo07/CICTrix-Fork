@@ -22,7 +22,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ActionFeedback } from '../../components/action-feedback';
 import type {
   AddressParts,
   Employee,
@@ -417,10 +418,12 @@ const SaveBar: React.FC<{ saving: boolean; onSave: () => void; label: string; la
       type="button"
       onClick={onSave}
       disabled={saving}
-      className="rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+      aria-busy={saving || undefined}
+      className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
       style={{ background: BRAND.blue }}
     >
-      {saving ? 'Saving…' : label}
+      {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+      {label}
     </button>
   </div>
 );
@@ -805,7 +808,12 @@ export const PersonalDataSheetSection: React.FC<Props> = ({ employeeId, profile,
         <div className="min-w-0 flex-1 space-y-5">
 
       {saveError && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{saveError}</p>
+        <ActionFeedback
+          title="We couldn't save this section."
+          message={saveError}
+          nextStep="Check the marked fields and your connection, then save again."
+          onDismiss={() => setSaveError(null)}
+        />
       )}
       {saveSuccess && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{saveSuccess}</p>

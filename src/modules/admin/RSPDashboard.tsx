@@ -3368,6 +3368,12 @@ export const RSPDashboard = () => {
               onOpenApplicants={() => navigate('/admin/rsp/applications')}
               onOpenQualified={() => goToSection('qualified')}
               onOpenSuccession={() => goToSection('succession')}
+              onOpenSuccessionPosition={(departmentId, positionId, opts) =>
+                navigate(
+                  `/admin/rsp/succession?${new URLSearchParams({ dept: departmentId, position: positionId })}`,
+                  { replace: opts?.replace },
+                )
+              }
               onOpenNewHired={() => goToSection('new-hired')}
             />
             </div>

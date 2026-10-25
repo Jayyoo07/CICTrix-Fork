@@ -583,52 +583,60 @@ export async function listDepartmentSummaries(): Promise<Result<DepartmentSummar
 export interface SuccessionOverviewPosition {
   id: string;
   title: string;
+  /** Null when the position has no office; the Succession page cannot open it then. */
+  departmentId: string | null;
   departmentName: string;
   incumbentName: string | null;
   incumbentLeavingDate: string | null;
-  requiredSuccessorsCount: number;
-  successorCount: number;
+  /**
+   * Size of the ranked successor pool the Succession Planning page shows for
+   * this position (listAutoSuccessors().qualified). Null when the engine
+   * failed for this position.
+   */
+  successorCount: number | null;
 }
 
 export interface SuccessionOverview {
   positions: SuccessionOverviewPosition[];
-  /** Distinct employees named as a successor, with the department of the position they are named for. */
-  talentPool: { employeeId: string; departmentName: string }[];
 }
 
+/** listAutoSuccessors calls in flight at once; each one is several queries. */
+const OVERVIEW_ENGINE_CONCURRENCY = 4;
+
 /**
- * Every critical position with its named-successor count, for the RSP
- * dashboard. A fixed number of round-trips regardless of how many positions
- * exist. Readiness tiers are deliberately not computed here: that needs the
- * full per-candidate readiness engine.
+ * Every critical position with its successor count, for the RSP dashboard.
+ *
+ * The count comes from the same ranking engine as the Succession Planning
+ * page, so the two always agree. That engine runs once per position, so this
+ * costs several queries per position; the calls are capped at
+ * OVERVIEW_ENGINE_CONCURRENCY to keep the burst bounded.
  */
 export async function getSuccessionDashboardOverview(): Promise<Result<SuccessionOverview>> {
   try {
-    const [{ data: positions, error: pErr }, { data: depts, error: dErr }, { data: candidates, error: cErr }] =
-      await Promise.all([
-        supabase
-          .from('critical_positions')
-          .select('id, title, department_id, incumbent_employee_id, incumbent_leaving_date, required_successors_count'),
-        supabase.from('departments').select('id, name'),
-        supabase.from('succession_candidates').select('critical_position_id, employee_id'),
-      ]);
+    const [{ data: positions, error: pErr }, { data: depts, error: dErr }] = await Promise.all([
+      supabase
+        .from('critical_positions')
+        .select('id, title, department_id, incumbent_employee_id, incumbent_leaving_date'),
+      supabase.from('departments').select('id, name'),
+    ]);
     if (pErr) return { ok: false, error: pErr.message };
     if (dErr) return { ok: false, error: dErr.message };
-    if (cErr) return { ok: false, error: cErr.message };
 
     const rows = (positions ?? []) as any[];
     const deptName = new Map(((depts ?? []) as any[]).map((d) => [String(d.id), String(d.name ?? '').trim()]));
     const positionDept = new Map(rows.map((r) => [String(r.id), deptName.get(String(r.department_id)) || 'Unassigned']));
 
-    const successorsByPosition = new Map<string, number>();
-    const talentPool = new Map<string, string>();
-    for (const c of (candidates ?? []) as any[]) {
-      const key = String(c.critical_position_id);
-      successorsByPosition.set(key, (successorsByPosition.get(key) ?? 0) + 1);
-      if (c.employee_id && !talentPool.has(String(c.employee_id))) {
-        talentPool.set(String(c.employee_id), positionDept.get(key) ?? 'Unassigned');
+    const successorsByPosition = new Map<string, number | null>();
+    let next = 0;
+    const worker = async () => {
+      while (next < rows.length) {
+        const id = String(rows[next].id);
+        next += 1;
+        const res = await listAutoSuccessors(id);
+        successorsByPosition.set(id, res.ok ? res.data.qualified.length : null);
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(OVERVIEW_ENGINE_CONCURRENCY, rows.length) }, worker));
 
     const incumbentIds = rows.map((r) => r.incumbent_employee_id).filter(Boolean);
     const nameById = new Map<string, string>();
@@ -646,13 +654,12 @@ export async function getSuccessionDashboardOverview(): Promise<Result<Successio
         positions: rows.map((r) => ({
           id: String(r.id),
           title: String(r.title ?? ''),
+          departmentId: r.department_id ? String(r.department_id) : null,
           departmentName: positionDept.get(String(r.id)) ?? 'Unassigned',
           incumbentName: r.incumbent_employee_id ? nameById.get(String(r.incumbent_employee_id)) ?? null : null,
           incumbentLeavingDate: r.incumbent_leaving_date ?? null,
-          requiredSuccessorsCount: Number(r.required_successors_count ?? 1),
-          successorCount: successorsByPosition.get(String(r.id)) ?? 0,
+          successorCount: successorsByPosition.get(String(r.id)) ?? null,
         })),
-        talentPool: [...talentPool].map(([employeeId, departmentName]) => ({ employeeId, departmentName })),
       },
     };
   } catch (err) {

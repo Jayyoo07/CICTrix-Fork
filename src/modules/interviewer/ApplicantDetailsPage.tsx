@@ -1754,6 +1754,18 @@ function ApplicantDetailsPageView() {
     // applicant's tracker really did show it. The single write below is the
     // only one this flow needs.
     try {
+      // Idempotency: a retry after a partial failure must not insert a second
+      // notice for the same document and reason. Anything already recorded is
+      // skipped; the status write and email still run.
+      const { data: existingNotices } = await (supabase as any)
+        .from('applicant_attachments')
+        .select('file_name')
+        .eq('applicant_id', applicant.id)
+        .eq('document_type', 'resubmission_request');
+      const existingNoticeNames = new Set<string>(
+        (existingNotices ?? []).map((row: any) => String(row.file_name)),
+      );
+
       // Insert a resubmission_request row in Supabase for each selected document.
       for (const slotLabel of resubmitSelectedSlots) {
         const slot = DOCUMENT_SLOTS.find((s) => s.label === slotLabel);
@@ -1765,23 +1777,27 @@ function ApplicantDetailsPageView() {
         if (matchedAtt) {
           await handleRequestResubmission(matchedAtt.file_path, slotLabel, resubmitReason.trim());
         }
-        const { error: insertError } = await (supabase as any).from('applicant_attachments').insert({
-          applicant_id: applicant.id,
-          file_name: `RESUBMIT::${slotLabel}::${resubmitReason.trim()}`,
-          file_path: resubmitNotes.trim() || '—',
-          document_type: 'resubmission_request',
-          file_type: 'notice',
-          file_size: 0,
-        });
-        if (insertError) throw insertError;
-        const saved = await recordDocumentEvent({
-          applicantId: applicant.id,
-          eventType: 'resubmission_requested',
-          documentType: slot.type,
-          reason: resubmitNotes.trim() ? `${resubmitReason.trim()} — Note: ${resubmitNotes.trim()}` : resubmitReason.trim(),
-          actorEmail: getAdminEmail('RSP'),
-        });
-        if (!saved.ok) console.warn('[handleSubmitResubmission] history event not saved for', slotLabel, saved.error);
+        const noticeName = `RESUBMIT::${slotLabel}::${resubmitReason.trim()}`;
+        if (!existingNoticeNames.has(noticeName)) {
+          const { error: insertError } = await (supabase as any).from('applicant_attachments').insert({
+            applicant_id: applicant.id,
+            file_name: noticeName,
+            file_path: resubmitNotes.trim() || '—',
+            document_type: 'resubmission_request',
+            file_type: 'notice',
+            file_size: 0,
+          });
+          if (insertError) throw insertError;
+          existingNoticeNames.add(noticeName);
+          const saved = await recordDocumentEvent({
+            applicantId: applicant.id,
+            eventType: 'resubmission_requested',
+            documentType: slot.type,
+            reason: resubmitNotes.trim() ? `${resubmitReason.trim()} — Note: ${resubmitNotes.trim()}` : resubmitReason.trim(),
+            actorEmail: getAdminEmail('RSP'),
+          });
+          if (!saved.ok) console.warn('[handleSubmitResubmission] history event not saved for', slotLabel, saved.error);
+        }
       }
       void reloadDocEvents();
 
@@ -1832,8 +1848,15 @@ function ApplicantDetailsPageView() {
           a.document_type !== 'resubmission_resolved' &&
           a.document_type !== 'doc_validated',
       );
-      const existingValidatedTypes = new Set(
-        attachments.filter((a) => a.document_type === 'doc_validated').map((a) => a.file_name),
+      // Read the validated set from the database, not the last page render, so
+      // a retry after a partial failure does not insert the same marker twice.
+      const { data: validatedRows } = await (supabase as any)
+        .from('applicant_attachments')
+        .select('file_name')
+        .eq('applicant_id', applicant.id)
+        .eq('document_type', 'doc_validated');
+      const existingValidatedTypes = new Set<string>(
+        (validatedRows ?? []).map((row: any) => String(row.file_name)),
       );
       for (const att of realDocs) {
         const rawDocType = (att.document_type as string | null) || FILE_NAME_TO_TYPE[att.file_name] || 'other';

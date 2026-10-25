@@ -5,7 +5,7 @@ import {
   buildDeptCompletionRows,
   getAdjectival,
   groupByDept,
-  REPORT_PERIOD,
+  RATED_PERIOD_LABEL,
   restrictToActiveOffices,
   type DeptCompletionRow,
   type IPCRRatingRecord,
@@ -214,7 +214,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
     (async () => {
       try {
         const [data, roster, activeOffices] = await Promise.all([
-          getIPCRRecordsFromGapView(REPORT_PERIOD),
+          getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
           getActiveHeadcountByDepartment(),
           // The active-office list only filters; if it fails, show everything.
           getActiveOfficeKeys().catch((err) => {
@@ -271,7 +271,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
           <p className="pd-crumbs">Performance Management › <b>Dashboard</b></p>
           {/* Not an <h1>: admin.css forces .admin-content h1 to brand blue with !important. */}
           <div className="pd-hero-title" role="heading" aria-level={1}>PM Dashboard</div>
-          <p className="pd-hero-sub">Performance evaluation overview · {REPORT_PERIOD} rating period</p>
+          <p className="pd-hero-sub">Performance evaluation overview · {RATED_PERIOD_LABEL}</p>
         </div>
         <div className="pd-filters">
           <label className="pd-select">
@@ -360,7 +360,7 @@ export const PmDashboardOverview = ({ pending, onOpenSummary }: Props) => {
             <span className="pd-ico"><BarChart3 size={18} aria-hidden="true" /></span>
             <div>
               <h2>IPCR results</h2>
-              <p className="pd-desc">{results.rated} evaluated · {REPORT_PERIOD}</p>
+              <p className="pd-desc">{results.rated} evaluated · {RATED_PERIOD_LABEL}</p>
             </div>
             <button type="button" className="pd-link" onClick={onOpenSummary}>Full report ›</button>
           </div>

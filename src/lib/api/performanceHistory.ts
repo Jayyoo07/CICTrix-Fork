@@ -12,6 +12,7 @@
 
 import { supabase as supabaseClient } from '../supabase';
 import { bucketForScore } from './performanceEvaluations';
+import { normalizeSemesterKey } from './semesterTransition';
 
 const supabase = supabaseClient as any;
 
@@ -74,40 +75,59 @@ export async function getEmployeeHistory(
     const locked: any[] = lockedRes.error ? [] : lockedRes.data ?? [];
     const perf: any[] = (perfRes as any).error ? [] : (perfRes as any).data ?? [];
 
-    // Index by period.
-    const evalByPeriod = new Map<string, any>();
-    for (const e of evals) if (e?.period) evalByPeriod.set(String(e.period), e);
+    // One semester is stored under three spellings: the cycle title in
+    // performance_evaluations and locked_targets, the legacy rating label in
+    // ipcr_performance (see docs/ipcr-data-map.md). Merging on the raw string
+    // would render a single semester as two half-filled cycles, so group by the
+    // format-agnostic semester key and keep the title as the display label.
+    const semesterKey = (period: unknown) => normalizeSemesterKey(period) ?? String(period ?? '');
 
-    const lockedByPeriod = new Map<string, any[]>();
-    for (const l of locked) if (l?.period) lockedByPeriod.set(String(l.period), Array.isArray(l.targets) ? l.targets : []);
-
-    const perfByPeriod = new Map<string, any[]>();
-    for (const p of perf) {
-      const key = String(p?.rating_period ?? '');
-      if (!key) continue;
-      const list = perfByPeriod.get(key) ?? [];
-      list.push(p);
-      perfByPeriod.set(key, list);
+    interface SemesterBucket {
+      label: string;
+      evaluation: any | null;
+      locked: any[];
+      performed: any[];
     }
 
-    const periods = new Set<string>([...evalByPeriod.keys(), ...lockedByPeriod.keys(), ...perfByPeriod.keys()]);
+    const bySemester = new Map<string, SemesterBucket>();
+    const bucketFor = (period: unknown): SemesterBucket => {
+      const key = semesterKey(period);
+      let bucket = bySemester.get(key);
+      if (!bucket) {
+        bucket = { label: String(period ?? ''), evaluation: null, locked: [], performed: [] };
+        bySemester.set(key, bucket);
+      }
+      return bucket;
+    };
 
-    const cycles: HistoryCycle[] = Array.from(periods).map((period) => {
-      const ev = evalByPeriod.get(period);
-      const finalScore = ev && ev.final_score != null ? Number(ev.final_score) : null;
+    for (const e of evals) {
+      if (!e?.period) continue;
+      const bucket = bucketFor(e.period);
+      bucket.evaluation = e;
+      bucket.label = String(e.period);
+    }
+    for (const l of locked) {
+      if (!l?.period) continue;
+      bucketFor(l.period).locked = Array.isArray(l.targets) ? l.targets : [];
+    }
+    for (const p of perf) {
+      if (!p?.rating_period) continue;
+      bucketFor(p.rating_period).performed.push(p);
+    }
+
+    const cycles: HistoryCycle[] = Array.from(bySemester.values()).map(({ label, evaluation, locked: frozen, performed }) => {
+      const finalScore = evaluation && evaluation.final_score != null ? Number(evaluation.final_score) : null;
 
       // Prefer ipcr_performance (has accomplishments); fall back to locked targets.
       let rows: HistoryTargetRow[] = [];
-      const perfRows = perfByPeriod.get(period);
-      if (perfRows && perfRows.length) {
-        rows = perfRows.map((p) => ({
+      if (performed.length) {
+        rows = performed.map((p) => ({
           functionType: p.function_type ?? null,
           target: String(p.target_text ?? ''),
           accomplishment: String(p.accomplishment_text ?? ''),
         }));
       } else {
-        const lt = lockedByPeriod.get(period) ?? [];
-        rows = lt.map((t: any) => ({
+        rows = frozen.map((t: any) => ({
           functionType: t.function_type ?? null,
           target: String(t.target_text ?? ''),
           accomplishment: '',
@@ -115,11 +135,11 @@ export async function getEmployeeHistory(
       }
 
       return {
-        period,
+        period: label,
         finalScore,
         adjectival: finalScore != null ? bucketForScore(finalScore) : null,
-        status: ev?.status ?? null,
-        approvedAt: ev?.approved_at ?? ev?.submitted_at ?? null,
+        status: evaluation?.status ?? null,
+        approvedAt: evaluation?.approved_at ?? evaluation?.submitted_at ?? null,
         rows,
       };
     });

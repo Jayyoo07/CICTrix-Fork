@@ -396,6 +396,26 @@ export async function saveRatings(params: {
       adjectival: null,
     }));
 
+    if (complete) {
+      // Fan the finalized record out to ipcr_performance, performance_evaluations,
+      // ipcr_submissions and locked_targets. The DB trigger does the same on the
+      // phase2_status transition; this explicit call is what surfaces a failure to
+      // the reviewer instead of leaving the summary screens silently stale. Both
+      // paths are idempotent, so a retry after an error is safe.
+      const { error: fanoutErr } = await supabase.rpc('finalize_ipcr_surfaces', {
+        p_target_setting_id: targetSettingId,
+      });
+      if (fanoutErr) {
+        console.error('[ipcrRatings] finalize_ipcr_surfaces failed:', fanoutErr);
+        return {
+          ok: false,
+          error:
+            `The IPCR was rated, but the summary tables did not sync (${fanoutErr.message}). ` +
+            'Finalize it again to retry; the ratings themselves are saved.',
+        };
+      }
+    }
+
     // Best-effort audit line.
     supabase
       .from('ipcr_audit_log')

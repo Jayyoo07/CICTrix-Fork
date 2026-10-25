@@ -84,10 +84,8 @@
 .dash-lg .pmdash .pd-desc { font-size: 16.8px; }
 .dash-lg .pmdash .pd-link { font-size: 16.8px; }
 .dash-lg .pmdash .pd-empty { font-size: 18.2px; }
-.dash-lg .pmdash .pd-kpi-h { font-size: 19.6px; line-height: 22.4px; }
-.dash-lg .pmdash .pd-kpi-v { font-size: 50.4px; line-height: 56.0px; }
-.dash-lg .pmdash .pd-kpi-v small { font-size: 18.2px; }
-.dash-lg .pmdash .pd-kpi-sub { font-size: 16.8px; line-height: 22.4px; }
+.dash-lg .pmdash .pd-sum-v { font-size: 50.4px; line-height: 56.0px; }
+.dash-lg .pmdash .pd-sum-v small { font-size: 16.8px; line-height: 22.4px; }
 .dash-lg .pmdash .pd-pill { font-size: 16.8px; }
 .dash-lg .pmdash .pd-tbl th { font-size: 16.8px; }
 .dash-lg .pmdash .pd-tbl td { font-size: 18.2px; }

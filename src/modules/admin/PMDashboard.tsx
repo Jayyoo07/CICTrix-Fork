@@ -89,7 +89,7 @@ import { CompetencyFrameworkPage } from './CompetencyFrameworkPageView';
 import { PMArchive } from './pm/PMArchive';
 import { SummaryOfRatings } from './pm/SummaryOfRatings';
 import { SkeletonList, TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from '../../components/table-loading';
-import { PmDashboardOverview } from './PmDashboardOverview';
+import { PmDashboardOverview, type IpcrStatus } from './PmDashboardOverview';
 import '../../styles/dashboard-scale.css';
 
 type EvaluationEmployeeRow = { name: string; position: string; status: string };
@@ -449,6 +449,8 @@ export const PMDashboard = ({
   const [probationarySubmissionsCount, setProbationarySubmissionsCount] = useState(0);
   const [regularSubmissionsCount, setRegularSubmissionsCount] = useState(0);
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
+  // Every Active employee's current IPCR status, for the overview's submission card. null = failed to load.
+  const [ipcrStatuses, setIpcrStatuses] = useState<IpcrStatus[] | null>([]);
   const [probationaryMetrics, setProbationaryMetrics] = useState({
     total: 0,
     due: 0,
@@ -679,7 +681,10 @@ export const PMDashboard = ({
       ]);
 
       if (loadId !== latestIpcrLoadId.current) return;
-      if (!empResult.success) return;
+      if (!empResult.success) {
+        setIpcrStatuses(null);
+        return;
+      }
 
       const employees: Employee[] = empResult.data || [];
       const submissions = subRes.error ? [] : (subRes.data ?? []);
@@ -759,6 +764,7 @@ export const PMDashboard = ({
       let probDue = 0;
       let nextDueDate: Date | null = null;
       const pendingList: any[] = [];
+      const statuses: IpcrStatus[] = [];
 
       for (const emp of employees) {
         const hireDateToUse = emp.hire_date || emp.created_at || new Date().toISOString();
@@ -768,6 +774,7 @@ export const PMDashboard = ({
 
         const actualStage = subMap.get(`${emp.id}::${periodLabel}::${phase}`) || 'Not Started';
         const isPending = actualStage !== 'Forwarded to PM';
+        statuses.push({ dept: emp.department ?? '', dueDate, forwarded: !isPending });
 
         if (isProb) {
           probTotal++;
@@ -805,8 +812,10 @@ export const PMDashboard = ({
 
       pendingList.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
       setPendingSubmissions(pendingList);
+      setIpcrStatuses(statuses);
     } catch (err) {
       console.error('Error calculating IPCR stats:', err);
+      if (loadId === latestIpcrLoadId.current) setIpcrStatuses(null);
     } finally {
       if (loadId === latestIpcrLoadId.current) {
         setIpcrLoading(false);
@@ -1018,7 +1027,8 @@ export const PMDashboard = ({
             {activeSection === 'dashboard' && (
               <div className="dash-lg">
                 <PmDashboardOverview
-                  pending={pendingSubmissions}
+                  statuses={ipcrStatuses}
+                  statusesLoading={ipcrLoading}
                   onOpenSummary={() => setActiveSection('summary-of-ratings')}
                 />
 

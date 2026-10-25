@@ -90,6 +90,7 @@ import { PMArchive } from './pm/PMArchive';
 import { SummaryOfRatings } from './pm/SummaryOfRatings';
 import { SkeletonList, TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from '../../components/table-loading';
 import { PmDashboardOverview, type IpcrStatus } from './PmDashboardOverview';
+import { toCalendarPeriod } from '../../lib/ipcrPeriods';
 import '../../styles/dashboard-scale.css';
 
 type EvaluationEmployeeRow = { name: string; position: string; status: string };
@@ -755,9 +756,33 @@ export const PMDashboard = ({
         return { stage: 'Accomplishment Rating', phase: 'rating', dueDate: due, periodLabel: `${halfLabel} ${yr}` };
       };
 
+      const currentCycleStart = (hireDate: string): Date => {
+        const hired = new Date(hireDate);
+        if (getMonthsOfService(hireDate) < 6) return hired;
+        const regularStart = new Date(hired);
+        regularStart.setMonth(regularStart.getMonth() + 6);
+        const now = new Date();
+        const msSinceRegular = Math.max(
+          0,
+          (now.getFullYear() - regularStart.getFullYear()) * 12 + (now.getMonth() - regularStart.getMonth()),
+        );
+        const completedCycles = Math.floor(msSinceRegular / 12);
+        const cycleStart = new Date(regularStart);
+        cycleStart.setMonth(cycleStart.getMonth() + completedCycles * 12);
+        return cycleStart;
+      };
+
       const subMap = new Map<string, string>();
+      const subByEmpPhase = new Map<string, { stage: string; updatedAt: number }>();
       for (const s of submissions) {
         subMap.set(`${s.employee_id}::${s.period}::${s.phase}`, s.stage);
+
+        const fk = `${s.employee_id}::${s.phase}`;
+        const updatedAt = new Date(s.updated_at ?? 0).getTime();
+        const prev = subByEmpPhase.get(fk);
+        if (!prev || updatedAt >= prev.updatedAt) {
+          subByEmpPhase.set(fk, { stage: s.stage, updatedAt });
+        }
       }
 
       let probTotal = 0;
@@ -772,7 +797,18 @@ export const PMDashboard = ({
         const isProb = months < 6;
         const { stage, phase, dueDate, periodLabel } = computeStageInfoLocal(hireDateToUse, schedules);
 
-        const actualStage = subMap.get(`${emp.id}::${periodLabel}::${phase}`) || 'Not Started';
+        const calPeriod = toCalendarPeriod(periodLabel);
+        let actualStage = subMap.get(`${emp.id}::${periodLabel}::${phase}`);
+        if (!actualStage && calPeriod) {
+          actualStage = subMap.get(`${emp.id}::${calPeriod}::${phase}`);
+        }
+        if (!actualStage) {
+          const fallback = subByEmpPhase.get(`${emp.id}::${phase}`);
+          if (fallback && fallback.updatedAt >= currentCycleStart(hireDateToUse).getTime()) {
+            actualStage = fallback.stage;
+          }
+        }
+        actualStage = actualStage || 'Not Started';
         const isPending = actualStage !== 'Forwarded to PM';
         statuses.push({ dept: emp.department ?? '', dueDate, forwarded: !isPending });
 

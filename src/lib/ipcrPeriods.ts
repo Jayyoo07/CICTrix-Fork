@@ -107,3 +107,19 @@ export function groupPeriodsByYear<T>(
       return b.year - a.year;
     });
 }
+
+
+/**
+ * Maps half-year period labels (e.g. "1st Half 2026", "2nd Half 2025")
+ * to standard calendar cycle titles (e.g. "January–June 2026", "July–December 2025").
+ * Uses an en-dash (\u2013) to match performance_cycles.title.
+ * Returns null if the label is not a recognised half-year format.
+ */
+export function toCalendarPeriod(periodLabel: unknown): string | null {
+  const s = String(periodLabel ?? '').trim();
+  const m = s.match(/^(1st|2nd)\s+Half\s+(\d{4})$/i);
+  if (!m) return null;
+  const isFirst = m[1].toLowerCase() === '1st';
+  const year = m[2];
+  return isFirst ? `January\u2013June ${year}` : `July\u2013December ${year}`;
+}

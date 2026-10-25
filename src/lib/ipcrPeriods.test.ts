@@ -4,6 +4,7 @@ import {
   periodSemester,
   periodSemesterLabel,
   periodYear,
+  toCalendarPeriod,
 } from './ipcrPeriods';
 
 describe('periodYear', () => {
@@ -72,5 +73,25 @@ describe('groupPeriodsByYear', () => {
 
   it('handles an empty list', () => {
     expect(groupPeriodsByYear([], (s: { period: string }) => s.period)).toEqual([]);
+  });
+});
+
+describe('toCalendarPeriod', () => {
+  it('translates 1st Half to January–June with an en-dash', () => {
+    expect(toCalendarPeriod('1st Half 2026')).toBe('January\u2013June 2026');
+    expect(toCalendarPeriod('1st half 2025')).toBe('January\u2013June 2025');
+  });
+
+  it('translates 2nd Half to July–December with an en-dash', () => {
+    expect(toCalendarPeriod('2nd Half 2026')).toBe('July\u2013December 2026');
+    expect(toCalendarPeriod('2nd half 2025')).toBe('July\u2013December 2025');
+  });
+
+  it('returns null for non-half labels', () => {
+    expect(toCalendarPeriod('Probationary — 1st 3 Months')).toBeNull();
+    expect(toCalendarPeriod('Jul-Dec 2026')).toBeNull();
+    expect(toCalendarPeriod('January–June 2026')).toBeNull();
+    expect(toCalendarPeriod('')).toBeNull();
+    expect(toCalendarPeriod(null)).toBeNull();
   });
 });

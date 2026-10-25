@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Dialog } from './components/Dialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FeedbackProvider } from './components/action-feedback';
 import { JobDetailsPage } from './components/JobDetailsPage';
 import { JobPostingsPage } from './components/JobPostingsPage';
 import { NewlyHiredPage } from './components/NewlyHiredPage';
@@ -1075,9 +1076,11 @@ function AppContent() {
 function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <FeedbackProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </FeedbackProvider>
     </ErrorBoundary>
   );
 }

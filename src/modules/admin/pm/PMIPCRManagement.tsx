@@ -1147,7 +1147,7 @@ const PhaseConfirmModal = ({
   return (
     <Dialog open={open} onClose={onClose}>
       <div className="w-[460px] max-w-full space-y-5 p-1">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pr-8">
           <div className="flex items-center gap-3.5">
             <div
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
@@ -1158,14 +1158,6 @@ const PhaseConfirmModal = ({
             </div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">{title}</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="text-slate-400 hover:text-slate-600 text-lg font-medium p-1 rounded-lg transition-colors"
-          >
-            ✕
-          </button>
         </div>
 
         <p className="text-sm text-slate-600 leading-relaxed">{description}</p>

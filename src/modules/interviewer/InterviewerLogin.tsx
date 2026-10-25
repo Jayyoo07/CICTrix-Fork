@@ -144,7 +144,25 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
         password,
       });
 
-      if (authError || !authData.user) {
+      if (authError) {
+        if (authError.status === 429) {
+          setFailure({
+            message: 'Too many sign-in attempts.',
+            nextStep: 'Wait a minute, then try again.',
+          });
+        } else if (authError.status === 400 || /invalid login credentials/i.test(authError.message)) {
+          setFailure({
+            message: "That email and password don't match an account.",
+            nextStep: "Check them and try again. If access was just granted, ask RSP to finish setting up your account.",
+          });
+        } else {
+          const described = describeActionFailure('sign you in', authError);
+          setFailure({ message: described.message, nextStep: described.nextStep });
+        }
+        return;
+      }
+
+      if (!authData.user) {
         setFailure({
           message: "That email and password don't match an account.",
           nextStep: "Check them and try again. If access was just granted, ask RSP to finish setting up your account.",

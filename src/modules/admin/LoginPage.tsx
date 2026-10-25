@@ -94,9 +94,28 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
         password,
       });
 
-      if (authError || !authData.user) {
-        // The credentials themselves failed — say so, rather than implying the
-        // account exists but is barred.
+      if (authError) {
+        // A network or server failure is not a wrong password. Supabase returns
+        // status 0 for a fetch failure and 400 for bad credentials; conflating
+        // them told people their password was wrong when nothing was reached.
+        if (authError.status === 429) {
+          setFailure({
+            message: 'Too many sign-in attempts.',
+            nextStep: 'Wait a minute, then try again.',
+          });
+        } else if (authError.status === 400 || /invalid login credentials/i.test(authError.message)) {
+          setFailure({
+            message: "That email and password don't match an account.",
+            nextStep: "Check them and try again. If you've forgotten your password, contact your administrator.",
+          });
+        } else {
+          const described = describeActionFailure('sign you in', authError);
+          setFailure({ message: described.message, nextStep: described.nextStep });
+        }
+        return;
+      }
+
+      if (!authData.user) {
         setFailure({
           message: "That email and password don't match an account.",
           nextStep: "Check them and try again. If you've forgotten your password, contact your administrator.",
@@ -110,7 +129,22 @@ export const LoginPage = ({ onLogin }: LoginPageProps) => {
         .eq('user_id', authData.user.id)
         .single();
 
-      if (roleError || !(roleData as any)?.role) {
+      if (roleError) {
+        await discardSession();
+        // PGRST116 is "no row returned" — the account genuinely has no role.
+        if (roleError.code === 'PGRST116') {
+          setFailure({
+            message: 'Your account signed in but has no portal role assigned.',
+            nextStep: 'Ask your administrator to assign your role, then sign in again.',
+          });
+        } else {
+          const described = describeActionFailure('check your account role', roleError);
+          setFailure({ message: described.message, nextStep: described.nextStep });
+        }
+        return;
+      }
+
+      if (!(roleData as any)?.role) {
         await discardSession();
         setFailure({
           message: 'Your account signed in but has no portal role assigned.',

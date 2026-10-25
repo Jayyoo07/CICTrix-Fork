@@ -61,11 +61,11 @@ export const MyTrainingsSection = ({ employeeId }: { employeeId: string }) => {
         </div>
       </div>
 
-      {loading ? (
+      {loading && trainings.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white" aria-busy="true">
           <SkeletonList show rows={3} label="Loading your trainings…" />
         </div>
-      ) : failure ? (
+      ) : trainings.length === 0 && failure ? (
         <ActionFeedback
           title="We couldn't load your trainings."
           message={failure.message}
@@ -80,6 +80,15 @@ export const MyTrainingsSection = ({ employeeId }: { employeeId: string }) => {
         </div>
       ) : (
         <div className="space-y-3">
+          {failure && (
+            <ActionFeedback
+              tone="warning"
+              title="Couldn't refresh your trainings"
+              message={failure.message}
+              nextStep="The list below is the last loaded copy. It will retry automatically."
+              focusOnMount={false}
+            />
+          )}
           {trainings.map((t) => {
             const color = CATEGORY_COLORS[t.category ?? ''] ?? '#6366f1';
             return (

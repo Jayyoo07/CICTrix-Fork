@@ -2011,7 +2011,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               <button
                 onClick={() => setIpcrSubtab('phase2')}
                 className={`px-4 py-2 text-xs font-bold rounded-md transition flex items-center gap-1.5 ${
-                  ipcrSubtab === 'phase2' ? 'bg-[#363EE8] text-white shadow-sm' : 'text-slate-650 hover:text-slate-800 hover:bg-slate-50'
+                  ipcrSubtab === 'phase2' ? 'bg-[#363EE8] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
                 Phase 2: Accomplishments &amp; Ratings
@@ -2522,7 +2522,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                             setOrientationChecked(prev => ({ ...prev, [item.id]: e.target.checked }));
                           }}
                           disabled={orientationVerified}
-                          className="rounded border-slate-350 h-4 w-4 text-[#363EE8]"
+                          className="rounded border-slate-300 h-4 w-4 text-[#363EE8]"
                         />
                         <span className={`font-semibold ${isChecked ? 'text-slate-800 line-through' : 'text-slate-600'}`}>
                           {item.label}

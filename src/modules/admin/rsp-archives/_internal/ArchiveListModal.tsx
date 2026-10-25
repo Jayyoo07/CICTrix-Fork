@@ -1,7 +1,7 @@
-import { FileText, RotateCcw, Trash2, X } from 'lucide-react';
+import { FileText, RotateCcw, Trash2 } from 'lucide-react';
+import { Modal } from '../../../../components/modal';
 import { formatDate, type ArchiveRecord, type GroupDef, type PositionRow } from './model';
 import { StatusBadge } from './StatusBadge';
-import { useFocusTrap } from './useFocusTrap';
 
 interface ArchiveListModalProps {
   row: PositionRow;
@@ -39,10 +39,9 @@ const factOf = (r: ArchiveRecord, label: string) => r.facts?.find((f) => f.label
 
 /**
  * §9.10 large list modal (880px): everything archived under one department +
- * position. Only the overlay scrolls (§9.7.1); on phones it fills the screen.
+ * position. On phones it fills the screen.
  */
 export const ArchiveListModal = ({ row, group, onClose, onRestore, onPurge, onOpenAssessment }: ArchiveListModalProps) => {
-  const ref = useFocusTrap<HTMLDivElement>(onClose);
   const first = row.records[0];
 
   const body = (() => {
@@ -122,39 +121,24 @@ export const ArchiveListModal = ({ row, group, onClose, onRestore, onPurge, onOp
   })();
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--overlay)] sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex min-h-full items-start justify-center sm:items-center">
-        <div
-          ref={ref}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="archive-modal-title"
-          className="min-h-screen w-full bg-white p-5 shadow-[var(--shadow-3)] sm:min-h-0 sm:max-w-[880px] sm:rounded-2xl sm:p-6"
-        >
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 id="archive-modal-title" className="!mb-0.5 text-xl font-semibold text-[var(--color-primary-900)]">{row.position}</h2>
-              <p className="!mb-0 text-[13px] font-medium text-[var(--neutral-600)]">
-                {row.department} · {row.count} {group.noun[row.count === 1 ? 0 : 1]} · {formatDate(row.date)}
-              </p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[var(--neutral-600)] hover:bg-[var(--bg-page)]">
-              <X className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={row.position}
+      subtitle={`${row.department} · ${row.count} ${group.noun[row.count === 1 ? 0 : 1]} · ${formatDate(row.date)}`}
+      footer={(
+        <>
+          <button type="button" className="btn btn-secondary btn-md" onClick={onClose}>Close</button>
+          {group.id === 'evaluations' && first.action?.kind === 'assessment' && (
+            <button type="button" className="btn btn-primary btn-md" onClick={() => { const position = first.action?.kind === 'assessment' ? first.action.position : row.position; onClose(); onOpenAssessment(position); }}>
+              <FileText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />Open assessment forms
             </button>
-          </div>
-
-          {body}
-
-          <div className="mt-6 flex flex-wrap justify-end gap-3">
-            <button type="button" className="btn btn-secondary btn-md" onClick={onClose}>Close</button>
-            {group.id === 'evaluations' && first.action?.kind === 'assessment' && (
-              <button type="button" className="btn btn-primary btn-md" onClick={() => { const position = first.action?.kind === 'assessment' ? first.action.position : row.position; onClose(); onOpenAssessment(position); }}>
-                <FileText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />Open assessment forms
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+          )}
+        </>
+      )}
+    >
+      {body}
+    </Modal>
   );
 };

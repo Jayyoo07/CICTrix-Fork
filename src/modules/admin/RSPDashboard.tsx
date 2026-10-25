@@ -98,6 +98,7 @@ import type { EmployeeRecord, JobPosting, NewlyHired } from '../../types/recruit
 import { usePlantillaNames } from '../../hooks/usePlantillaNames';
 import { internalPlantillaKey } from '../../lib/plantillaRules';
 import { SkeletonList, TableSkeletonRows, tableBodyClass, useDelayedLoading } from '../../components/table-loading';
+import { Modal } from '../../components/modal';
 
 type JobStatus = 'Open' | 'Reviewing' | 'Closed';
 type Section = 'dashboard' | 'jobs' | 'qualified' | 'applicant-score' | 'new-hired' | 'raters' | 'accounts' | 'succession' | 'reports' | 'settings';
@@ -3743,20 +3744,21 @@ export const RSPDashboard = () => {
 
                     <ErrorBanner error={officeDirectoryError} context="server" />
 
-{showPositionChangeModal && selectedEmployeeDetails && (
-                    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPositionChangeModal(false)}>
-                      <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-                        <div className="flex items-start justify-between border-b border-[var(--border-color)] px-6 py-5">
-                          <div>
-                            <h3 className="!mb-1 text-3xl font-bold text-[var(--text-primary)]">Change Position</h3>
-                            <p className="!mb-0 text-lg text-[var(--text-secondary)]">Update position for {selectedEmployeeDetails.full_name}</p>
-                          </div>
-                          <button type="button" className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-slate-100" onClick={() => setShowPositionChangeModal(false)}>
-                            <X size={26} />
-                          </button>
-                        </div>
-
-                        <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
+<Modal
+                    open={showPositionChangeModal && Boolean(selectedEmployeeDetails)}
+                    onClose={() => setShowPositionChangeModal(false)}
+                    size="lg"
+                    title="Change Position"
+                    subtitle={selectedEmployeeDetails ? `Update position for ${selectedEmployeeDetails.full_name}` : undefined}
+                    footer={(
+                      <>
+                        <button type="button" className="btn btn-md btn-secondary" onClick={() => setShowPositionChangeModal(false)}>Cancel</button>
+                        <button type="button" className="btn btn-md btn-primary" onClick={() => setShowPositionChangeModal(false)}>Apply Position Change</button>
+                      </>
+                    )}
+                  >
+                  {selectedEmployeeDetails && (
+                        <div className="space-y-4">
                           <div className="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 xl:grid-cols-2">
                             <div>
                               <p className="!mb-1 text-lg text-[var(--text-secondary)]">Current Position</p>
@@ -3850,22 +3852,8 @@ export const RSPDashboard = () => {
                             <strong>Note:</strong> This action will update the employee's position and department. All related records will be updated accordingly.
                           </div>
                         </div>
-
-                        <div className="flex justify-end gap-3 border-t border-[var(--border-color)] px-6 py-4">
-                          <button type="button" className="rounded-xl border border-[var(--border-color)] px-5 py-2 text-base" onClick={() => setShowPositionChangeModal(false)}>
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-xl bg-blue-600 px-6 py-2 text-base font-semibold text-white"
-                            onClick={() => setShowPositionChangeModal(false)}
-                          >
-                            Apply Position Change
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                   )}
+                  </Modal>
                 <section>
                       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                         <table className="w-full min-w-full">
@@ -4179,20 +4167,21 @@ export const RSPDashboard = () => {
                       </div>
                     )}
 
-                    {showPositionChangeModal && selectedEmployeeDetails && (
-                      <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPositionChangeModal(false)}>
-                        <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-                          <div className="flex items-start justify-between border-b border-[var(--border-color)] px-6 py-5">
-                            <div>
-                              <h3 className="!mb-1 text-3xl font-bold text-[var(--text-primary)]">Change Position</h3>
-                              <p className="!mb-0 text-lg text-[var(--text-secondary)]">Update position for {selectedEmployeeDetails.full_name}</p>
-                            </div>
-                            <button type="button" className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-slate-100" onClick={() => setShowPositionChangeModal(false)}>
-                              <X size={26} />
-                            </button>
-                          </div>
-
-                          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
+                    <Modal
+                    open={showPositionChangeModal && Boolean(selectedEmployeeDetails)}
+                    onClose={() => setShowPositionChangeModal(false)}
+                    size="lg"
+                    title="Change Position"
+                    subtitle={selectedEmployeeDetails ? `Update position for ${selectedEmployeeDetails.full_name}` : undefined}
+                    footer={(
+                      <>
+                        <button type="button" className="btn btn-md btn-secondary" onClick={() => setShowPositionChangeModal(false)}>Cancel</button>
+                        <button type="button" className="btn btn-md btn-primary" onClick={() => setShowPositionChangeModal(false)}>Apply Position Change</button>
+                      </>
+                    )}
+                  >
+                  {selectedEmployeeDetails && (
+                        <div className="space-y-4">
                             <div className="grid grid-cols-1 gap-4 rounded-xl bg-slate-50 p-4 xl:grid-cols-2">
                               <div>
                                 <p className="!mb-1 text-lg text-[var(--text-secondary)]">Current Position</p>
@@ -4286,22 +4275,8 @@ export const RSPDashboard = () => {
                               <strong>Note:</strong> This action will update the employee's position and department. All related records will be updated accordingly.
                             </div>
                           </div>
-
-                          <div className="flex justify-end gap-3 border-t border-[var(--border-color)] px-6 py-4">
-                            <button type="button" className="rounded-xl border border-[var(--border-color)] px-5 py-2 text-base" onClick={() => setShowPositionChangeModal(false)}>
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-xl bg-blue-600 px-6 py-2 text-base font-semibold text-white"
-                              onClick={() => setShowPositionChangeModal(false)}
-                            >
-                              Apply Position Change
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  )}
+                  </Modal>
                   </>
                 )}
               </>
@@ -4811,51 +4786,34 @@ export const RSPDashboard = () => {
           </div>
         )}
 
-        {showAssessmentFormsModal && (
-          <div className="assessment-print-overlay fixed inset-0 z-[245] flex items-center justify-center bg-black/70 p-4" onClick={closeAssessmentForms}>
-            <div className="assessment-print-modal max-h-[92vh] w-full max-w-[1320px] overflow-hidden rounded-2xl bg-white" onClick={(event) => event.stopPropagation()}>
+        <Modal
+          open={showAssessmentFormsModal}
+          onClose={closeAssessmentForms}
+          size="xl"
+          flush
+          printable
+          title={activeAssessmentCard ? `Assessment Forms - ${activeAssessmentCard.position}` : 'No assessment forms available'}
+          subtitle={activeAssessmentCard
+            ? `${activeAssessmentCard.department} • ${activeAssessmentApplicants.length} applicant${activeAssessmentApplicants.length === 1 ? '' : 's'}`
+            : undefined}
+          footer={(
+            <>
+              <button type="button" onClick={closeAssessmentForms} className="btn btn-md btn-secondary">Close</button>
+              {activeAssessmentCard && (
+                <button type="button" onClick={() => window.print()} className="btn btn-md btn-primary">Print All Forms</button>
+              )}
+            </>
+          )}
+        >
               {!activeAssessmentCard ? (
-                <div className="flex items-center justify-center p-8 text-center">
-                  <div>
-                    <p className="!mb-2 text-2xl font-semibold text-red-600">No assessment forms available</p>
-                    <p className="!mb-4 text-base text-[var(--text-secondary)]">
-                      {activeAssessmentPosition ? `Position "${activeAssessmentPosition}" not found in database` : 'Please select a position'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={closeAssessmentForms}
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-white font-semibold"
-                    >
-                      Close
-                    </button>
-                  </div>
+                <div className="flex h-full items-center justify-center p-8 text-center">
+                  <p className="!mb-0 text-base text-[var(--text-secondary)]">
+                    {activeAssessmentPosition ? `Position "${activeAssessmentPosition}" not found in database` : 'Please select a position'}
+                  </p>
                 </div>
               ) : (
                 <>
-                  <div className="assessment-print-no flex items-start justify-between gap-3 border-b border-[var(--border-color)] px-6 py-5">
-                    <div>
-                      <h2 className="!mb-1 text-4xl font-semibold text-[var(--text-primary)]">Assessment Forms - {activeAssessmentCard.position}</h2>
-                      <p className="!mb-0 text-2xl text-[var(--text-secondary)]">{activeAssessmentCard.department} • {activeAssessmentApplicants.length} applicant{activeAssessmentApplicants.length === 1 ? '' : 's'}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="rounded-xl bg-[var(--primary-color)] px-5 py-3 text-xl font-semibold text-white"
-                      >
-                        Print All Forms
-                      </button>
-                      <button
-                        type="button"
-                        onClick={closeAssessmentForms}
-                        className="rounded-xl border border-[var(--border-color)] px-3 py-2 text-2xl text-[var(--text-muted)]"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="assessment-print-scroll max-h-[78vh] overflow-y-auto">
+                  <div className="assessment-print-scroll h-full overflow-y-auto">
                     <div className="assessment-print-no border-b border-[var(--border-color)] px-6 py-5">
                       <p className="!mb-2 text-xl font-semibold text-[var(--text-primary)]">Filter by Status:</p>
                       <div className="flex flex-wrap gap-2">
@@ -5357,9 +5315,7 @@ export const RSPDashboard = () => {
                   </div>
                 </>
               )}
-            </div>
-          </div>
-        )}
+        </Modal>
 
         {showJobDialog && (
           <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/40 px-3 py-4" onClick={() => setShowJobDialog(false)}>
@@ -6021,31 +5977,28 @@ export const RSPDashboard = () => {
           onClose={() => setPreviewSubmission(null)}
         />
 
-        {resetPwState !== 'idle' && (
-          <div
-            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 px-4"
-            onClick={() => { if (resetPwState !== 'working') closeResetPwModal(); }}
-          >
-            <div
-              className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-                <h3 className="!mb-0 text-base font-semibold text-slate-900">
-                  {resetPwState === 'done' ? 'New Password Generated' : 'Reset Employee Password'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={closeResetPwModal}
-                  disabled={resetPwState === 'working'}
-                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
-                  aria-label="Close"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="space-y-4 px-5 py-4">
+        <Modal
+          open={resetPwState !== 'idle'}
+          onClose={closeResetPwModal}
+          dismissible={resetPwState !== 'working'}
+          size="sm"
+          title={resetPwState === 'done' ? 'New Password Generated' : 'Reset Employee Password'}
+          footer={
+            resetPwState === 'confirm' ? (
+              <>
+                <button type="button" onClick={closeResetPwModal} className="btn btn-md btn-secondary">Cancel</button>
+                <button type="button" onClick={handleResetEmployeePasswordConfirm} className="btn btn-md btn-destructive">Yes, reset password</button>
+              </>
+            ) : resetPwState === 'working' ? (
+              <button type="button" disabled aria-busy="true" className="btn btn-md btn-destructive is-loading">Yes, reset password</button>
+            ) : resetPwState === 'done' ? (
+              <button type="button" onClick={closeResetPwModal} className="btn btn-md btn-primary">Done</button>
+            ) : (
+              <button type="button" onClick={closeResetPwModal} className="btn btn-md btn-secondary">Close</button>
+            )
+          }
+        >
+              <div className="space-y-4">
                 {resetPwState === 'confirm' && selectedEmployeeDetails && (
                   <>
                     <p className="!mb-0 text-sm text-slate-700">
@@ -6066,22 +6019,6 @@ export const RSPDashboard = () => {
                         {new Date(lastResetInfo.reset_at).toLocaleString()}.
                       </p>
                     )}
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={closeResetPwModal}
-                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResetEmployeePasswordConfirm}
-                        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                      >
-                        Yes, reset password
-                      </button>
-                    </div>
                   </>
                 )}
 
@@ -6104,7 +6041,7 @@ export const RSPDashboard = () => {
                           <button
                             type="button"
                             onClick={() => copyResetPwValue(resetPwUsername ?? '')}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="btn btn-sm btn-secondary"
                           >
                             Copy
                           </button>
@@ -6117,7 +6054,7 @@ export const RSPDashboard = () => {
                           <button
                             type="button"
                             onClick={() => copyResetPwValue(resetPwValue)}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="btn btn-sm btn-secondary"
                           >
                             Copy
                           </button>
@@ -6128,39 +6065,16 @@ export const RSPDashboard = () => {
                     <p className="!mb-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                       The employee should change this password on their first login.
                     </p>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={closeResetPwModal}
-                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                      >
-                        Done
-                      </button>
-                    </div>
                   </>
                 )}
 
                 {resetPwState === 'error' && (
-                  <>
-                    <p className="!mb-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {resetPwError ?? 'Something went wrong. Please try again.'}
-                    </p>
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={closeResetPwModal}
-                        className="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </>
+                  <p className="!mb-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {resetPwError ?? 'Something went wrong. Please try again.'}
+                  </p>
                 )}
               </div>
-            </div>
-          </div>
-        )}
+        </Modal>
       </div>
     </div>
   );

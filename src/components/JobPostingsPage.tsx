@@ -11,8 +11,7 @@ import {
     MapPin,
     Plus,
     Search,
-    Trash2,
-    X
+    Trash2
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -60,6 +59,7 @@ import { reviewOutcome } from '../lib/applicantReviewQueue';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
+import { Modal } from './modal';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -1328,29 +1328,29 @@ export const JobPostingsPage = () => {
 
       <RecruitmentNavigationGuide open={showGuide} onClose={() => setShowGuide(false)} />
 
-      {showModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 p-4" onClick={closeModal}>
-          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" style={{ maxHeight: '88vh', fontFamily: 'Poppins, sans-serif' }} onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4" style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)' }}>
-              <div>
-                <h2 className="text-xl font-bold text-white">{editingId ? 'Edit Position' : 'Create New Job Position'}</h2>
-                <p className="text-sm" style={{ color: '#C8D1FF' }}>
-                  {editingId
-                    ? 'Update the posting and its plantilla slots'
-                    : 'Fill in the details to create a new job posting'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/10"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div ref={modalBodyRef} className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title={editingId ? 'Edit Position' : 'Create New Job Position'}
+        subtitle={editingId ? 'Update the posting and its plantilla slots' : 'Fill in the details to create a new job posting'}
+        bodyRef={modalBodyRef}
+        footer={(
+          <>
+            <button type="button" onClick={closeModal} className="btn btn-md btn-secondary">Cancel</button>
+            <button
+              type="button"
+              disabled={savingJob}
+              aria-busy={savingJob || undefined}
+              onClick={() => void submitForm()}
+              className={`btn btn-md btn-primary${savingJob ? ' is-loading' : ''}`}
+            >
+              {!savingJob && <Plus size={15} aria-hidden="true" />}
+              {editingId ? 'Save Changes' : 'Create Position'}
+            </button>
+          </>
+        )}
+      >
+            <div className="space-y-5">
               {(() => {
                 const applied = editingId ? applicantCountsByJob.get(editingId)?.applicants ?? 0 : 0;
                 if (applied === 0) return null;
@@ -1627,29 +1627,7 @@ export const JobPostingsPage = () => {
                 </div>
               </section>
             </div>
-
-            {/* Dialog footer (§9.10): Cancel (secondary) left of the primary action. */}
-            <div className="abyan-ds flex justify-end gap-3 border-t px-6 py-4" style={{ borderColor: 'var(--color-primary-200)' }}>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="btn btn-md btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={savingJob}
-                onClick={() => void submitForm()}
-                className="btn btn-md btn-primary"
-              >
-                <Plus size={15} />
-                {savingJob ? 'Saving…' : editingId ? 'Save Changes' : 'Create Position'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {closingJob && (
         <CloseVacancyDialog job={closingJob} error={closeError} onCancel={() => setClosingJob(null)} onConfirm={confirmCloseVacancy} />

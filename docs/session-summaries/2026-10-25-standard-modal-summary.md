@@ -1,6 +1,6 @@
 # Standard modal — session summary
 
-Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phase 1 of 5 done).
+Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phases 1–2 of 5 done).
 
 ## Phase 1 — Foundation (2026-10-25)
 
@@ -42,3 +42,67 @@ Plan: `docs/plans/2026-10-25-standard-modal.md` (In Progress, phase 1 of 5 done)
   - the 480px confirmation stacks with focus on Cancel, and Esc closes only the top modal
 - **Same harness at 375px:** a full-screen sheet with the footer pinned.
 - **Not checked:** the real portal pages, since they need a live sign-in.
+
+## Phase 2 — Shared dialogs and RSP (2026-10-25)
+
+**Migrated to `Modal` / `ConfirmModal` (21 modals)**
+
+- **Shared**
+  - ConfirmLogoutDialog: `ConfirmModal`, used in every portal.
+  - DocumentPreviewModal: `xl` + `flush` viewer. Extra actions and Download move to the footer.
+- **Jobs**
+  - JobPostingsPage Create/Edit Position, the source modal. Its overlay is now blue, and "Saving…" is replaced by the §9.1 spinner with the label kept.
+  - CloseVacancyDialog: destructive `ConfirmModal` with the reason form.
+  - JobVacanciesPanel Open Vacancy.
+- **Scheduling and scoring**
+  - ScheduleApplicantsModal.
+  - PendingAssignmentList Edit Schedule.
+  - QualifiedApplicantsSection: Applicant Evaluation & Scoring, Files viewer, Written Examination Scores.
+- **Hiring**
+  - ForHiringPage Select for Hiring (notice → confirm steps).
+  - GenerateCredentialsPage: Generate confirm, Revoke (destructive) and Employee Records Created (not dismissible, since passwords show once).
+  - NewlyHiredPage Generated Employee Credentials.
+- **Other RSP pages**
+  - CriticalPositionPage: its local `Modal` now wraps the shared one.
+  - RaterManagementPage: Remove rater (destructive).
+  - Recruitment and Rater Management navigation guides. Their step chips use the brand tint, because §3.6 makes green status-only.
+- **RSPDashboard**
+  - Change Position (both copies).
+  - Reset Employee Password.
+  - Assessment Forms (`xl`, `flush`, `printable`).
+- **rsp-archives**
+  - The list modal and the Restore and Permanently Delete dialogs. `useFocusTrap` was deleted, and the toast now sits above modals.
+
+**Shared component additions**
+
+- **`size="xl"` (1024px) and `flush`.** An edge-to-edge body at a fixed 88vh, for document viewers. §9.10 is updated to match.
+- **`printable`.** `window.print()` prints only the modal body. The print rules are in `abyan-tokens.css`.
+- **Esc handling.** `useModalBehavior` ignores an Esc that a field already handled (`defaultPrevented`), so a combobox's Esc closes its menu, not the modal.
+
+**Left as they are, with reasons**
+
+- **SalaryGradesPage "Edit SG" drawer.** It's a side drawer chosen in the saved mockup `docs/mockups/2026-10-15-salary-grades-drawer.html`. It is a design decision for the user, since §15 now discourages side drawers for details.
+- **Unreachable code** (no importer or trigger), deleted in no phase:
+  - `QualifiedApplicantsPage` (6 modals; imported in App.tsx but never rendered)
+  - `EmployeeDirectory` → `EmployeeDetailPage` / `ChangePositionModal`
+  - RSPDashboard's Job dialog, Rater dialog and Bulk Request (their sections route to JobPostingsPage and RaterManagementPage, or there is no caller)
+  - RSPDashboard's Ranking Report and Hire Applicants (`openRankingReport` has no caller)
+- **Not a modal.** The applicant details workspace in `QualifiedApplicantsPage` is a full-screen detail page (and is unreachable anyway).
+
+**Found, not fixed (out of scope)**
+
+- **RSPDashboard Change Position.** "Apply Position Change" only closes the modal. It saves nothing, and did not before.
+
+**Checks**
+
+- `npx tsc --noEmit`: clean.
+- `npx vitest run`: 55 files, 502 tests, including CloseVacancyDialog (3) and BatchScheduling (8).
+- `npm run build`: succeeds.
+- `impeccable detect`: only `side-tab` warnings, on existing §9.9 warning callouts. These are pre-existing and sanctioned by the guide.
+- **Harness at 1366×768** (real components: Logout, Close Vacancy, Recruitment guide, Document preview, Schedule Applicants):
+  - header title computed white, gradient header, blue overlay
+  - widths of 480, 480, 880, 1024 and 640px
+  - footers as expected
+  - focus on Cancel, the first field or the date
+  - Esc closes each one
+- **Not checked:** printing the assessment forms (print preview can't be driven here), and the live portal pages.

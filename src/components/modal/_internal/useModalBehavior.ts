@@ -45,6 +45,8 @@ export const useModalBehavior = ({ open, dismissible, onClose, panelRef, bodyRef
     const onKey = (e: KeyboardEvent) => {
       if (stack[stack.length - 1] !== id) return;
       if (e.key === 'Escape') {
+        // A field that used Esc itself (closing a combobox menu) calls preventDefault.
+        if (e.defaultPrevented) return;
         if (latest.current.dismissible) { e.stopPropagation(); latest.current.onClose(); }
         return;
       }

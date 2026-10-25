@@ -1,5 +1,6 @@
-import { Download, X } from 'lucide-react';
-import React, { useEffect } from 'react';
+import { Download } from 'lucide-react';
+import React from 'react';
+import { Modal } from './modal';
 import { downloadEmployeeDocument } from '../lib/employeeDocuments';
 
 interface DocumentPreviewModalProps {
@@ -38,15 +39,6 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   onClose,
   actions,
 }) => {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const handleDownload = () => {
@@ -103,56 +95,35 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
         <button
           type="button"
           onClick={handleDownload}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          className="btn btn-primary btn-md"
         >
-          <Download className="h-4 w-4" />
+          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           Download to view
         </button>
       </div>
     );
   };
 
+  // §9.10 document viewer: xl, edge-to-edge body; extra actions sit beside Download.
   return (
-    <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 px-4 py-6"
-      onClick={onClose}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title || fileName}
+      subtitle={subtitle}
+      size="xl"
+      flush
+      footer={(
+        <>
+          {actions}
+          <button type="button" onClick={handleDownload} className="btn btn-secondary btn-md">
+            <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            Download
+          </button>
+        </>
+      )}
     >
-      <div
-        className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-slate-900">
-              {title || fileName}
-            </h2>
-            {subtitle && (
-              <p className="truncate text-xs text-slate-500">{subtitle}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {actions}
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-hidden">{renderBody()}</div>
-      </div>
-    </div>
+      {renderBody()}
+    </Modal>
   );
 };

@@ -1,4 +1,5 @@
-import { CalendarClock, Network, UserCog, X } from 'lucide-react';
+import { CalendarClock, Network, UserCog } from 'lucide-react';
+import { Modal } from './modal';
 
 interface RaterManagementNavigationGuideProps {
   open: boolean;
@@ -29,32 +30,22 @@ const steps = [
 ];
 
 export const RaterManagementNavigationGuide = ({ open, onClose }: RaterManagementNavigationGuideProps) => {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/70 p-4" onClick={onClose}>
-      <div
-        className="mx-auto mt-8 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Rater Management Guide</h2>
-            <p className="text-sm text-slate-500">Configure rater assignments and monitor evaluation workflows.</p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Rater Management Guide"
+      subtitle="Configure rater assignments and monitor evaluation workflows."
+      size="lg"
+      footer={<button type="button" className="btn btn-secondary btn-md" onClick={onClose}>Close</button>}
+    >
           <div className="space-y-4">
             {steps.map((step) => {
               const Icon = step.icon;
               return (
                 <div key={step.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                    <div className="rounded-lg bg-[var(--color-primary-50)] p-2 text-[var(--color-primary)]">
                       <Icon className="h-5 w-5" />
                     </div>
                     <div>
@@ -66,8 +57,6 @@ export const RaterManagementNavigationGuide = ({ open, onClose }: RaterManagemen
               );
             })}
           </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

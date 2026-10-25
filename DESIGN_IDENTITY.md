@@ -651,7 +651,7 @@ Used where a KPI should also preview **who** it counts (e.g. Interviewer Dashboa
 |---|---|
 | Overlay | `--overlay` `rgba(4,14,107,.45)`: tinted deep blue, not black. Centered, 16px padding. |
 | Panel | White, `--radius-xl` (16px), `--shadow-3`, `overflow: hidden`, `max-height: 88vh`, flex column |
-| Sizes | `sm` 480px (confirmations), `md` 640px (forms, the default), `lg` 880px (lists and tables, §9.7.1) |
+| Sizes | `sm` 480px (confirmations), `md` 640px (forms, the default), `lg` 880px (lists and tables, §9.7.1), `xl` 1024px (document viewers; use `flush` for an edge-to-edge body at a fixed 88vh) |
 | Header | `--gradient-modal-header` (`linear-gradient(135deg, #363EE8 0%, #040E6B 100%)`), padding 16px 24px. Title: 20px/28px Bold, **white**. Optional subtitle: Body M (14px), `#C8D1FF` (4.6:1 on `#363EE8`). An optional 20px icon sits before the title. |
 | Close | Top-right, 36px icon button with the `x` icon, `aria-label="Close"`. White at 80%; hover background white at 10%; focus ring `0 0 0 3px rgba(255,255,255,.5)`. |
 | Body | Padding 20px 24px. Body text `#28343D`. **The body scrolls inside the panel** so the header and footer stay visible. |

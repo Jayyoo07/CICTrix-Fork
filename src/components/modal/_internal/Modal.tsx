@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalBehavior } from './useModalBehavior';
 
-export type ModalSize = 'sm' | 'md' | 'lg';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
 /** §9.10 widths: confirmations, forms, lists. */
 const WIDTH: Record<ModalSize, string> = {
   sm: 'sm:max-w-[480px]',
   md: 'sm:max-w-[640px]',
   lg: 'sm:max-w-[880px]',
+  xl: 'sm:max-w-[1024px]',
 };
 
 export interface ModalProps {
@@ -22,7 +23,7 @@ export interface ModalProps {
   subtitle?: ReactNode;
   /** Optional 20px icon before the title. */
   icon?: ReactNode;
-  /** sm 480 (confirmations), md 640 (forms, default), lg 880 (lists). */
+  /** sm 480 (confirmations), md 640 (forms, default), lg 880 (lists), xl 1024 (document viewers). */
   size?: ModalSize;
   /** Footer actions, right-aligned: Cancel (secondary) then the primary. */
   footer?: ReactNode;
@@ -31,6 +32,10 @@ export interface ModalProps {
   dismissible?: boolean;
   /** Element to focus on open; defaults to the first field, then the close button. */
   initialFocusRef?: RefObject<HTMLElement>;
+  /** Edge-to-edge body at a fixed 88vh height, for document viewers. */
+  flush?: boolean;
+  /** window.print() prints only this modal's body: no page, overlay, header or footer. */
+  printable?: boolean;
   /** Ref to the scrolling body, for callers that scroll to a field. */
   bodyRef?: Ref<HTMLDivElement>;
 }
@@ -41,7 +46,7 @@ export interface ModalProps {
  * scope so tokens, `.btn` classes and the white header text hold in every portal.
  */
 export const Modal = ({
-  open, onClose, title, ariaLabel, subtitle, icon, size = 'md', footer, children, dismissible = true, initialFocusRef, bodyRef,
+  open, onClose, title, ariaLabel, subtitle, icon, size = 'md', footer, children, dismissible = true, initialFocusRef, bodyRef, flush = false, printable = false,
 }: ModalProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const innerBodyRef = useRef<HTMLDivElement>(null);
@@ -61,7 +66,7 @@ export const Modal = ({
 
   return createPortal(
     <div
-      className="abyan-ds fixed inset-0 z-[1000] flex items-stretch justify-center bg-[var(--overlay)] sm:items-center sm:p-4"
+      className={`abyan-ds${printable ? ' abyan-modal-printable' : ''} fixed inset-0 z-[1000] flex items-stretch justify-center bg-[var(--overlay)] sm:items-center sm:p-4`}
       onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -71,10 +76,10 @@ export const Modal = ({
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : ariaLabel}
         aria-describedby={subtitle ? subtitleId : undefined}
-        className={`relative flex h-full w-full flex-col overflow-hidden bg-white shadow-[var(--shadow-3)] sm:h-auto sm:max-h-[88vh] sm:rounded-2xl ${WIDTH[size]}`}
+        className={`relative flex h-full w-full flex-col overflow-hidden bg-white shadow-[var(--shadow-3)] sm:max-h-[88vh] sm:rounded-2xl ${flush ? 'sm:h-[88vh]' : 'sm:h-auto'} ${WIDTH[size]}`}
       >
         {title ? (
-        <header className="flex shrink-0 items-start justify-between gap-4 px-6 py-4" style={{ background: 'var(--gradient-modal-header)' }}>
+        <header className="abyan-modal-chrome flex shrink-0 items-start justify-between gap-4 px-6 py-4" style={{ background: 'var(--gradient-modal-header)' }}>
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-white">
               {icon && <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5" aria-hidden="true">{icon}</span>}
@@ -100,18 +105,18 @@ export const Modal = ({
             onClick={onClose}
             disabled={!dismissible}
             aria-label="Close"
-            className="absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-lg !text-[var(--neutral-600)] hover:bg-[var(--bg-page)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-primary-200)]"
+            className="abyan-modal-chrome absolute right-3 top-3 z-10 grid h-9 w-9 place-items-center rounded-lg !text-[var(--neutral-600)] hover:bg-[var(--bg-page)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-primary-200)]"
           >
             <X className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
           </button>
         )}
 
-        <div ref={setBodyRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm text-[var(--neutral-800)]">
+        <div ref={setBodyRef} className={`abyan-modal-body min-h-0 flex-1 text-sm text-[var(--neutral-800)] ${flush ? 'overflow-hidden' : 'overflow-y-auto px-6 py-5'}`}>
           {children}
         </div>
 
         {footer && (
-          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--neutral-200)] px-6 py-4">
+          <footer className="abyan-modal-chrome flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--neutral-200)] px-6 py-4">
             {footer}
           </footer>
         )}

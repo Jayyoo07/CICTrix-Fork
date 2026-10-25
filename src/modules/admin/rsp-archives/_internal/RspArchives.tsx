@@ -423,7 +423,7 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
       {dialog?.kind === 'restore' && <RestoreDialog record={dialog.record} onCancel={() => setDialog(null)} onConfirm={doRestore} />}
       {dialog?.kind === 'purge' && <PurgeDialog record={dialog.record} onCancel={() => setDialog(null)} onConfirm={doPurge} />}
 
-      <div aria-live="polite" className="pointer-events-none fixed right-6 top-20 z-[60]">
+      <div aria-live="polite" className="pointer-events-none fixed right-6 top-20 z-[1100]">
         {toast && (
           <div role="status" className="pointer-events-auto w-[min(360px,calc(100vw-32px))] rounded-xl border-l-4 border-[var(--success-500)] bg-white p-4 text-sm font-medium text-[var(--neutral-800)] shadow-[var(--shadow-3)]">
             {toast}

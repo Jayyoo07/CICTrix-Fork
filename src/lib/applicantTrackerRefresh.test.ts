@@ -65,7 +65,7 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
   api.refetch.mockReset().mockResolvedValue(rows);
   api.attachments.mockReset().mockResolvedValue({ data: [attachment], error: null });
-  api.links.mockReset().mockResolvedValue({ ok: true, data: new Map() });
+  api.links.mockReset().mockResolvedValue({ ok: true, data: new Map([['a1', [{ slotId: 's1', status: 'applied' }]]]) });
   api.slots.mockReset().mockResolvedValue({ ok: true, data: new Map() });
 });
 afterEach(() => {
@@ -84,6 +84,7 @@ describe('tracker fallback and realtime coordinator', () => {
     expect(api.attachments).toHaveBeenCalledTimes(4);
     expect(api.links).toHaveBeenCalledTimes(4);
     expect(api.slots).toHaveBeenCalledTimes(4);
+    expect(api.slots).toHaveBeenCalledWith(['s1']);
     expect(refresh.callback).toHaveBeenCalledTimes(4);
   });
 
@@ -212,7 +213,7 @@ describe('tracker snapshot loading', () => {
   it.each(['links', 'slots'] as const)('keeps failed %s reads distinct from empty successful outcomes', async (key) => {
     api[key].mockResolvedValueOnce({ ok: false, error: 'offline' });
     expect((await loadTrackerDetails(['a1'])).outcomesByApplicant).toBeNull();
-    expect((await loadTrackerDetails(['a1'])).outcomesByApplicant).toEqual(new Map());
+    expect((await loadTrackerDetails(['a1'])).outcomesByApplicant).toEqual(new Map([['a1', []]]));
   });
 
   it('paginates a capped combined attachment snapshot without losing older documents', async () => {

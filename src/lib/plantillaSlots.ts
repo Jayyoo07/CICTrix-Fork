@@ -80,13 +80,16 @@ export const fetchSlotsByJobPosting = async (): Promise<Map<string, PlantillaSlo
 };
 
 /** Callers retaining last-good data must distinguish failure from no slots. */
-export const fetchSlotsByJobPostingChecked = async (): Promise<SlotResult<Map<string, PlantillaSlot[]>>> => {
+export const fetchSlotsByJobPostingChecked = async (slotIds?: string[]): Promise<SlotResult<Map<string, PlantillaSlot[]>>> => {
   const grouped = new Map<string, PlantillaSlot[]>();
+  if (slotIds?.length === 0) return { ok: true, data: grouped };
   try {
-    const { data, error } = await client
+    let query = client
       .from('plantilla_slots')
       .select('*')
       .order('slot_number', { ascending: true });
+    if (slotIds) query = query.in('id', slotIds);
+    const { data, error } = await query;
 
     if (error) {
       if (!isMissingSlotSchema(error)) {

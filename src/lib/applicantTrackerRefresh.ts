@@ -41,10 +41,14 @@ export const loadTrackerDetails = async (applicantIds: string[]): Promise<Tracke
       return attachments;
     } catch { return null; }
   };
-  const [attachments, links, slotsByJob] = await Promise.all([
-    attachmentsRead(), fetchApplicantSlotLinksChecked(applicantIds), fetchSlotsByJobPostingChecked(),
+  const [attachments, links] = await Promise.all([
+    attachmentsRead(), fetchApplicantSlotLinksChecked(applicantIds),
   ]);
-  if (!links.ok || !slotsByJob.ok) return { attachments, outcomesByApplicant: null };
+  if (!links.ok) return { attachments, outcomesByApplicant: null };
+  const slotIds = [...new Set([...links.data.values()].flatMap((rows) => rows.map((link) => link.slotId)))];
+  // A tracker only displays this person's linked slots, never the whole roster.
+  const slotsByJob = await fetchSlotsByJobPostingChecked(slotIds);
+  if (!slotsByJob.ok) return { attachments, outcomesByApplicant: null };
   const slots = new Map<string, PlantillaSlot>();
   slotsByJob.data.forEach((rows) => rows.forEach((slot) => slots.set(slot.id, slot)));
   const outcomesByApplicant = new Map<string, TrackerSlotOutcome[]>();

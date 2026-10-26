@@ -230,24 +230,26 @@
 .rsp-ds :is(input[type='checkbox'], input[type='radio']) { accent-color: #363EE8; }
 
 /* ── Tables (§9.5) ─────────────────────────────────────────────────────────── */
-:root:not([data-theme='dark']) .rsp-ds table thead,
-:root:not([data-theme='dark']) .rsp-ds table thead tr { background-color: #F1F5F9; }
-:root:not([data-theme='dark']) .rsp-ds table thead th {
+/* Legacy remap for tables not yet on the shared .abyan-table layer
+   (src/components/data-table), which carries its own §9.5 styles. */
+:root:not([data-theme='dark']) .rsp-ds table:not(.abyan-table) thead,
+:root:not([data-theme='dark']) .rsp-ds table:not(.abyan-table) thead tr { background-color: #F1F5F9; }
+:root:not([data-theme='dark']) .rsp-ds table:not(.abyan-table) thead th {
   color: #040E6B;
   font-weight: 600;
 }
-.rsp-ds table thead th {
+.rsp-ds table:not(.abyan-table) thead th {
   font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
 }
 /* Density (§5.4, §9.5): roomy legacy cell padding (py-4+/px-5+) drops to the
    token values; cells that already use tighter padding keep it. */
-.rsp-ds table thead th:is(.py-3, .py-3\.5, .py-4, .py-5) { padding-top: var(--table-head-pad-y); padding-bottom: var(--table-head-pad-y); }
-.rsp-ds table tbody td:is(.py-3\.5, .py-4, .py-5, .py-6) { padding-top: var(--table-cell-pad-y); padding-bottom: var(--table-cell-pad-y); }
-.rsp-ds table :is(th, td):is(.px-5, .px-6) { padding-left: var(--table-cell-pad-x); padding-right: var(--table-cell-pad-x); }
-:root:not([data-theme='dark']) .rsp-ds table tbody tr { border-color: #E2E8F0; }
-:root:not([data-theme='dark']) .rsp-ds table tbody tr:hover { background-color: #F8FAFF; }
+.rsp-ds table:not(.abyan-table) thead th:is(.py-3, .py-3\.5, .py-4, .py-5) { padding-top: var(--table-head-pad-y); padding-bottom: var(--table-head-pad-y); }
+.rsp-ds table:not(.abyan-table) tbody td:is(.py-3\.5, .py-4, .py-5, .py-6) { padding-top: var(--table-cell-pad-y); padding-bottom: var(--table-cell-pad-y); }
+.rsp-ds table:not(.abyan-table) :is(th, td):is(.px-5, .px-6) { padding-left: var(--table-cell-pad-x); padding-right: var(--table-cell-pad-x); }
+:root:not([data-theme='dark']) .rsp-ds table:not(.abyan-table) tbody tr { border-color: #E2E8F0; }
+:root:not([data-theme='dark']) .rsp-ds table:not(.abyan-table) tbody tr:hover { background-color: #F8FAFF; }
 
 /* ── Modals (§9.10): deep-blue tinted overlay, not black ───────────────────── */
 .rsp-ds .fixed.inset-0:is(.bg-black\/40, .bg-black\/45, .bg-black\/50, .bg-slate-900\/60) {

@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`top scorer highlight in a table > renders the shared table structure 1`] = `
+<div
+  class="abyan-table-wrap"
+>
+  <table
+    class="abyan-table"
+  >
+    <thead>
+      <tr>
+        <th>
+          Applicant
+        </th>
+        <th
+          class="is-num"
+        >
+          Score
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr
+        class=""
+        data-testid="row-a"
+      >
+        <td>
+          <span
+            class="abyan-cell-primary"
+          >
+            Ana
+          </span>
+        </td>
+        <td
+          class="is-num"
+        >
+          80
+        </td>
+      </tr>
+      <tr
+        class="is-top-scorer"
+        data-testid="row-b"
+      >
+        <td>
+          <span
+            class="abyan-cell-primary"
+          >
+            Ben
+          </span>
+          <span
+            class="abyan-top-badge"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-trophy"
+              fill="none"
+              height="12"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="12"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"
+              />
+              <path
+                d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"
+              />
+              <path
+                d="M18 9h1.5a1 1 0 0 0 0-5H18"
+              />
+              <path
+                d="M4 22h16"
+              />
+              <path
+                d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"
+              />
+              <path
+                d="M6 9H4.5a1 1 0 0 1 0-5H6"
+              />
+            </svg>
+            Top scorer
+          </span>
+        </td>
+        <td
+          class="is-num"
+        >
+          85
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+`;

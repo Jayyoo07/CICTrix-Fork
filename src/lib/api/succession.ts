@@ -598,16 +598,12 @@ export interface SuccessionOverview {
   positions: SuccessionOverviewPosition[];
 }
 
-/** listAutoSuccessors calls in flight at once; each one is several queries. */
-const OVERVIEW_ENGINE_CONCURRENCY = 4;
-
 /**
  * Every critical position with its successor count, for the RSP dashboard.
  *
  * The count comes from the same ranking engine as the Succession Planning
- * page, so the two always agree. That engine runs once per position, so this
- * costs several queries per position; the calls are capped at
- * OVERVIEW_ENGINE_CONCURRENCY to keep the burst bounded.
+ * page, so the two always agree. Load its shared inputs once for all positions
+ * instead of repeating those reads for each position.
  */
 export async function getSuccessionDashboardOverview(): Promise<Result<SuccessionOverview>> {
   try {
@@ -624,17 +620,11 @@ export async function getSuccessionDashboardOverview(): Promise<Result<Successio
     const deptName = new Map(((depts ?? []) as any[]).map((d) => [String(d.id), String(d.name ?? '').trim()]));
     const positionDept = new Map(rows.map((r) => [String(r.id), deptName.get(String(r.department_id)) || 'Unassigned']));
 
+    const results = await listAutoSuccessorsForPositions(rows.map((r) => String(r.id)));
     const successorsByPosition = new Map<string, number | null>();
-    let next = 0;
-    const worker = async () => {
-      while (next < rows.length) {
-        const id = String(rows[next].id);
-        next += 1;
-        const res = await listAutoSuccessors(id);
-        successorsByPosition.set(id, res.ok ? res.data.qualified.length : null);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(OVERVIEW_ENGINE_CONCURRENCY, rows.length) }, worker));
+    for (const [id, res] of results) {
+      successorsByPosition.set(id, res.ok ? res.data.qualified.length : null);
+    }
 
     const incumbentIds = rows.map((r) => r.incumbent_employee_id).filter(Boolean);
     const nameById = new Map<string, string>();

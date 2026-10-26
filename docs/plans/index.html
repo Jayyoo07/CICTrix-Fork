@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">70 plans &middot; 58 done</p>
+    <p class="counts">81 plans &middot; 69 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -71,13 +71,43 @@
         <tbody>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-uniform-tables.md">Readable table text and a uniform table design</a><p class="summary">Fix low-contrast table text and move every table in every module onto a shared .abyan-table style layer modelled on the Succession Planning table, with shared loading/error/empty rows and the top-scorer option.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-tracker-application-list.md">Applicant tracker lists every application, each row expands to its status</a><p class="summary">A tracker search returns all of a person's applications (same Reference No. or email). A &quot;Your applications&quot; list sits above the existing sections; clicking a row expands that position's status in place. The existing sections and their realtime behaviour stay as they are, scoped to the open row.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-top-scorer-highlight.md">Highlight the top scorer in RSP tables</a><p class="summary">Every RSP table with scores or rankings highlights the highest scorer(s) per comparison group, computed from the full group, including print and export.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-succession-batch-fetch.md">Batch succession candidate loading per department</a><p class="summary">Load the shared succession inputs once per department and evaluate every critical position in memory, replacing the per-position query fan-out.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-portal-header.md">One shared portal header</a><p class="summary">Consolidate AdminHeader, the Dept Head console header, the Employee gradient header and InterviewerNavBar into one PortalHeader built to DESIGN_IDENTITY.md §8.2.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-pm-dashboard-submission-matching.md">Match IPCR submissions on the PM dashboard</a><p class="summary">Align PMDashboard's IPCR submission matching with the cycle title vocabulary and the Subtab 2.2 fallback map, so forwarded IPCRs reflect on the PM dashboard overview card instead of showing 0.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
-        <td><a href="2026-10-26-opencode-handoff.md">Retarget the agent handoff to OpenCode</a><p class="summary">Rewrite docs/handoff/agent-handoff.md for OpenCode instead of Claude Code, and add the two missing slash commands so /grill-me and /grill-with-docs work as AGENTS.md describes.</p></td>
+        <td><a href="2026-10-26-pm-dashboard-cleanup.md">PM dashboard cleanup</a><p class="summary">Remove the Competency &amp; Succession Watchlist and the IPCR Submissions panel from the PM dashboard, after confirming the submissions data exists elsewhere.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-loading-and-error-states.md">Loading states and error handling across the system</a><p class="summary">Audit every fetch/action site, extend the shared loading/error building blocks, and fix every site module by module so failures say what went wrong, whether it completed, and what to do next.</p></td>
+        <td class="status"><span class="badge badge-info">In Progress</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -86,12 +116,37 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-lint-green.md">Make npm run lint green on current main</a><p class="summary">Restore the missing ESLint config, land the deferred cleanup on current main, and clear the remaining warnings so npm run lint exits 0 with zero warnings.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-ipcr-surface-sync.md">Sync every IPCR surface from the authoritative record</a><p class="summary">Make a finished Phase 1/2 IPCR land in every derived store, backfill the 272 seeded IPCRs through the same function, and fill the missing accomplishment text, so the Summary of Ratings, tracker, vault, PM dashboard, archive and RSP all read real data.</p></td>
         <td class="status"><span class="badge badge-info">In Progress</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-ipcr-character-limits.md">Add character limits and live counters to IPCR text fields</a><p class="summary">Cap each IPCR free-text field at a limit sized from production data and show a live n/max counter that warns near and at the cap.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-fix-modal-duplicate-close-and-ui-peculiarities.md">Fix duplicate modal close buttons and UI peculiarities</a><p class="summary">Unify IPCR phase open/close confirmation modals, eliminate duplicate X close buttons, fix non-existent Tailwind utility classes, and standardize modal patterns to ABYAN design tokens.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-exam-total-points.md">Configurable written exam total points</a><p class="summary">RSP sets the Written Exam total points per vacancy instead of the hard-coded 100; every conversion, display, ranking and export uses it, capped at the 30-point share.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-dashboard-succession-batch.md">Batch RSP dashboard succession counts</a><p class="summary">Replace the dashboard's per-position succession fetches with one shared batch, preserving every successor count and existing failure behavior.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-build-verify-script.md">Add a Windows-safe local build check</a><p class="summary">Add a build:verify script that type-checks and builds without esbuild minification, so a Windows dev machine can verify a change without changing the production build.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -246,6 +301,11 @@
       </tr>
       <tr>
         <td class="date">2026-10-20</td>
+        <td><a href="2026-10-20-eslint-cleanup.md">ESLint config and safe lint cleanup</a><p class="summary">Add the missing ESLint config, turn off no-explicit-any for now, and fix the mechanical findings that cannot change runtime behavior. Hook-dependency warnings are left for a separate reviewed pass.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-20</td>
         <td><a href="2026-10-20-department-head-assignment-access-management.md">Department Head Assignment &amp; Access Management</a><p class="summary">Provide Super Admin with Department Head assignment capabilities in System Administration with full supervisory synchronization, central employee alignment, downstream competency protection, duplicate prevention, and in-page subtabs.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
@@ -283,11 +343,6 @@
         <td class="date">2026-10-16</td>
         <td><a href="2026-10-16-soft-delete-documents.md">Hide documents of soft-deleted applicants and employees</a><p class="summary">Extend the 2026-10-15 soft delete so attachment rows and private storage files belonging to soft-deleted applicants and employees are hidden from the app, with no rows or files removed.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-16</td>
-        <td><a href="2026-10-16-security-remediation.md">Security remediation (key rotation, history purge, password hashing, real RLS)</a><p class="summary">Close the gaps that let anyone read or change HR data. Rotate the leaked service-role key, purge secrets from git history, move every portal login to Supabase Auth with hashed passwords, then replace the allow-all database access with per-role RLS, private storage and authenticated backend routes.</p></td>
-        <td class="status"><span class="badge badge-neutral">Draft</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-16</td>
@@ -430,11 +485,31 @@
         <tbody>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-uniform-tables-summary.md">Readable table text and uniform table design summary</a><p class="meta">Plan: <a href="2026-10-26-uniform-tables.md">2026-10-26-uniform-tables.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-tracker-application-list-summary.md">Applicant tracker lists every application — summary</a><p class="meta">Plan: <a href="2026-10-26-tracker-application-list.md">2026-10-26-tracker-application-list.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-top-scorer-highlight-summary.md">Top scorer highlight summary</a><p class="meta">Plan: <a href="2026-10-26-top-scorer-highlight.md">2026-10-26-top-scorer-highlight.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-succession-batch-fetch-summary.md">Succession batch fetch: session summary</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-portal-header-summary.md">One shared portal header summary</a><p class="meta">Plan: <a href="2026-10-26-portal-header.md">2026-10-26-portal-header.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-pm-dashboard-submission-matching-summary.md">Session Summary: Match IPCR Submissions on PM Dashboard</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
-        <td><a href="../session-summaries/2026-10-26-opencode-handoff-summary.md">Session Summary: Retarget the Agent Handoff to OpenCode</a></td>
+        <td><a href="../session-summaries/2026-10-26-pm-dashboard-cleanup-summary.md">PM dashboard cleanup summary</a><p class="meta">Plan: <a href="2026-10-26-pm-dashboard-cleanup.md">2026-10-26-pm-dashboard-cleanup.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -442,7 +517,31 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-lint-green-summary.md">Lint green on current main (summary)</a><p class="meta">Plan: <a href="2026-10-26-lint-green.md">2026-10-26-lint-green.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-ipcr-character-limits-summary.md">Session Summary: IPCR Character Limits and Live Counters</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-fix-modal-duplicate-close-and-ui-peculiarities-summary.md">Session Summary: Fix Modal Duplicate Close Buttons and UI Peculiarities</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-exam-total-points-summary.md">Written exam total points summary</a><p class="meta">Plan: <a href="2026-10-26-exam-total-points.md">2026-10-26-exam-total-points.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-eliminate-duplicate-phase-modal-close-button-summary.md">Session Summary: Eliminate Duplicate Close Button from PhaseConfirmModal</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-dashboard-succession-batch-summary.md">Batch RSP dashboard succession counts — session summary</a><p class="summary">Dashboard service requests fell from 498 to 18 and measured load time from 12.28 s to 1.73 s, with identical counts for all 33 critical positions.</p><p class="meta">Plan: <a href="2026-10-26-dashboard-succession-batch.md">2026-10-26-dashboard-succession-batch.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-build-verify-summary.md">Windows-safe local build check (summary)</a><p class="meta">Plan: <a href="2026-10-26-build-verify-script.md">2026-10-26-build-verify-script.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-25</td>
@@ -535,6 +634,10 @@
       <tr>
         <td class="date">2026-10-20</td>
         <td><a href="../session-summaries/2026-10-20-migration-guard-summary.md">Migration guard: summary</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-20</td>
+        <td><a href="../session-summaries/2026-10-20-eslint-cleanup-summary.md">ESLint config and safe lint cleanup (summary)</a><p class="meta">Plan: <a href="2026-10-20-eslint-cleanup.md">2026-10-20-eslint-cleanup.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-20</td>

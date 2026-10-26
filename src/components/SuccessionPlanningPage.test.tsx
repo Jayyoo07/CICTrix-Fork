@@ -17,7 +17,8 @@ vi.mock('../lib/api/succession', () => ({
       ],
     }),
   listCriticalPositions: api.listCriticalPositions,
-  listAutoSuccessors: () => Promise.resolve({ ok: true, data: { qualified: [], notQualified: [], downwardMovesExcluded: 0 } }),
+  listAutoSuccessorsForPositions: (ids: string[]) =>
+    Promise.resolve(new Map(ids.map((id) => [id, { ok: true, data: { qualified: [], notQualified: [], downwardMovesExcluded: 0 } }]))),
 }));
 
 describe('SuccessionPlanningPage deep link', () => {

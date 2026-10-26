@@ -35,6 +35,7 @@ import { fetchEmployeeApplicationProfile } from '../../lib/api/employeeApplicati
 import { describeActionFailure } from '../../lib/friendlyErrors';
 import { linkApplicationToSlots } from '../../lib/plantillaSlots';
 import { ATTACHMENTS_BUCKET, supabase } from '../../lib/supabase';
+import { encryptApplicantFile } from '../../lib/crypto';
 import '../../styles/wizard.css';
 import type { ApplicantFormData, UploadedFile, ValidationErrors } from '../../types/applicant.types';
 import type { JobPosting } from '../../types/recruitment.types';
@@ -755,8 +756,9 @@ export const ApplicantWizard: React.FC = () => {
       }
 
       const filePath = generatedPath;
+      const fileToUpload = await encryptApplicantFile(uploadedFile.file);
       try {
-        const uploadResult = await storageBucket.upload(generatedPath, uploadedFile.file);
+        const uploadResult = await storageBucket.upload(generatedPath, fileToUpload);
         const uploadError = (uploadResult as any).error;
         if (uploadError) {
           throw new Error(String(uploadError));
@@ -771,7 +773,7 @@ export const ApplicantWizard: React.FC = () => {
         file_name: uploadedFile.file.name,
         file_path: filePath,
         file_type: uploadedFile.file.type,
-        file_size: uploadedFile.file.size,
+        file_size: fileToUpload.size,
         document_type: (uploadedFile as any).documentType || 'other',
       };
 

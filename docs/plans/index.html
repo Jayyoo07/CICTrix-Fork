@@ -62,13 +62,18 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">70 plans &middot; 58 done</p>
+    <p class="counts">77 plans &middot; 64 done</p>
 
     <section>
       <h2>Plans</h2>
       <table>
         <thead><tr><th>Date</th><th>Plan</th><th>Status</th></tr></thead>
         <tbody>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-rsp-view-first-documents.md">Open RSP documents in a viewer before printing or downloading</a><p class="summary">Make RSP document actions view-first using the existing in-site viewer, with explicit Print and Download controls instead of immediate file downloads. Preserve document access rules and leave report exports unchanged.</p></td>
+        <td class="status"><span class="badge badge-info">In Progress</span></td>
+      </tr>
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-pm-dashboard-submission-matching.md">Match IPCR submissions on the PM dashboard</a><p class="summary">Align PMDashboard's IPCR submission matching with the cycle title vocabulary and the Subtab 2.2 fallback map, so forwarded IPCRs reflect on the PM dashboard overview card instead of showing 0.</p></td>
@@ -86,12 +91,37 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-lint-green.md">Make npm run lint green on current main</a><p class="summary">Restore the missing ESLint config, land the deferred cleanup on current main, and clear the remaining warnings so npm run lint exits 0 with zero warnings.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-ipcr-surface-sync.md">Sync every IPCR surface from the authoritative record</a><p class="summary">Make a finished Phase 1/2 IPCR land in every derived store, backfill the 272 seeded IPCRs through the same function, and fill the missing accomplishment text, so the Summary of Ratings, tracker, vault, PM dashboard, archive and RSP all read real data.</p></td>
         <td class="status"><span class="badge badge-info">In Progress</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-ipcr-character-limits.md">Add character limits and live counters to IPCR text fields</a><p class="summary">Cap each IPCR free-text field at a limit sized from production data and show a live n/max counter that warns near and at the cap.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-grilling-question-count.md">Add estimated question counts to grilling skills</a><p class="summary">Announce an estimated interview length and number each question in grilling and grill-with-docs, revising the estimate openly when needed.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-fix-modal-duplicate-close-and-ui-peculiarities.md">Fix duplicate modal close buttons and UI peculiarities</a><p class="summary">Unify IPCR phase open/close confirmation modals, eliminate duplicate X close buttons, fix non-existent Tailwind utility classes, and standardize modal patterns to ABYAN design tokens.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-build-verify-script.md">Add a Windows-safe local build check</a><p class="summary">Add a build:verify script that type-checks and builds without esbuild minification, so a Windows dev machine can verify a change without changing the production build.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-applicant-file-encryption.md">Client-side asymmetric encryption for applicant files</a><p class="summary">Encrypt applicant file uploads client-side via Web Crypto (AES-256-GCM + RSA-OAEP) before storing in Supabase Storage, and gate the private decryption key in Postgres to Super Admin, RSP, and active Interviewers.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -243,6 +273,11 @@
         <td class="date">2026-10-20</td>
         <td><a href="2026-10-20-import-sheet-job-postings.md">Import the office plantilla sheet as job postings</a><p class="summary">Turn the four-office plantilla Google Sheet into job postings, plantilla slots, a new Social Welfare office and per-office divisions, with Faker filling the qualification fields inside CSC rules, and keep divisions out of office lists.</p></td>
         <td class="status"><span class="badge badge-info">In Progress</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-20</td>
+        <td><a href="2026-10-20-eslint-cleanup.md">ESLint config and safe lint cleanup</a><p class="summary">Add the missing ESLint config, turn off no-explicit-any for now, and fix the mechanical findings that cannot change runtime behavior. Hook-dependency warnings are left for a separate reviewed pass.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-20</td>
@@ -442,7 +477,31 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-lint-green-summary.md">Lint green on current main (summary)</a><p class="meta">Plan: <a href="2026-10-26-lint-green.md">2026-10-26-lint-green.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-ipcr-character-limits-summary.md">Session Summary: IPCR Character Limits and Live Counters</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-grilling-question-count-summary.md">Add estimated question counts to grilling skills</a><p class="summary">Both local grilling skills now announce an estimated total and show progress on each question, with explicit estimate revisions.</p><p class="meta">Plan: <a href="2026-10-26-grilling-question-count.md">2026-10-26-grilling-question-count.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-fix-modal-duplicate-close-and-ui-peculiarities-summary.md">Session Summary: Fix Modal Duplicate Close Buttons and UI Peculiarities</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-eliminate-duplicate-phase-modal-close-button-summary.md">Session Summary: Eliminate Duplicate Close Button from PhaseConfirmModal</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-build-verify-summary.md">Windows-safe local build check (summary)</a><p class="meta">Plan: <a href="2026-10-26-build-verify-script.md">2026-10-26-build-verify-script.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-applicant-file-encryption-summary.md">Session Summary: Client-Side Asymmetric Encryption for Applicant Files</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-25</td>
@@ -535,6 +594,10 @@
       <tr>
         <td class="date">2026-10-20</td>
         <td><a href="../session-summaries/2026-10-20-migration-guard-summary.md">Migration guard: summary</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-20</td>
+        <td><a href="../session-summaries/2026-10-20-eslint-cleanup-summary.md">ESLint config and safe lint cleanup (summary)</a><p class="meta">Plan: <a href="2026-10-20-eslint-cleanup.md">2026-10-20-eslint-cleanup.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-20</td>

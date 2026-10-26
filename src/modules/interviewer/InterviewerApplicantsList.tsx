@@ -25,6 +25,7 @@ import { describeActionFailure } from '../../lib/friendlyErrors';
 import { mockDatabase } from '../../lib/mockDatabase';
 import { ensureRecruitmentSeedData, getAuthoritativeJobPostings, getApplicants as getRecruitmentApplicants } from '../../lib/recruitmentData';
 import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../../lib/supabase';
+import { fetchAndDecryptApplicantAttachment, downloadApplicantAttachment } from '../../lib/applicantDocuments';
 import '../../styles/interviewer.css';
 import '../../styles/abyan-tokens.css';
 import '../../styles/interviewer-dashboard.css';
@@ -257,6 +258,13 @@ const getSubmittedDocumentTypes = (attachments: ApplicantAttachment[]): string[]
 
 const toDocumentUrl = async (filePath: string): Promise<string | null> => {
   if (!filePath) return null;
+  try {
+    const { objectUrl, cleanup } = await fetchAndDecryptApplicantAttachment(filePath);
+    setTimeout(() => cleanup(), 60000);
+    return objectUrl;
+  } catch (err) {
+    console.error('Failed to decrypt attachment:', err);
+  }
   if (filePath.startsWith('http') || filePath.startsWith('data:') || filePath.startsWith('blob:')) return filePath;
   if (isMockModeEnabled) return filePath;
 
@@ -710,6 +718,12 @@ export function InterviewerApplicantsList({
 
   const handleDownloadAllDocuments = async (attachments: ApplicantAttachment[]) => {
     for (const attachment of attachments) {
+      try {
+        await downloadApplicantAttachment(attachment.file_path, attachment.file_name || 'document');
+        continue;
+      } catch {
+        // Fall back to direct link download below
+      }
       const url = await toDocumentUrl(attachment.file_path);
       if (!url) continue;
       const link = document.createElement('a');

@@ -13,6 +13,8 @@
  * this system is used for.
  */
 
+import { clearCachedDecryptionKey } from './crypto';
+
 export type AdminRole = 'super-admin' | 'rsp' | 'lnd' | 'pm';
 
 export interface AdminSession {
@@ -62,6 +64,7 @@ export const writeAdminSession = (session: AdminSession): void => {
 
 /** Clears both stores — the legacy localStorage copy included. */
 export const clearAdminSession = (): void => {
+  clearCachedDecryptionKey();
   try {
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
   } catch {

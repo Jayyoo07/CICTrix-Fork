@@ -35,6 +35,8 @@ import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { RspArchives, type ArchiveRecord } from './rsp-archives';
 import { fetchWrittenExamTotals } from '../../lib/api/examTotalPoints';
+import { failureText } from '../../lib/friendlyErrors';
+import { useFeedback } from '../../components/action-feedback';
 import { TopScorerBadge, topScorerIds, topScorerRowClass } from '../../components/data-table';
 import { WRITTEN_EXAM_FORM_SHARE, convertExamScore, totalForPosition } from '../../lib/examTotalPoints';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
@@ -811,6 +813,10 @@ export const RSPDashboard = () => {
   const [resetPwUsername, setResetPwUsername] = useState<string | null>(null);
   const [resetPwValue, setResetPwValue] = useState<string | null>(null);
   const [resetPwError, setResetPwError] = useState<string | null>(null);
+  // The live applicants read failed on the last load (see the main load).
+  const [liveDataError, setLiveDataError] = useState<unknown>(null);
+  const [officeDirectoryAttempt, setOfficeDirectoryAttempt] = useState(0);
+  const feedback = useFeedback();
   const [lastResetInfo, setLastResetInfo] = useState<EmployeePasswordResetLog | null>(null);
 
   // Prefer matching by email (most authoritative since it's per-person), then by employee_number.
@@ -951,18 +957,25 @@ export const RSPDashboard = () => {
 
       const accountId = existingAccount?.id ?? `employee-account-${empNumber || username}`;
 
-      upsertEmployeePortalAccount({
+      const saved = await upsertEmployeePortalAccount({
         id: accountId,
         username,
         password: newPassword,
         employee: realignedEmployee,
         mustChangePassword: true,
       });
+      // The employee signs in against the database copy; until it is stored,
+      // the new password only works in this browser.
+      if (!saved.ok) {
+        setResetPwError(`${failureText('reset the password', saved.error)} The employee can't sign in with the new password yet.`);
+        setResetPwState('error');
+        return;
+      }
 
       // Sanity-check the new credential pair authenticates.
       const verify = findEmployeePortalAccount(username, newPassword);
       if (!verify) {
-        setResetPwError('Password generated but verification failed. Please retry.');
+        setResetPwError("We couldn't confirm the new password. It may not be active yet. Try resetting it again.");
         setResetPwState('error');
         return;
       }
@@ -982,7 +995,7 @@ export const RSPDashboard = () => {
       setResetPwState('done');
     } catch (error) {
       console.error('handleResetEmployeePasswordConfirm: failed', error);
-      setResetPwError(error instanceof Error ? error.message : String(error));
+      setResetPwError(failureText('reset the password', error));
       setResetPwState('error');
     }
   };
@@ -998,8 +1011,10 @@ export const RSPDashboard = () => {
   const copyResetPwValue = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
+      feedback.success('Copied', 'Paste it where you need it.');
     } catch (error) {
       console.warn('clipboard write failed', error);
+      feedback.warning("We couldn't copy it.", 'Your browser blocked the clipboard. Select the text and copy it yourself.');
     }
   };
   const [savedScoredApplicantIds, setSavedScoredApplicantIds] = useState<Set<string>>(getSavedScoredApplicantIdSet);
@@ -1124,6 +1139,12 @@ export const RSPDashboard = () => {
 
       const primaryApplicantsFetchSucceeded =
         applicantsRes.status === 'fulfilled' && !applicantsRes.value.error && Array.isArray(applicantsRes.value.data);
+
+      // Say when the live read failed: the fallback below is the local mock
+      // store, so the page would otherwise show sample records as real ones.
+      setLiveDataError(primaryApplicantsFetchSucceeded
+        ? null
+        : (applicantsRes.status === 'rejected' ? applicantsRes.reason : applicantsRes.value.error) ?? 'Applicants could not be read');
 
       // Fallback only on fetch failure. Empty DB results are authoritative.
       if (!primaryApplicantsFetchSucceeded) {
@@ -1873,9 +1894,8 @@ export const RSPDashboard = () => {
         setActiveDocumentSubmissions(mapped);
       } catch (error) {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : String(error);
         console.error('listEmployeeDocumentsByType: refresh failed', error);
-        setDocumentsError(message);
+        setDocumentsError(failureText('load the document submissions', error, { mode: 'load' }));
         setActiveDocumentSubmissions([]);
       } finally {
         if (!cancelled) setDocumentsLoading(false);
@@ -2229,7 +2249,7 @@ export const RSPDashboard = () => {
       }
       setOfficeDirectoryLoading(false);
     });
-  }, [section, officeDirectoryRows.length]);
+  }, [section, officeDirectoryRows.length, officeDirectoryAttempt]);
 
   // Headcount comes from getOfficeDirectory() so this page, PM and System
   // Administration all report the same numbers from one query.
@@ -2914,6 +2934,10 @@ export const RSPDashboard = () => {
     const downloadable = entries.filter((entry) => entry.documentUrl && entry.documentUrl !== '#');
 
     if (downloadable.length > 0) {
+      // Files download one after another (120ms apart), so say it started.
+      if (downloadable.length > 1) {
+        feedback.info(`Downloading ${downloadable.length} files`, "They save one after another. If one can't download, it opens in a new tab instead.");
+      }
       downloadable.forEach((entry, index) => {
         window.setTimeout(() => {
           const fileName =
@@ -3180,8 +3204,9 @@ export const RSPDashboard = () => {
         body,
       });
       closeBulkRequestDialog();
+      feedback.success('Request sent', `Emailed ${emails.length} employee${emails.length === 1 ? '' : 's'}.`);
     } catch (error) {
-      setBulkRequestError(error instanceof Error ? error.message : String(error));
+      setBulkRequestError(failureText('send the request', error));
     } finally {
       setBulkRequestSending(false);
     }
@@ -3202,6 +3227,18 @@ export const RSPDashboard = () => {
         <Sidebar activeModule="RSP" />
 
         <main className="admin-content !p-0">
+          {liveDataError ? (
+            <div className="px-6 pt-6">
+              <ErrorBanner
+                error={liveDataError}
+                action="load the live applicant data"
+                onRetry={() => window.dispatchEvent(new Event('cictrix:applicants-updated'))}
+              />
+              <p className="!mb-0 mt-2 text-sm text-[var(--neutral-800)]">
+                Until it loads, counts and lists on this page may come from sample data stored in this browser, not the database.
+              </p>
+            </div>
+          ) : null}
           {/* The dashboard draws its own gradient header strip with filters. */}
           {/* dash-lg: dashboard text enlarged (src/styles/dashboard-scale.css).
               Must be an ANCESTOR of .rspdash so the generated rules outrank
@@ -3603,7 +3640,7 @@ export const RSPDashboard = () => {
                       <p className="text-sm text-slate-500">{officeDirectoryTotalEmployees} total employees</p>
                     </div>
 
-                    <ErrorBanner error={officeDirectoryError} context="server" />
+                    <ErrorBanner error={officeDirectoryError} action="load the office directory" onRetry={() => setOfficeDirectoryAttempt((n) => n + 1)} />
 
 <Modal
                     open={showPositionChangeModal && Boolean(selectedEmployeeDetails)}
@@ -4190,8 +4227,7 @@ export const RSPDashboard = () => {
 
                     {documentsError && (
                       <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-                        <p className="!mb-1 font-semibold">Could not load submissions.</p>
-                        <p className="!mb-0">{documentsError}</p>
+                        <p className="!mb-0" role="alert">{documentsError}</p>
                       </div>
                     )}
 
@@ -5930,7 +5966,7 @@ export const RSPDashboard = () => {
 
                 {resetPwState === 'error' && (
                   <p className="!mb-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {resetPwError ?? 'Something went wrong. Please try again.'}
+                    {resetPwError ?? "We couldn't reset the password. Try again."}
                   </p>
                 )}
               </div>

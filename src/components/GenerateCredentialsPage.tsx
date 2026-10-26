@@ -22,6 +22,9 @@ import {
   type CheckState,
 } from '../lib/scheduleSelection';
 import { ConfirmModal, Modal } from './modal';
+import { ErrorBanner } from './ErrorBanner';
+import { useFeedback } from './action-feedback';
+import { describeActionFailure } from '../lib/friendlyErrors';
 
 /**
  * Applicants selected on For Hiring wait here until they report for contract
@@ -57,10 +60,21 @@ export const GenerateCredentialsPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<CredentialResult[]>([]);
   const [failures, setFailures] = useState<string[]>([]);
+  // A failed read is reported, not shown as "nobody is awaiting credentials".
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const feedback = useFeedback();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const reserved = await fetchReservedApplicants();
+    let reserved: Awaited<ReturnType<typeof fetchReservedApplicants>>;
+    try {
+      reserved = await fetchReservedApplicants();
+    } catch (err) {
+      setLoadError(err);
+      setLoading(false);
+      return;
+    }
+    setLoadError(null);
     setRows(reserved.map((r) => ({
       ...r,
       office: r.department,
@@ -122,7 +136,8 @@ export const GenerateCredentialsPage = () => {
     const result = await revokeSlotReservation(revokeTarget.id);
     setRevoking(false);
     if (!result.ok) {
-      setError(result.error ?? "We couldn't revoke the selection. Try again.");
+      const failure = describeActionFailure('revoke the selection', result.error);
+      setError(`${failure.title} ${failure.message} ${failure.nextStep}`);
       return;
     }
     setRevokeTarget(null);
@@ -196,6 +211,10 @@ export const GenerateCredentialsPage = () => {
               </div>
             </div>
 
+            {loadError ? (
+              <ErrorBanner error={loadError} action="load the applicants awaiting credentials" onRetry={() => void load()} className="mb-3" />
+            ) : null}
+
             {error && (
               <div role="alert" className="mb-3 flex items-start gap-3 rounded-xl border-l-4 border-[var(--error-500)] bg-[var(--error-100)] p-4 text-sm text-[var(--neutral-800)]">
                 <XCircle className="h-5 w-5 shrink-0 text-[var(--error-500)]" aria-hidden="true" />
@@ -207,7 +226,7 @@ export const GenerateCredentialsPage = () => {
               <div className="space-y-3" aria-busy="true" aria-label="Loading selected applicants">
                 {[0, 1].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl border border-[var(--neutral-200)] bg-white" />)}
               </div>
-            ) : groups.length === 0 ? (
+            ) : loadError && rows.length === 0 ? null : groups.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--neutral-200)] bg-white py-16 text-center">
                 <KeyRound className="mb-3 h-8 w-8 text-[var(--neutral-400)]" aria-hidden="true" />
                 <p className="text-base font-semibold text-[var(--color-primary-900)]">No one is waiting for contract signing</p>
@@ -342,7 +361,11 @@ export const GenerateCredentialsPage = () => {
               type="button"
               className="btn btn-md btn-secondary"
               disabled={credentials.length === 0}
-              onClick={() => printCredentialCards(credentials)}
+              onClick={() => {
+                if (!printCredentialCards(credentials)) {
+                  feedback.warning("The print window didn't open.", "Your browser blocked it. Allow pop-ups for this site, then click Print Credentials again.");
+                }
+              }}
             >
               <Printer className="h-4 w-4" aria-hidden="true" />
               Print Credentials

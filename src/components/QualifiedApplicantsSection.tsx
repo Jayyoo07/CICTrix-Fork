@@ -25,6 +25,8 @@ import {
   type EvaluationSnapshot,
 } from '../lib/evaluationScores';
 import { Modal } from './modal';
+import { useFeedback } from './action-feedback';
+import { describeActionFailure } from '../lib/friendlyErrors';
 import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 import { getAdminRole } from '../lib/adminSession';
 import { fetchWrittenExamTotals, saveWrittenExamTotal, type SaveExamTotalResult } from '../lib/api/examTotalPoints';
@@ -370,19 +372,33 @@ interface FilesViewerModalProps {
   onClose: () => void;
 }
 
-const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
-  const openFile = async (row: AttachmentRow) => {
-    try {
-      const { data } = await (supabase as any).storage
-        .from(ATTACHMENTS_BUCKET)
-        .createSignedUrl(row.file_path, 300);
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-      }
-    } catch {
-      window.open(row.file_path, '_blank', 'noopener,noreferrer');
+/** Signed-URL lifetime for opening an attachment, in seconds. */
+const ATTACHMENT_LINK_TTL_S = 300;
+
+/**
+ * Opens an applicant attachment in a new tab. A failed link or a blocked
+ * pop-up is reported instead of silently doing nothing (or opening the raw
+ * storage path, which is a broken page).
+ */
+const openAttachment = async (filePath: string, feedback: ReturnType<typeof useFeedback>) => {
+  try {
+    const { data, error } = await (supabase as any).storage
+      .from(ATTACHMENTS_BUCKET)
+      .createSignedUrl(filePath, ATTACHMENT_LINK_TTL_S);
+    if (error || !data?.signedUrl) throw error ?? new Error('No signed URL returned');
+    const win = window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      feedback.warning("The file didn't open.", 'Your browser blocked the new tab. Allow pop-ups for this site, then try again.');
     }
-  };
+  } catch (error) {
+    const failure = describeActionFailure('open the file', error, { mode: 'load' });
+    feedback.error(failure.title, `${failure.message} ${failure.nextStep}`);
+  }
+};
+
+const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
+  const feedback = useFeedback();
+  const openFile = (row: AttachmentRow) => openAttachment(row.file_path, feedback);
 
   return (
     <Modal
@@ -641,6 +657,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   // Current employees (verified at wizard time via employee auth) submit with
   // application_type === 'promotion'. Their evaluation must be locked to a
   // Promotional Appointment — Original is invalid for an existing employee.
+  const feedback = useFeedback();
   const isCurrentEmployee = String(applicant.application_type ?? '').toLowerCase() === 'promotion';
 
   // hasPersistedScores must mean *complete* prior save — otherwise a partial entry
@@ -692,6 +709,10 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   const [filesModal, setFilesModal] = useState<{ catKey: CatKey; files: AttachmentRow[] } | null>(null);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  // A failed attachment load reads as "couldn't load", not "0 files".
+  const [filesFailed, setFilesFailed] = useState(false);
+  const filesLabel = (count: number) =>
+    loadingFiles ? '…' : filesFailed ? "files couldn't load; reopen to retry" : `${count} files`;
   const [liveEvaluation, setLiveEvaluation] = useState<EvaluationSnapshot | null>(evaluation ?? null);
 
   useEffect(() => {
@@ -767,14 +788,18 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   useEffect(() => {
     const fetchAttachments = async () => {
       setLoadingFiles(true);
+      setFilesFailed(false);
       try {
-        const { data } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .from('applicant_attachments')
           .select('id, file_name, file_path, file_type, document_type, created_at, file_size')
           .eq('applicant_id', applicant.id);
+        if (error) throw error;
         setAttachments(data ?? []);
-      } catch {
+      } catch (error) {
+        console.error('[ApplicantScoringModal] attachments failed to load:', error);
         setAttachments([]);
+        setFilesFailed(true);
       } finally {
         setLoadingFiles(false);
       }
@@ -1177,14 +1202,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                           const cvRow = attachments.find(a => (a.document_type ?? '').includes('curriculum_vitae'));
                           const targetRow = cvRow ?? catFiles[0];
                           if (targetRow) {
-                            try {
-                              const { data } = await (supabase as any).storage
-                                .from(ATTACHMENTS_BUCKET)
-                                .createSignedUrl(targetRow.file_path, 300);
-                              window.open(data?.signedUrl ?? targetRow.file_path, '_blank', 'noopener,noreferrer');
-                            } catch {
-                              window.open(targetRow.file_path, '_blank', 'noopener,noreferrer');
-                            }
+                            await openAttachment(targetRow.file_path, feedback);
                           } else {
                             setFilesModal({ catKey, files: catFiles });
                           }
@@ -1195,7 +1213,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       style={SM_LINK}
                     >
                       <FileText size={13} />
-                      View {meta.label} Documents ({loadingFiles ? '…' : catFiles.length} files)
+                      View {meta.label} Documents ({filesLabel(catFiles.length)})
                       <ExternalLink size={11} />
                     </button>
                   </div>
@@ -1285,7 +1303,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                         style={SM_LINK}
                       >
                         <FileText size={12} />
-                        View {meta.label} Assessment Files ({loadingFiles ? '…' : catFiles.length} files)
+                        View {meta.label} Assessment Files ({filesLabel(catFiles.length)})
                         <ExternalLink size={11} />
                       </button>
                     </div>

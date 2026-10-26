@@ -13,6 +13,7 @@ import {
 } from '../lib/api/succession';
 import { RANKING_WEIGHTS, type EligibilityScore } from '../lib/api/successionCriteria';
 import { SkeletonList, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
+import { TableStateRows } from './data-table';
 
 // The Succession Planning view lives inside the RSP Portal, which is already
 // access-gated to the RSP admin. Management actions therefore key off "am I in
@@ -203,14 +204,26 @@ const OcboTableView = (_props: { admin: string }) => {
     });
   };
   const [loadingDept, setLoadingDept] = useState<Record<string, boolean>>({});
+  // Failed reads, kept apart from "none" so the plan never states something false.
+  const [deptError, setDeptError] = useState<unknown>(null);
+  const [positionsFailed, setPositionsFailed] = useState<Record<string, boolean>>({});
+  const [candidatesFailed, setCandidatesFailed] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
 
-  useEffect(() => {
-    listDepartmentSummaries().then((r) => {
-      if (r.ok) setDepartments(r.data);
+  const loadDepartments = () => {
+    setLoading(true);
+    void listDepartmentSummaries().then((r) => {
+      if (r.ok) {
+        setDepartments(r.data);
+        setDeptError(null);
+      } else {
+        setDeptError('error' in r ? r.error : 'Failed to load departments.');
+      }
       setLoading(false);
     });
-  }, []);
+  };
+
+  useEffect(loadDepartments, []);
 
   const toggle = async (deptId: string) => {
     const isOpen = expanded.has(deptId);
@@ -223,7 +236,14 @@ const OcboTableView = (_props: { admin: string }) => {
     if (isOpen || posByDept[deptId]) return;
     setLoadingDept((p) => ({ ...p, [deptId]: true }));
     const pr = await listCriticalPositions(deptId);
-    const positions = pr.ok ? pr.data : [];
+    if (!pr.ok) {
+      // Not cached, so collapsing and reopening the office retries.
+      setPositionsFailed((p) => ({ ...p, [deptId]: true }));
+      setLoadingDept((p) => ({ ...p, [deptId]: false }));
+      return;
+    }
+    setPositionsFailed((p) => ({ ...p, [deptId]: false }));
+    const positions = pr.data;
     setPosByDept((p) => ({ ...p, [deptId]: positions }));
     const candidateResults = await listAutoSuccessorsForPositions(positions.map((pos) => pos.id));
     setCandByPos((prev) => {
@@ -232,6 +252,12 @@ const OcboTableView = (_props: { admin: string }) => {
         const cr = candidateResults.get(pos.id);
         if (cr?.ok) next[pos.id] = cr.data;
       }
+      return next;
+    });
+    // A position with no ok result failed to load; say so instead of "no candidates".
+    setCandidatesFailed((prev) => {
+      const next = { ...prev };
+      for (const pos of positions) next[pos.id] = !candidateResults.get(pos.id)?.ok;
       return next;
     });
     setLoadingDept((p) => ({ ...p, [deptId]: false }));
@@ -313,9 +339,15 @@ const OcboTableView = (_props: { admin: string }) => {
         <TableSkeletonRows show={departmentsLoad.showSkeleton} columns={['text', 'text', 'text', 'badge']} label="Loading succession plan…" />
       )}
       {!departmentsLoad.initialLoading && departments.length === 0 && (
-        <tr>
-          <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-500">No departments to show yet.</td>
-        </tr>
+        <TableStateRows
+          view={deptError ? 'error' : 'empty'}
+          columns={4}
+          error={deptError}
+          errorAction="load the succession plan"
+          onRetry={loadDepartments}
+          emptyTitle="No departments to show yet"
+          emptyMessage="Departments appear here once they have critical positions."
+        />
       )}
       {!departmentsLoad.initialLoading && departments.map((dept) => {
         const open = expanded.has(dept.departmentId);
@@ -362,7 +394,12 @@ const OcboTableView = (_props: { admin: string }) => {
               <tr className="last:border-0">
               <td colSpan={4} className="border-y-2 border-slate-300 bg-slate-100 px-5 py-5 shadow-inner">
                 {loadingDept[dept.departmentId] && <SkeletonList show rows={3} label="Loading positions…" />}
-                {!loadingDept[dept.departmentId] && positions.length === 0 && (
+                {!loadingDept[dept.departmentId] && positionsFailed[dept.departmentId] && (
+                  <p role="alert" className="text-sm font-medium text-[var(--error-700)]">
+                    We couldn't load this office's critical positions, so none are shown. Collapse the office and open it again to retry.
+                  </p>
+                )}
+                {!loadingDept[dept.departmentId] && !positionsFailed[dept.departmentId] && positions.length === 0 && (
                   <p className="text-sm text-[var(--text-secondary)]">No critical positions flagged for this office.</p>
                 )}
                 {positions.map((pos) => {
@@ -430,7 +467,11 @@ const OcboTableView = (_props: { admin: string }) => {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {rows.length === 0 && (
-                              <tr><td colSpan={9} className="px-3 py-4 text-center text-slate-400">No employee meets all four minimum requirements for this position.</td></tr>
+                              candidatesFailed[pos.id] ? (
+                                <tr><td colSpan={9} role="alert" className="px-3 py-4 text-center font-medium text-[var(--error-700)]">We couldn't load the candidates for this position, so none are shown. Reload the page to try again.</td></tr>
+                              ) : (
+                                <tr><td colSpan={9} className="px-3 py-4 text-center text-slate-400">No employee meets all four minimum requirements for this position.</td></tr>
+                              )
                             )}
                             {rows.map((r) => {
                               const detailOpen = openDetail.has(`${pos.id}:${r.employeeId}`);

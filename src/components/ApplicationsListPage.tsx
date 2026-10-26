@@ -18,6 +18,9 @@ import { plantillaLabel } from '../lib/plantillaRules';
 import { samePositionRows } from '../lib/applicantReviewQueue';
 import { SortHeader, toTime, useTableSort } from './tableSort';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
+import { ErrorBanner } from './ErrorBanner';
+import { useFeedback } from './action-feedback';
+import { describeActionFailure } from '../lib/friendlyErrors';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,6 +122,9 @@ export const ApplicationsListPage = () => {
   const [slotIdsByPosition, setSlotIdsByPosition] = useState<Map<string, Set<string>>>(new Map());
   const [position, setPosition] = useState<JobPosting | null | undefined>(undefined);
   const [loading, setLoading]       = useState(true);
+  // A failed read, so the table never says "No applicants" when it couldn't look.
+  const [loadError, setLoadError]   = useState<unknown>(null);
+  const feedback = useFeedback();
   const [search, setSearch]         = useState('');
   const [officeFilter, setOfficeFilter]     = useState('all');
   const [positionFilter, setPositionFilter] = useState('all');
@@ -134,7 +140,8 @@ export const ApplicationsListPage = () => {
       try {
         const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
         const client: any = preferredMode === 'local' ? mockDatabase : supabase;
-        const { data } = await client.from('applicants').select('*').order('created_at', { ascending: false });
+        const { data, error } = await client.from('applicants').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
 
         // Resolve each application's plantilla item(s) in two reads rather than
         // per row. Both return empty before migration 20260922 is applied, and
@@ -169,8 +176,10 @@ export const ApplicationsListPage = () => {
           linked_slot_ids:  (slotLinks.get(String(r.id ?? '')) ?? []).map(link => link.slotId),
         }));
         setApplicants(rows);
-      } catch {
-        setApplicants([]);
+        setLoadError(null);
+      } catch (error) {
+        console.error('[ApplicationsListPage] applicants failed to load:', error);
+        setLoadError(error);
       } finally {
         setLoading(false);
       }
@@ -300,24 +309,38 @@ export const ApplicationsListPage = () => {
     setRemovingShortlist(true);
     const ids = Array.from(selectedShortlistIds);
 
-    // Best-effort: try Supabase, fall back to mock. Either way, update local
-    // state so the row immediately falls back into the main list.
-    try {
-      const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
-      const client: any = preferredMode === 'local' ? mockDatabase : supabase;
-      await Promise.all(
-        ids.map(id =>
-          client.from('applicants').update({ status: 'Under Review' }).eq('id', id),
-        ),
-      );
-    } catch (err) {
-      console.error('removeSelectedFromShortlist: status revert failed', err);
-    }
+    // Only rows the database accepted move back to the main list; the rest
+    // stay selected so the user can try again.
+    const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
+    const client: any = preferredMode === 'local' ? mockDatabase : supabase;
+    const results = await Promise.allSettled(
+      ids.map(id => client.from('applicants').update({ status: 'Under Review' }).eq('id', id)),
+    );
+    const failedIds: string[] = [];
+    let firstError: unknown;
+    results.forEach((result, index) => {
+      const error = result.status === 'rejected' ? result.reason : (result.value as { error?: unknown })?.error;
+      if (error) {
+        failedIds.push(ids[index]);
+        firstError ??= error;
+      }
+    });
+    const doneIds = ids.filter(id => !failedIds.includes(id));
 
     setApplicants(prev =>
-      prev.map(a => (ids.includes(a.id) ? { ...a, status: 'Under Review' } : a)),
+      prev.map(a => (doneIds.includes(a.id) ? { ...a, status: 'Under Review' } : a)),
     );
-    setSelectedShortlistIds(new Set());
+    setSelectedShortlistIds(new Set(failedIds));
+    if (failedIds.length > 0) {
+      console.error('removeSelectedFromShortlist: status revert failed', firstError);
+      const failure = describeActionFailure('remove them from the shortlist', firstError);
+      feedback.error(
+        failure.title,
+        `${doneIds.length > 0 ? `${doneIds.length} of ${ids.length} were removed; the ${failedIds.length} still selected were not.` : failure.message} ${failure.nextStep}`,
+      );
+    } else {
+      feedback.success('Removed from the shortlist', `${ids.length} applicant${ids.length === 1 ? '' : 's'} moved back to Under Review.`);
+    }
     setRemovingShortlist(false);
     window.dispatchEvent(new Event('cictrix:applicants-updated'));
   };
@@ -407,6 +430,15 @@ export const ApplicationsListPage = () => {
               </div>
             </div>
 
+            {loadError ? (
+              <ErrorBanner
+                error={loadError}
+                action="load the applications"
+                onRetry={() => window.dispatchEvent(new Event('cictrix:applicants-updated'))}
+                className="mb-4"
+              />
+            ) : null}
+
             {/* Table */}
             <div className="abyan-table-wrap">
               <table className="abyan-table w-full min-w-full">
@@ -463,7 +495,7 @@ export const ApplicationsListPage = () => {
                       <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">{fmtDate(a.created_at)}</td>
                     </tr>
                   ))}
-                  {!applicantsLoad.initialLoading && paged.length === 0 && (
+                  {!applicantsLoad.initialLoading && paged.length === 0 && !(loadError && applicants.length === 0) && (
                     <tr>
                       <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
                         <Search className="mx-auto mb-2 h-8 w-8 text-slate-300" />

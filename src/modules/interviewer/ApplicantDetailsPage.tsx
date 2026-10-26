@@ -94,10 +94,14 @@ type ApplicantRecord = {
 
 type AttachmentRecord = {
   id: string;
+  /** Display label; see source_file_name for the uploaded name. */
   file_name: string;
   file_path: string;
   created_at?: string;
   document_type?: string;
+  file_type?: string | null;
+  /** The uploaded file's own name, kept for the viewer's title and Download. */
+  source_file_name?: string;
 };
 
 type EvaluationRecord = {
@@ -452,10 +456,11 @@ const computeScoreBreakdown = (
 };
 
 /** An attachment for the in-site viewer, which signs, fetches and decrypts it without a new tab. */
-const applicantViewerDocument = (filePath: string, fileName: string, label?: string): ViewerDocument => ({
-  id: filePath,
-  url: filePath,
-  fileName,
+const applicantViewerDocument = (row: Pick<AttachmentRecord, 'file_path' | 'file_name' | 'source_file_name' | 'file_type'>, label?: string): ViewerDocument => ({
+  id: row.file_path,
+  url: row.file_path,
+  fileName: row.source_file_name || row.file_name,
+  fileType: row.file_type,
   bucket: ATTACHMENTS_BUCKET,
   label,
 });
@@ -494,6 +499,7 @@ const buildAttachmentRowsFromRecruitment = (applicant: Applicant | null): Attach
           id: `${applicant.id}-cached-${index}`,
           file_name: row.fileName || labelize(row.documentType),
           file_path: row.dataUrl,
+          file_type: row.mimeType,
           created_at: row.createdAt,
         }));
     } catch {
@@ -507,7 +513,7 @@ const buildAttachmentRowsFromRecruitment = (applicant: Applicant | null): Attach
     const key = `${row.file_name}|${row.file_path}`;
     if (!row.file_path || seen.has(key)) return;
     seen.add(key);
-    merged.push({ ...row, file_name: labelize(row.file_name) });
+    merged.push({ ...row, source_file_name: row.file_name, file_name: labelize(row.file_name) });
   });
 
   return merged;
@@ -525,6 +531,7 @@ const mergeAttachmentRows = (primary: AttachmentRecord[], fallback: AttachmentRe
     merged.push({
       ...row,
       id: row.id || `primary-${index}`,
+      source_file_name: row.source_file_name ?? row.file_name,
       file_name: labelize(row.file_name || row.file_path),
     });
   });
@@ -545,6 +552,7 @@ const mergeAttachmentRows = (primary: AttachmentRecord[], fallback: AttachmentRe
     merged.push({
       ...row,
       id: row.id || `fallback-${index}`,
+      source_file_name: row.source_file_name ?? row.file_name,
       file_name: labelize(row.file_name || row.file_path),
     });
   });
@@ -905,12 +913,19 @@ function ApplicantDetailsPageView() {
   const docsValidatedDurable = realDocs.length > 0 && docsAwaitingValidation.length === 0;
   const docsValidatedEffective = docsValidated || docsValidatedDurable;
 
+  // Viewers and modals add a Back marker to location.state, which makes a new state
+  // object without changing the applicant. Reload on the applicant's identity only;
+  // re-running on every state change remounted the page and looped any open viewer.
+  const routeApplicant = useRef(routeState?.applicant ?? null);
+  routeApplicant.current = routeState?.applicant ?? null;
+  const routeApplicantId = routeState?.applicant?.id ?? null;
+
   useEffect(() => {
     const load = async () => {
       if (!id) return;
       setLoading(true);
 
-      const storedRecruitmentApplicant = routeState?.applicant ?? getApplicants().find((entry) => entry.id === id) ?? null;
+      const storedRecruitmentApplicant = routeApplicant.current ?? getApplicants().find((entry) => entry.id === id) ?? null;
       const storedJobPosting = storedRecruitmentApplicant
         ? getAuthoritativeJobPostings().find((entry) => entry.id === storedRecruitmentApplicant.jobPostingId) ?? null
         : null;
@@ -1128,7 +1143,7 @@ function ApplicantDetailsPageView() {
     };
 
     load();
-  }, [id, routeState]);
+  }, [id, routeApplicantId]);
 
   // Pre-fill the Experience scoring input with what the applicant submitted in
   // the application portal (work_experience_years). RSP can still overwrite it
@@ -1705,7 +1720,8 @@ function ApplicantDetailsPageView() {
 
   const handleOpenDocument = (filePath: string, fileName: string, label?: string) => {
     if (!filePath) return;
-    setPreviewDocument(applicantViewerDocument(filePath, fileName, label));
+    const row = attachments.find((a) => a.file_path === filePath) ?? { file_path: filePath, file_name: fileName };
+    setPreviewDocument(applicantViewerDocument(row, label));
     setOpenedDocFilePaths((prev) => new Set([...prev, filePath]));
   };
 
@@ -3062,7 +3078,7 @@ function ApplicantDetailsPageView() {
                         <button
                           type="button"
                           onClick={() => {
-                            const docs = experienceDocs.map((doc) => applicantViewerDocument(doc.file_path, doc.file_name));
+                            const docs = experienceDocs.map((doc) => applicantViewerDocument(doc));
                             if (docs.length === 1) setPreviewDocument(docs[0]);
                             else setDocumentCollection(docs);
                           }}
@@ -3500,6 +3516,7 @@ function ApplicantDetailsPageView() {
           viewFirst
           fileUrl={previewDocument.url}
           fileName={previewDocument.fileName}
+          fileType={previewDocument.fileType}
           storageBucket={previewDocument.bucket}
           title={previewDocument.fileName}
           subtitle={previewDocument.label}

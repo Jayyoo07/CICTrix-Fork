@@ -56,12 +56,24 @@ describe('document preview preparation', () => {
     expect(await prepareDocumentPreview({ ...source, fileName: 'scan' }, signal())).toMatchObject({ kind: 'image', fileName: 'scan' });
   });
 
-  it('does not send Office files to an external viewer', async () => {
-    vi.mocked(fetch).mockResolvedValue(response('application/vnd.openxmlformats-officedocument.wordprocessingml.document') as Response);
+  it('prepares Word (.docx) files for the local renderer, never an external viewer', async () => {
+    const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    vi.mocked(fetch).mockResolvedValue(response(docx) as Response);
     const file = await prepareDocumentPreview({ ...source, fileName: 'letter.docx' }, signal());
-    expect(file.kind).toBe('unsupported');
+    expect(file.kind).toBe('docx');
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(fetch).mock.calls[0][0])).not.toContain('officeapps');
+  });
+
+  it('recognises .docx stored with a generic or zip MIME type, but not legacy .doc', async () => {
+    vi.mocked(fetch).mockResolvedValue(response('application/octet-stream') as Response);
+    const generic = await prepareDocumentPreview({ ...source, fileName: 'letter.docx' }, signal());
+    expect(generic).toMatchObject({ kind: 'docx' });
+    expect(generic.blob.type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    vi.mocked(fetch).mockResolvedValue(response('application/zip') as Response);
+    expect(await prepareDocumentPreview({ ...source, fileName: 'letter.docx' }, signal())).toMatchObject({ kind: 'docx' });
+    vi.mocked(fetch).mockResolvedValue(response('application/msword') as Response);
+    expect(await prepareDocumentPreview({ ...source, fileName: 'letter.doc' }, signal())).toMatchObject({ kind: 'unsupported' });
   });
 
   it.each(['', '#', 'mock://missing', 'javascript:alert(1)'])('rejects unavailable or unsafe file links: %s', async (url) => {

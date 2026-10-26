@@ -61,6 +61,8 @@ The applicant details page (`src/modules/interviewer/ApplicantDetailsPage.tsx`),
 
 After that change shipped, the viewer on this page flickered with "Loading applicant details...". Opening the viewer adds a Back marker to `location.state`, and the page's loader re-ran on any change to that state object, so it remounted the page, which reopened the viewer, which added another marker, in a loop. The loader now re-runs only when the route id or the passed-in applicant changes. The page also passed its display label ("Cruz CV") as the file name, which would have saved downloads without an extension and could hide previews of encrypted files with no MIME type. The viewer now gets the uploaded file name and type.
 
+Word files showed "Preview unavailable", although the application form accepts `.docx` and `.doc`. The viewer now renders `.docx` in the browser with `docx-preview`, loaded only when a Word file opens. The pages render in a sandboxed frame (no scripts or popups), which keeps the portal's styles out of the document, and Print prints that frame only. Nothing is sent to an external viewer. Legacy `.doc` files keep the download fallback, with a message naming the older format, because no browser library renders them reliably.
+
 
 ## Steps
 

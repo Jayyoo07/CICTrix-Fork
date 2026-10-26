@@ -12,6 +12,8 @@ vi.mock('../lib/documentViewing', () => ({
   hasDocumentFile: (file: { url: string }) => Boolean(file.url && file.url !== '#'),
 }));
 vi.mock('../lib/employeeDocuments', () => ({ downloadEmployeeDocument: vi.fn() }));
+const docx = vi.hoisted(() => ({ renderAsync: vi.fn() }));
+vi.mock('docx-preview', () => docx);
 
 const file: PreparedDocument = { url: 'blob:document-fixture', blob: new Blob(['fixture']), kind: 'pdf', fileName: 'Reyes-TOR.pdf', dispose: vi.fn() };
 const sources: ViewerDocument[] = [
@@ -30,6 +32,11 @@ const CollectionHarness = () => {
   return <><button onClick={() => setOpen(true)}>View Documents</button>
     {open && <DocumentCollectionModal title="Submitted Documents" files={sources} onClose={() => setOpen(false)} />}</>;
 };
+// jsdom does not parse srcdoc; give the frame the containers a browser would.
+const loadDocxFrame = (frame: HTMLIFrameElement) => {
+  frame.contentDocument!.body.innerHTML = '<div id="docx-styles"></div><div id="docx-body"></div>';
+  fireEvent.load(frame);
+};
 const renderViewer = () => {
   render(<MemoryRouter><ViewerHarness /></MemoryRouter>);
   const opener = screen.getByRole('button', { name: 'View file' });
@@ -41,6 +48,7 @@ const renderViewer = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prepareDocumentPreview).mockResolvedValue({ ...file, dispose: vi.fn() });
+  docx.renderAsync.mockResolvedValue(undefined);
   vi.spyOn(window, 'print').mockImplementation(() => {});
   vi.spyOn(window, 'open').mockReturnValue(null);
 });
@@ -80,10 +88,36 @@ describe('RSP view-first viewer', () => {
     expect(openPdfForPrinting).not.toHaveBeenCalled();
   });
 
-  it('keeps Office files local, explains the limit, and disables Print', async () => {
-    vi.mocked(prepareDocumentPreview).mockResolvedValue({ ...file, kind: 'unsupported', fileName: 'Reyes-Letter.docx' });
+  it('renders Word (.docx) files locally in a sandboxed frame and prints only that frame', async () => {
+    vi.mocked(prepareDocumentPreview).mockResolvedValue({ ...file, kind: 'docx', fileName: 'Reyes-Letter.docx' });
+    renderViewer();
+    const frame = await screen.findByTitle('Reyes-Letter.docx') as HTMLIFrameElement;
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin allow-modals');
+    loadDocxFrame(frame);
+    const doc = frame.contentDocument!;
+    await waitFor(() => expect(docx.renderAsync).toHaveBeenCalledWith(file.blob, doc.getElementById('docx-body'), doc.getElementById('docx-styles'), expect.any(Object)));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Print' })).toBeEnabled());
+    const framePrint = vi.spyOn(frame.contentWindow!, 'print').mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }));
+    expect(framePrint).toHaveBeenCalledTimes(1);
+    expect(window.print).not.toHaveBeenCalled();
+    expect(openPdfForPrinting).not.toHaveBeenCalled();
+    expect(screen.queryByText('Preview unavailable for this file type')).toBeNull();
+  });
+
+  it('shows a download fallback when a Word file cannot be rendered', async () => {
+    vi.mocked(prepareDocumentPreview).mockResolvedValue({ ...file, kind: 'docx', fileName: 'Reyes-Letter.docx' });
+    docx.renderAsync.mockRejectedValueOnce(new Error('corrupt'));
+    renderViewer();
+    loadDocxFrame(await screen.findByTitle('Reyes-Letter.docx') as HTMLIFrameElement);
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be displayed. Download it');
+  });
+
+  it('keeps legacy .doc files local, explains the limit, and disables Print', async () => {
+    vi.mocked(prepareDocumentPreview).mockResolvedValue({ ...file, kind: 'unsupported', fileName: 'Reyes-Letter.doc' });
     renderViewer();
     expect(await screen.findByText('Preview unavailable for this file type')).toBeInTheDocument();
+    expect(screen.getByText(/older Word format \(\.doc\)/)).toBeInTheDocument();
     expect(document.querySelector('iframe')).toBeNull();
     expect(screen.getByRole('button', { name: 'Print' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Download' })).toBeEnabled();

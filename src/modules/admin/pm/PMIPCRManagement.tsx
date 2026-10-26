@@ -19,6 +19,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { BackButton } from '../../../components/BackButton';
 import { Dialog } from '../../../components/Dialog';
 import { useDepartmentNames } from '../../../hooks/useDepartmentOptions';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
@@ -1583,6 +1584,8 @@ const RegularPanel = ({
         </div>
       ) : activeDrill ? (
         /* ── Employee drill-down ── */
+        <>
+        <BackButton onBack={() => setDrillOffice(null)} />
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Building2 size={14} className="text-[#363EE8]" />
@@ -1630,6 +1633,7 @@ const RegularPanel = ({
             </table>
           </div>
         </div>
+        </>
       ) : officeGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-40 text-slate-400 bg-white rounded-xl border border-slate-200">
           <Building2 size={28} className="mb-2 text-slate-300" />
@@ -1880,10 +1884,13 @@ export const PMIPCRManagement = () => {
 
   if (selectedEmployee) {
     return (
-      <IPCRDetailPage
-        employee={selectedEmployee}
-        onStageUpdate={handleStageUpdate}
-      />
+      <div className="space-y-4">
+        <BackButton onBack={() => setSelectedEmployee(null)} />
+        <IPCRDetailPage
+          employee={selectedEmployee}
+          onStageUpdate={handleStageUpdate}
+        />
+      </div>
     );
   }
 

@@ -13,6 +13,7 @@ import { useBackClosesView } from '../../../../hooks/useHistoryBack';
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { BackButton } from '../../../../components/BackButton';
 import { listAccounts } from './api';
 import {
   getCycleState,
@@ -136,17 +137,20 @@ export function PMIncoming({ pmId, tick, onChange }: { pmId: string; tick: numbe
 
   if (reviewing) {
     return (
-      <PMReview
-        account={reviewing.account}
-        phase={reviewing.phase}
-        pmId={pmId}
-        accounts={accounts}
-        onDone={() => {
-          setReviewing(null);
-          refresh();
-          onChange();
-        }}
-      />
+      <div className="space-y-4">
+        <BackButton onBack={() => setReviewing(null)} />
+        <PMReview
+          account={reviewing.account}
+          phase={reviewing.phase}
+          pmId={pmId}
+          accounts={accounts}
+          onDone={() => {
+            setReviewing(null);
+            refresh();
+            onChange();
+          }}
+        />
+      </div>
     );
   }
 

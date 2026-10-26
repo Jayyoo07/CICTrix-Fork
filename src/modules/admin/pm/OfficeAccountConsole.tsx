@@ -52,6 +52,7 @@ import { OfficeTrainingCourses } from './OfficeTrainingCourses';
 import { CriticalPositionPage } from '../../../components/CriticalPositionPage';
 import { CriticalPositionGapAnalysisPage } from '../../../components/CriticalPositionGapAnalysisPage';
 import { SkeletonList, useDelayedLoading, useTableLoading } from '../../../components/table-loading';
+import { BackButton } from '../../../components/BackButton';
 import { CharacterCount } from '../../../components/CharacterCount';
 import { IPCR_LIMITS } from '../../../lib/ipcrLimits';
 
@@ -903,7 +904,7 @@ export const OfficeAccountConsole: React.FC = () => {
 
                           return (
                             <div className="space-y-4">
-
+                              <BackButton onBack={() => setSelectedTargetId(null)} />
                               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4 bg-slate-50/50">
                                   <div>

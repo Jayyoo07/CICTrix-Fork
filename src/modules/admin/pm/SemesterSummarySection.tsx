@@ -14,6 +14,7 @@ import { useBackClosesView } from '../../../hooks/useHistoryBack';
 import { ArrowUpDown, Building2, ChevronDown, ChevronRight, GraduationCap, RefreshCw, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
+import { BackButton } from '../../../components/BackButton';
 import { EmptyState } from '../../../components/EmptyState';
 import { getAdjectival, groupByDept, type IPCRRatingRecord } from './SummaryOfRatings';
 import { CompetencyGapPanel } from './CompetencyGapPanel';
@@ -299,6 +300,7 @@ export const SemesterSummarySection = () => {
       ) : (
         /* ── Drilled-in office: employee ratings ──────────────────── */
         <div className="space-y-3">
+          <BackButton onBack={backToDepartments} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm font-semibold text-gray-700">
               {activeDept}

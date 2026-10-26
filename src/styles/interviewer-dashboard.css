@@ -300,36 +300,7 @@
 .ivd-link:hover { color: var(--color-primary-700); text-decoration: underline; }
 .ivd-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
-/* ── Tables (§9.5) ───────────────────────────────────────────────────── */
-.ivd-table-wrap {
-  background: var(--bg-surface);
-  border: 1px solid var(--neutral-200);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.ivd-table { width: 100%; border-collapse: collapse; }
-.ivd-table th {
-  height: 52px;
-  padding: 0 20px;
-  background: var(--bg-page);
-  text-align: left;
-  font: 600 14px/20px var(--font-sans);
-  color: var(--color-primary-900);
-  white-space: nowrap;
-}
-.ivd-table th.is-num, .ivd-table td.is-num,
-.ivd-table th.is-action, .ivd-table td.is-action { text-align: right; }
-.ivd-table td {
-  height: 64px;
-  padding: 12px 20px;
-  box-sizing: border-box;
-  border-top: 1px solid var(--neutral-200);
-  font: 500 14px/18px var(--font-sans);
-  color: var(--neutral-800);
-  vertical-align: middle;
-}
-.ivd-table tbody tr { transition: background var(--duration-fast); }
-.ivd-table tbody tr:hover { background: var(--bg-row-hover); }
+/* Tables use the shared .abyan-table layer (src/components/data-table). */
 
 /* Applicant name opens the details panel: a §3.4 link in the primary column. */
 .ivd-name-link {
@@ -463,8 +434,6 @@
 /* Search grows, the two dropdowns keep one line beside it. */
 .ivd-toolbar--modal { display: grid; grid-template-columns: minmax(0, 1fr) 220px 180px; }
 .ivd-toolbar--modal .ivd-select { min-width: 0; width: 100%; }
-.ivd-modal--large .ivd-table th,
-.ivd-modal--large .ivd-table td { padding-left: 14px; padding-right: 14px; }
 
 .ivd-icon-btn {
   flex: none;
@@ -483,8 +452,6 @@
 @media (max-width: 1023px) {
   .ivd-kpis { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .ivd-view-more { display: none; }
-  .ivd-table th { white-space: normal; }
-  .ivd-table th, .ivd-table td { padding-left: 16px; padding-right: 16px; }
   /* Proportional margins and the half-height hero are for laptop widths and
      up; tablets keep the full width for the 7-column history table. */
   .ivd { --ivd-photo-width: 60%; --ivd-gutter: 24px; }
@@ -517,41 +484,6 @@
   .ivd-field:not(.ivd-field--search) .ivd-field-icon { display: none; }
   .ivd-field:not(.ivd-field--search) .ivd-select { padding-left: 12px; }
 
-  /* Tables → stacked cards, no horizontal scroll */
-  .ivd-table-wrap { border: 0; border-radius: 0; overflow: visible; background: transparent; }
-  .ivd-table thead {
-    position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap;
-  }
-  .ivd-table, .ivd-table tbody { display: block; }
-  .ivd-table tbody { display: flex; flex-direction: column; gap: 12px; }
-  .ivd-table tbody tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 12px 16px;
-    padding: 16px;
-    border: 1px solid var(--neutral-200);
-    border-radius: var(--radius-lg);
-    background: var(--bg-surface);
-  }
-  .ivd-table tbody tr:hover { background: var(--bg-surface); }
-  .ivd-table td { display: block; height: auto; padding: 0; border: 0; text-align: left; min-width: 0; }
-  .ivd-table td.is-num { text-align: right; }
-  .ivd-table td.is-action { text-align: left; }
-  .ivd-table td[data-label]::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 4px;
-    font: 600 12px/16px var(--font-sans);
-    letter-spacing: .4px;
-    text-transform: uppercase;
-    color: var(--neutral-600);
-  }
-  .ivd-table td.ivd-cell-primary,
-  .ivd-table td.ivd-cell-wide,
-  .ivd-table td.is-action,
-  .ivd-table td.ivd-cell-empty { grid-column: 1 / -1; }
-  .ivd-table td.is-action .btn { width: 100%; }
   .ivd-view-more { display: inline; }
 
   .ivd-pager { justify-content: center; }

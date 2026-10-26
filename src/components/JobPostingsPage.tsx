@@ -1178,7 +1178,7 @@ export const JobPostingsPage = () => {
               The corners are clipped on the header cells and the last row
               instead. */}
           <div className="rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full min-w-full">
+            <table className="abyan-table w-full min-w-full">
               <thead>
                 {/* Sticky under the page header, which is itself sticky under
                     the §8.2 bar. The cells stick, not the row: a sticky <tr>

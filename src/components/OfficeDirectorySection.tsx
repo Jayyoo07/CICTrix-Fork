@@ -170,8 +170,8 @@ export const OfficeDirectorySection: React.FC<OfficeDirectorySectionProps> = () 
             <p className="!mb-0 text-sm text-slate-500">{officeEmployees.length} employee{officeEmployees.length === 1 ? '' : 's'}</p>
           </div>
 
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full border-collapse text-sm">
+          <section className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead className="bg-slate-50 text-left">
                 <tr>
                   <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">First Name</th>
@@ -223,8 +223,8 @@ export const OfficeDirectorySection: React.FC<OfficeDirectorySectionProps> = () 
           </div>
 
           <section>
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full min-w-full">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full min-w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Office / Department</th>

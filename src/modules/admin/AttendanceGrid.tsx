@@ -122,8 +122,8 @@ export const AttendanceGrid = ({ startDate, endDate, attendees }: Props) => {
   };
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200">
-      <table className="w-full text-left text-sm">
+    <div className="abyan-table-wrap">
+      <table className="abyan-table w-full text-left">
         <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
           <tr>
             <th rowSpan={2} className="px-4 py-2.5 font-semibold sticky left-0 bg-gray-50 align-bottom">Attendee</th>

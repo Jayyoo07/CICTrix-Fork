@@ -156,7 +156,7 @@ export function PMIncoming({ pmId, tick, onChange }: { pmId: string; tick: numbe
       {incoming.length === 0 ? (
         <p className="px-6 py-8 text-center text-sm text-slate-400">Nothing awaiting PM review. Office-verified IPCRs land here.</p>
       ) : (
-        <table className="w-full text-sm">
+        <table className="abyan-table w-full">
           <thead>
             <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-6 py-3">Employee</th>
@@ -221,7 +221,7 @@ export function PMVault({ pmId, tick, onChange }: { pmId: string; tick: number; 
         {vault.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-slate-400">Empty. Accept & Lock a verified IPCR to store it here.</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="abyan-table w-full">
             <thead>
               <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-6 py-3">Employee</th>
@@ -407,7 +407,7 @@ function StatusTable({ employees, schedById }: { employees: DemoAccount[]; sched
       {employees.length === 0 ? (
         <p className="px-6 py-8 text-center text-sm text-slate-400">No employees yet. Create them in Account Management.</p>
       ) : (
-        <table className="w-full text-sm">
+        <table className="abyan-table w-full">
           <thead>
             <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-6 py-3">Employee</th>

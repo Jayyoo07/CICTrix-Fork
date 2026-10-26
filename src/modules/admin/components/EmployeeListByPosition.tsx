@@ -92,8 +92,8 @@ export default function EmployeeListByPosition({ position, onEmployeeClick }: Pr
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
+        <div className="abyan-table-wrap">
+          <table className="abyan-table w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th

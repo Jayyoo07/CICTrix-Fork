@@ -190,10 +190,10 @@ const PositionRequirements = () => {
               {position}
               <span style={{ marginLeft: 'auto', fontSize: '13px', fontWeight: 500, color: '#6b7280' }}>{items.length} competencies</span>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <tbody>
                 {items.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <tr key={r.id}>
                     <td style={{ ...ui.td, width: '28%', fontWeight: 600, color: '#1f2937' }}>{r.competency_name}</td>
                     <td style={{ ...ui.td, color: '#6b7280' }}>{r.description || '—'}</td>
                     <td style={{ ...ui.td, width: '130px' }}>
@@ -210,7 +210,7 @@ const PositionRequirements = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         ))
       )}
@@ -725,16 +725,16 @@ const CompetencyMap = () => {
           <div style={ui.emptyBox}>No requirements match the current filters.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                <tr>
                   <th style={{ ...ui.th, width: '220px' }}>Position</th>
                   <th style={ui.th}>Competency Standards</th>
                 </tr>
               </thead>
               <tbody>
                 {groupedByPosition.map(([pos, posReqs]) => (
-                  <tr key={pos} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                  <tr key={pos}>
                     <td style={{ ...ui.td, fontWeight: 600, color: '#1f2937' }}>{pos}</td>
                     <td style={{ ...ui.td, padding: '8px 12px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -746,7 +746,7 @@ const CompetencyMap = () => {
                               flexWrap: 'wrap',
                               alignItems: 'center',
                               gap: '8px',
-                              fontSize: '12px',
+                              fontSize: '14px',
                               padding: '4px 8px',
                               borderRadius: '6px',
                               border: '1px solid #f0f0f0',
@@ -756,7 +756,7 @@ const CompetencyMap = () => {
                             <span style={{ fontWeight: 600, color: '#1f2937' }}>{r.competency_name}</span>
                             <span style={levelPill(r.proficiency_level)}>{r.proficiency_level}</span>
                             {r.description && (
-                              <span style={{ color: '#6b7280', fontSize: '11px' }}>— {r.description}</span>
+                              <span style={{ color: '#6b7280', fontSize: '14px' }}>— {r.description}</span>
                             )}
                           </div>
                         ))}
@@ -765,7 +765,7 @@ const CompetencyMap = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>

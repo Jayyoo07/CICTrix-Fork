@@ -1341,8 +1341,8 @@ const ProbationaryPanel = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   {[
@@ -1587,8 +1587,8 @@ const RegularPanel = ({
               {activeDrill.employees.length !== 1 ? 's' : ''})
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="bg-slate-50/60 border-b border-slate-200">
                   {['Employee', 'Position', 'Current Stage', 'Deadline'].map((h) => (
@@ -1633,8 +1633,8 @@ const RegularPanel = ({
       ) : (
         /* ── Office list ── */
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   {['Office', 'Employees', 'Pending', 'Completed', ''].map((h, i) => (

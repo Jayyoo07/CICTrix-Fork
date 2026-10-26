@@ -1082,8 +1082,8 @@ export const OfficeAccountConsole: React.FC = () => {
                         <p className="text-xs text-slate-500 mt-0.5">Historical log of batches compiled and locked into PM cold storage.</p>
                       </div>
 
-                      <div className="overflow-x-auto rounded-lg border border-slate-200">
-                        <table className="w-full text-left border-collapse text-xs">
+                      <div className="abyan-table-wrap">
+                        <table className="abyan-table w-full text-left">
                           <thead>
                             <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                               <th className="px-4 py-2.5">Transmittal ID</th>
@@ -1207,8 +1207,8 @@ export const OfficeAccountConsole: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="overflow-x-auto rounded-lg border border-slate-200">
-                        <table className="w-full text-left border-collapse text-xs">
+                      <div className="abyan-table-wrap">
+                        <table className="abyan-table w-full text-left">
                           <thead>
                             <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                               <th className="px-4 py-3">Employee</th>
@@ -1551,8 +1551,8 @@ export const OfficeAccountConsole: React.FC = () => {
                       <p className="mt-1">Use the form above to recommend a training to L&amp;D.</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full text-left border-collapse text-xs">
+                    <div className="abyan-table-wrap">
+                      <table className="abyan-table w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                             <th className="px-4 py-3">Topic</th>

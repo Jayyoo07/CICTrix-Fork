@@ -1,7 +1,7 @@
 ---
 title: Readable table text and a uniform table design
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Fix low-contrast table text and move every table in every module onto a shared .abyan-table style layer modelled on the Succession Planning table, with shared loading/error/empty rows and the top-scorer option.
 spec: docs/mockups/2026-10-07-succession-table.html
 ---

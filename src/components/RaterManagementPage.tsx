@@ -713,8 +713,8 @@ export const RaterManagementPage = () => {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <table className="w-full border-collapse text-left">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full text-left">
               <thead className="border-b border-gray-200 bg-white">
                 <tr>
                   {/* Rater Name takes the slack; the other two hug their

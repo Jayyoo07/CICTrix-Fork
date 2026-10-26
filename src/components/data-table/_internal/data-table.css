@@ -31,7 +31,6 @@
 .abyan-table thead tr { background: transparent; border: 0; }
 .abyan-table th {
   padding: 12px 20px;
-  text-align: left;
   vertical-align: middle;
   font: 600 12px/16px var(--font-sans, 'Poppins', system-ui, sans-serif);
   letter-spacing: .4px;
@@ -41,16 +40,19 @@
 }
 .abyan-table th.is-num, .abyan-table td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
 .abyan-table th.is-center, .abyan-table td.is-center { text-align: center; }
+.abyan-table th.is-action, .abyan-table td.is-action { text-align: right; white-space: nowrap; }
 /* Sort buttons inside headers keep the header's look. */
 .abyan-table th button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: transparent; }
+
+/* Defaults a cell's own utilities may override (alignment, colour, weight,
+   size): zero specificity via :where(). */
+:where(.abyan-table) th { text-align: left; }
+:where(.abyan-table) td { font-size: 14px; line-height: 20px; font-weight: 500; }
 
 /* ── Body ── */
 .abyan-table td {
   padding: 16px 20px;
   vertical-align: middle;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
   border-bottom: 1px solid var(--neutral-200, #E2E8F0);
 }
 .abyan-table tbody tr:last-child td { border-bottom: 0; }
@@ -60,16 +62,21 @@
 .abyan-table.is-compact th { padding: 10px 12px; }
 .abyan-table.is-compact td { padding: 12px; }
 
-/* Primary and secondary cell text. */
-.abyan-table .abyan-cell-primary { display: block; font-weight: 600; }
-.abyan-table .abyan-cell-secondary { display: block; margin-top: 2px; font-weight: 500; }
+/* Primary and secondary cell text. `display` stays overridable so a cell can
+   lay the name out as a flex row with its badge. */
+:where(.abyan-table .abyan-cell-primary, .abyan-table .abyan-cell-secondary) { display: block; }
+.abyan-table .abyan-cell-primary { font-weight: 600; }
+.abyan-table .abyan-cell-secondary { margin-top: 2px; font-weight: 500; }
+/* Legacy cells use <p> for stacked lines; global paragraph margins made rows uneven. */
+:where(.abyan-table td) p { margin: 0; }
 
 /* ── Colours, light theme ── */
-:root:not([data-theme='dark']) .abyan-table th {
+/* Doubled class: beats rsp-design.css's (0,4,0) remap of legacy header greys. */
+:root:not([data-theme='dark']) .abyan-table.abyan-table thead th {
   background: var(--bg-page, #F1F5F9);
   color: var(--neutral-600, #515F69);
 }
-:root:not([data-theme='dark']) .abyan-table td { color: var(--neutral-800, #28343D); }
+:where(:root:not([data-theme='dark']) .abyan-table) td { color: var(--neutral-800, #28343D); }
 :root:not([data-theme='dark']) .abyan-table tbody tr:hover { background-color: var(--bg-row-hover, #F8FAFF); }
 :root:not([data-theme='dark']) .abyan-table .abyan-cell-primary { color: var(--color-primary-900, #040E6B); }
 :root:not([data-theme='dark']) .abyan-table .abyan-cell-secondary { color: var(--neutral-600, #515F69); }

@@ -1,7 +1,7 @@
 ---
 title: Highlight the top scorer in RSP tables
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Every RSP table with scores or rankings highlights the highest scorer(s) per comparison group, computed from the full group, including print and export.
 ---
 

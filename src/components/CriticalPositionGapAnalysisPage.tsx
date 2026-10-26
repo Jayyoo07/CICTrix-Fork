@@ -296,8 +296,8 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
           </div>
 
           {/* Comparison table */}
-          <div className="overflow-hidden rounded-xl border border-[var(--border-color)] bg-white">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="border-b border-[var(--border-color)] bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                   <th className="px-4 py-2.5">Requirement</th>

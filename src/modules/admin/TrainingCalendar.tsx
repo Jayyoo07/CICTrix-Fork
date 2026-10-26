@@ -915,8 +915,8 @@ export const TrainingCalendar = () => {
           {!eventsLoad.initialLoading && events.length === 0 ? (
             <EmptyState title="No trainings this year" description={`No trainings have been scheduled for ${currentYear} yet.`} />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full text-left">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Training</th>

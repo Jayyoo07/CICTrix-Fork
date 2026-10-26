@@ -182,8 +182,8 @@ export const TrainingEvaluationReport = ({ employee, seminar, onBack }: Props) =
         {/* Section A */}
         <div className="mb-12">
           <h3 className="font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">A. CONTENT & OBJECTIVES</h3>
-          <div className="overflow-x-auto border border-gray-200 rounded-lg mb-6">
-            <table className="w-full text-left text-sm border-collapse">
+          <div className="abyan-table-wrap mb-6">
+            <table className="abyan-table w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="py-3 px-4 font-semibold text-gray-700 border-r border-gray-200">Question</th>
@@ -243,8 +243,8 @@ export const TrainingEvaluationReport = ({ employee, seminar, onBack }: Props) =
             <h3 className="font-bold text-gray-900 mb-6 border-b border-gray-200 pb-2">{rp.section}</h3>
             <p className="font-bold text-gray-800 mb-4 uppercase text-sm">{rp.name}</p>
             
-            <div className="overflow-x-auto border border-gray-200 rounded-lg mb-6">
-              <table className="w-full text-left text-sm border-collapse">
+            <div className="abyan-table-wrap mb-6">
+              <table className="abyan-table w-full text-left">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="py-3 px-4 font-semibold text-gray-700 border-r border-gray-200">Question</th>
@@ -305,8 +305,8 @@ export const TrainingEvaluationReport = ({ employee, seminar, onBack }: Props) =
         {/* Program Administration */}
         <div className="mb-12">
           <h3 className="font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">{nextSectionLetter}. PROGRAM ADMINISTRATION</h3>
-          <div className="overflow-x-auto border border-gray-200 rounded-lg mb-6">
-            <table className="w-full text-left text-sm border-collapse">
+          <div className="abyan-table-wrap mb-6">
+            <table className="abyan-table w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="py-3 px-4 font-semibold text-gray-700 border-r border-gray-200">Question</th>

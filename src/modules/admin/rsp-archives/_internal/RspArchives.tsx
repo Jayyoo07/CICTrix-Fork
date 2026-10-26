@@ -302,8 +302,8 @@ export const RspArchives = ({ records, onPurge, onOpenAssessment }: RspArchivesP
         )}
 
         {/* Flat table (§9.5): one row per department + position */}
-        <div className="relative overflow-x-auto rounded-xl border border-[var(--neutral-200)]">
-          <table className="w-full min-w-[720px] border-collapse">
+        <div className="abyan-table-wrap relative">
+          <table className="abyan-table w-full min-w-[720px]">
             <caption className="sr-only">{def.label}, one row per department and position</caption>
             <thead>
               <tr className="bg-[var(--bg-page)]">

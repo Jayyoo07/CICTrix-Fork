@@ -102,13 +102,8 @@
 .pmdash .pd-p-n { background: var(--pd-bg); color: var(--pd-body); --d: #64748B; }
 
 /* ── Tables (§9.5) ────────────────────────────────────────────────────────── */
-.pmdash .pd-tbl { border: 1px solid var(--pd-line); border-radius: 12px; overflow-x: auto; }
-.pmdash .pd-tbl table { width: 100%; border-collapse: collapse; }
-.pmdash .pd-tbl th { background: var(--pd-bg); text-align: left; font-size: 12px; font-weight: 600; color: var(--pd-ink); padding: 9px 14px; white-space: nowrap; }
-.pmdash .pd-tbl td { padding: 10px 14px; border-top: 1px solid var(--pd-line); font-size: 13px; font-weight: 500; color: var(--pd-body); vertical-align: middle; }
-.pmdash .pd-tbl tr:hover td { background: #F8FAFF; }
-.pmdash .pd-tbl .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pmdash .pd-tbl .pd-bar-col { width: 36%; min-width: 160px; }
+.pmdash .abyan-table .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pmdash .abyan-table .pd-bar-col { width: 36%; min-width: 160px; }
 .pmdash .pd-pri { color: var(--pd-ink); font-weight: 600; }
 .pmdash .pd-meta { display: block; font-size: 12px; font-weight: 500; color: var(--pd-ink-2); }
 .pmdash .pd-rate { display: flex; align-items: center; gap: 10px; }

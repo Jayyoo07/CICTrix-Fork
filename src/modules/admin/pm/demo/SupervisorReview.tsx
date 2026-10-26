@@ -86,7 +86,7 @@ export function SupervisorReview({ account, readOnly = false }: { account: DemoA
         ) : pending.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-slate-400">Nothing awaiting review right now.</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="abyan-table w-full">
             <thead>
               <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-6 py-3">Employee</th>

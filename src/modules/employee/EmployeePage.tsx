@@ -1803,7 +1803,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                           {fn.label}
                         </label>
                         <div className={`overflow-x-auto rounded-lg border ${readOnly ? 'opacity-60' : ''}`} style={{ borderColor: '#C8D1FF' }}>
-                          <table className="w-full min-w-[640px] border-collapse text-sm">
+                          <table className="abyan-table w-full min-w-[640px]">
                             <thead>
                               <tr className="bg-slate-50 text-left">
                                 <th className="w-2/5 border-b px-3 py-2 text-xs font-bold text-slate-600" style={{ borderColor: '#C8D1FF' }}>MFO</th>

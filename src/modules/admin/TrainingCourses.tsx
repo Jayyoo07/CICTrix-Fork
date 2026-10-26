@@ -482,8 +482,8 @@ const DraftDetail = ({
             {included.length === 0 ? (
               <EmptyState title="No employees recommended yet" description="Add the employees this training is intended for. Each add needs a reason." />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-gray-200">
-                <table className="w-full text-left text-sm">
+              <div className="abyan-table-wrap">
+                <table className="abyan-table w-full text-left">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
                     <tr>
                       <th className="px-4 py-2.5 font-semibold">Employee</th>
@@ -786,8 +786,8 @@ export const TrainingCourses = () => {
             description={statusFilter === 'All' ? 'Create your first training draft to get started.' : `No drafts with status "${statusFilter}".`}
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full text-left">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Training</th>

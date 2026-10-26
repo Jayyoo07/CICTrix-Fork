@@ -488,8 +488,8 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
                 </div>
               </div>
               {/* §8.3: on small screens the table scrolls inside its card. */}
-              <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--neutral-200)] bg-[var(--bg-surface)]">
-                <table className="w-full min-w-[760px] table-fixed">
+              <div className="abyan-table-wrap rounded-[var(--radius-lg)]">
+                <table className="abyan-table w-full min-w-[760px] table-fixed">
                   <colgroup>
                     <col className="w-12" />
                     <col className="w-[32%]" />
@@ -654,10 +654,10 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
           ) : (
             <>
             {renderFilterBar(filteredScheduled.length, scheduledApplicants.length, scheduledSort.key === 'qualified')}
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="abyan-table-wrap">
               {/* Fixed layout with set widths so dates never wrap and the table
                   fits at 1366px without a sideways scroll. */}
-              <table className="w-full table-fixed">
+              <table className="abyan-table w-full table-fixed">
                 <colgroup>
                   <col className="w-[21%]" />
                   <col className="w-[19%]" />

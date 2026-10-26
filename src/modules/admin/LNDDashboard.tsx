@@ -815,8 +815,8 @@ const LndDashboardContent = () => {
           </p>
         ) : (
           <>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-xs">
+            <div className="abyan-table-wrap mt-3">
+              <table className="abyan-table w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b" style={{ borderColor: 'var(--neutral-200)', color: 'var(--neutral-500)' }}>
                     <th className="px-3 py-2.5 font-semibold">Employee</th>

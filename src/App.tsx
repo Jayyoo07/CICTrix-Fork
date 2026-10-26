@@ -47,6 +47,8 @@ import { InterviewerLogin } from './modules/interviewer/InterviewerLogin';
 import './styles/globals.css';
 // After globals.css: remaps RSP-portal utilities onto the Design Identity tokens.
 import './styles/abyan-tokens.css';
+// Shared table styles (.abyan-table), loaded once for every portal.
+import './components/data-table';
 import './styles/rsp-design.css';
 import type { Employee, EmployeeSession } from './types/employee.types';
 import { scheduleTransientUiReset } from './utils/uiReset';

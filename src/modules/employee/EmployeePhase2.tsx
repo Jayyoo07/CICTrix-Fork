@@ -369,8 +369,8 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border" style={{ borderColor: '#C8D1FF' }}>
-        <table className="w-full min-w-[820px] border-collapse text-xs">
+      <div className="abyan-table-wrap" style={{ borderColor: '#C8D1FF' }}>
+        <table className="abyan-table w-full min-w-[820px]">
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-bold text-slate-600">
               <th className="w-2/5 border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Success Indicator (frozen)</th>

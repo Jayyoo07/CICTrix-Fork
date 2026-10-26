@@ -167,8 +167,8 @@ export function AccountManagement({ pmId }: { pmId: string }) {
           <h2 className="text-lg font-bold text-slate-900">Accounts</h2>
           <span className="text-sm text-slate-400">{accounts.length} total</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="abyan-table-wrap">
+          <table className="abyan-table w-full">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-slate-500 bg-slate-50">
                 <th className="px-6 py-3">Name</th>

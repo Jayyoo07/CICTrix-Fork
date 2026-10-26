@@ -434,8 +434,8 @@ export function CandidateListModal({
           <SelectField value={status} onChange={(v) => setStatus(v as StatusFilter)} label="Status" options={statusOptions} />
         </div>
 
-        <div className="ivd-table-wrap">
-          <table className="ivd-table">
+        <div className="abyan-table-wrap">
+          <table className="abyan-table">
             <thead>
               <tr>
                 <th scope="col">Candidate</th>

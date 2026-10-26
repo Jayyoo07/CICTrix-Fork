@@ -1082,10 +1082,10 @@ export const PMDashboard = ({
                         {ipcrSubmissionTab === 'pending' ? 'Action Required' : 'Completed'}
                       </span>
                     </header>
-                    <div className="overflow-x-auto relative min-h-[60px]">
+                    <div className="abyan-table-wrap relative min-h-[60px]">
                       
                       {ipcrSubmissionTab === 'pending' ? (
-                        <table className="w-full text-xs">
+                        <table className="abyan-table w-full">
                           <thead>
                             <tr className="bg-slate-50/80 text-left">
                               <th className="px-4 py-2.5 font-semibold text-slate-400 uppercase tracking-wider">Employee</th>
@@ -1142,7 +1142,7 @@ export const PMDashboard = ({
                           </tbody>
                         </table>
                       ) : (
-                        <table className="w-full text-xs">
+                        <table className="abyan-table w-full">
                           <thead>
                             <tr className="bg-slate-50/80 text-left">
                               <th className="px-4 py-2.5 font-semibold text-slate-400 uppercase tracking-wider">Employee</th>
@@ -1764,8 +1764,8 @@ export const PMDashboard = ({
               <SkeletonList show={cyclesLoad.showSkeleton} rows={4} label="Loading evaluation cycles…" />
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
-              <table className="w-full">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">Cycle Name</th>

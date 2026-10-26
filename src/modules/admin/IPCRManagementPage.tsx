@@ -275,9 +275,9 @@ const NewEntrantOnboarding = () => {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                <tr>
                   <th style={ui.th}>Employee</th>
                   <th style={ui.th}>Office</th>
                   <th style={ui.th}>Start</th>
@@ -289,7 +289,7 @@ const NewEntrantOnboarding = () => {
               </thead>
               <tbody>
                 {filtered.map((e) => (
-                  <tr key={e.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <tr key={e.id}>
                     <td style={ui.td}>
                       <span style={{ fontWeight: 600, color: '#1f2937' }}>{e.employee_name || '—'}</span>
                     </td>
@@ -298,7 +298,7 @@ const NewEntrantOnboarding = () => {
                     <td style={ui.td}>
                       <div>{e.orientation_completed_date ? `Done ${fmtDate(e.orientation_completed_date)}` : e.orientation_date ? `Sched. ${fmtDate(e.orientation_date)}` : '—'}</div>
                       {e.orientation_conducted_by && (
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>by {e.orientation_conducted_by}</div>
+                        <div style={{ fontSize: '14px', color: '#515F69' }}>by {e.orientation_conducted_by}</div>
                       )}
                     </td>
                     <td style={ui.td}>{fmtDate(e.target_setting_deadline)}</td>
@@ -326,7 +326,7 @@ const NewEntrantOnboarding = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>
@@ -830,9 +830,9 @@ const SubmissionPhasePanel = ({
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                <tr>
                   <th style={ui.th}>Employee</th>
                   <th style={ui.th}>Office</th>
                   <th style={ui.th}>Stage</th>
@@ -846,7 +846,7 @@ const SubmissionPhasePanel = ({
                   const locked = showLockedTargets ? lockedMap.get(r.employeeId) : undefined;
                   return (
                     <Fragment key={r.employeeId}>
-                      <tr style={{ borderTop: '1px solid #f0f0f0' }}>
+                      <tr>
                         <td style={ui.td}>
                           <span style={{ fontWeight: 600, color: '#1f2937' }}>{r.employeeName}</span>
                         </td>
@@ -885,7 +885,7 @@ const SubmissionPhasePanel = ({
                                 />
                               </button>
                             ) : (
-                              <span style={{ fontSize: '12px', color: '#b45309' }}>Not in Vault</span>
+                              <span style={{ fontSize: '14px', color: '#b45309' }}>Not in Vault</span>
                             )}
                           </td>
                         )}
@@ -894,15 +894,15 @@ const SubmissionPhasePanel = ({
                         <tr>
                           <td colSpan={colCount} style={{ padding: '0 16px 14px', background: '#fafafa' }}>
                             <div style={{ padding: '12px 14px', border: '1px solid #eee', borderRadius: '8px', background: '#fff' }}>
-                              <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>
+                              <div style={{ fontSize: '14px', color: '#515F69', marginBottom: '8px' }}>
                                 Locked targets (read-only, from Vault) — the employee rates accomplishments against each of these.
                               </div>
                               {locked.length === 0 ? (
-                                <div style={{ fontSize: '13px', color: '#6b7280' }}>No target rows in this set.</div>
+                                <div style={{ fontSize: '14px', color: '#6b7280' }}>No target rows in this set.</div>
                               ) : (
                                 <ol style={{ margin: 0, paddingLeft: '18px' }}>
                                   {locked.map((t, i) => (
-                                    <li key={i} style={{ fontSize: '13px', color: '#374151', marginBottom: '4px' }}>
+                                    <li key={i} style={{ fontSize: '14px', color: '#374151', marginBottom: '4px' }}>
                                       {t.function_type ? <strong>[{t.function_type}] </strong> : null}
                                       {t.target_text || JSON.stringify(t)}
                                     </li>
@@ -917,7 +917,7 @@ const SubmissionPhasePanel = ({
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>
@@ -1097,16 +1097,16 @@ const PerformanceHistory = () => {
                   <div style={ui.emptyBox}>No target/accomplishment detail recorded for this cycle.</div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <div className="abyan-table-wrap is-flush"><table className="abyan-table">
                       <thead>
-                        <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                        <tr>
                           <th style={ui.th}>Target</th>
                           <th style={ui.th}>Accomplishment</th>
                         </tr>
                       </thead>
                       <tbody>
                         {c.rows.map((r, j) => (
-                          <tr key={j} style={{ borderTop: '1px solid #f0f0f0' }}>
+                          <tr key={j}>
                             <td style={{ ...ui.td, width: '50%' }}>
                               {r.functionType ? <strong style={{ color: '#6b7280' }}>[{r.functionType}] </strong> : null}
                               {r.target || '—'}
@@ -1117,7 +1117,7 @@ const PerformanceHistory = () => {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table></div>
                   </div>
                 )}
               </div>

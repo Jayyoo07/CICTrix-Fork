@@ -130,7 +130,7 @@ type SuccessionRow = SuccessionOverviewPosition;
 
 function SuccessionTable({ rows, onOpen }: { rows: SuccessionRow[]; onOpen: (row: SuccessionRow) => void }) {
   return (
-    <table className="rd-table">
+    <div className="abyan-table-wrap is-flush"><table className="abyan-table is-compact">
       <thead>
         <tr>
           <th>Key position</th><th>Incumbent leaves</th><th className="n">Successors</th>
@@ -166,7 +166,7 @@ function SuccessionTable({ rows, onOpen }: { rows: SuccessionRow[]; onOpen: (row
           );
         })}
       </tbody>
-    </table>
+    </table></div>
   );
 }
 
@@ -574,7 +574,7 @@ export function RspDashboardOverview({
               {postings.rows.length === 0 ? (
                 <p className="rd-empty">No open vacancies.</p>
               ) : (
-                <table className="rd-table">
+                <div className="abyan-table-wrap is-flush"><table className="abyan-table is-compact">
                   <tbody>
                     {postings.rows.slice(0, MAX_DEPARTMENT_ROWS).map((r) => (
                       <tr key={r.name}>
@@ -590,7 +590,7 @@ export function RspDashboardOverview({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               )}
             </div>
 

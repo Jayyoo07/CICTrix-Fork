@@ -893,8 +893,8 @@ export function InterviewerApplicantsList({
                 </div>
               </div>
             ) : (
-              <div className="ivd-table-wrap">
-                <table className="ivd-table" aria-busy={loading}>
+              <div className="abyan-table-wrap">
+                <table className="abyan-table" aria-busy={loading}>
                   <thead>
                     <tr>
                       <th scope="col">Applicant</th>

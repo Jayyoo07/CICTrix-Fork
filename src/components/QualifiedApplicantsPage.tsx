@@ -4,7 +4,7 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
-  Eye,
+  Download,
   FileText,
   Mail,
   MessageSquare,
@@ -15,8 +15,9 @@ import {
   UserCheck,
   X
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { getPreferredDataSourceMode } from '../lib/dataSourceMode';
 import { hireApplicant } from '../lib/api/employeesApi';
 import { mockDatabase } from '../lib/mockDatabase';
 import {
@@ -29,10 +30,7 @@ import {
 import { sendEmail } from '../lib/email';
 import { createPassword, upsertEmployeePortalAccount } from '../lib/employeePortalData';
 import { runSingleFlight } from '../lib/singleFlight';
-import { supabase } from '../lib/supabase';
-import { applicantAttachmentDocument, listApplicantDocumentAttachments, type ApplicantDocumentAttachment, type ViewerDocument } from '../lib/documentViewing';
-import { DocumentCollectionModal } from './DocumentCollectionModal';
-import { DocumentPreviewModal } from './DocumentPreviewModal';
+import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../lib/supabase';
 import { buildDisqualificationActivityDescription, DISQUALIFICATION_REASON_OPTIONS } from '../lib/applicationActivity';
 import { Applicant, ApplicantStatus, JobPosting } from '../types/recruitment.types';
 import { RecruitmentNavigationGuide } from './RecruitmentNavigationGuide';
@@ -40,7 +38,31 @@ import { Sidebar } from './Sidebar';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 
-type ApplicantAttachmentRow = ApplicantDocumentAttachment;
+type StoredAttachment = {
+  applicant_id: string;
+  file_name: string;
+  file_path: string;
+  file_type?: string;
+  document_type?: string;
+};
+
+type ResolvedDocument = {
+  fileName: string;
+  url: string;
+};
+
+type ApplicantDocumentRef = {
+  type: string;
+  url: string;
+};
+
+type ApplicantAttachmentRow = {
+  id: string;
+  file_name: string;
+  file_path: string;
+  document_type?: string;
+  created_at?: string;
+};
 
 type EmailTemplateKey = 'none' | 'missing_documents' | 'incorrect_file_format' | 'invalid_information' | 'schedule_interview' | 'custom_message';
 type JobPostsStatusFilter = 'all' | 'pending' | 'reviewed' | 'shortlisted' | 'qualified';
@@ -100,6 +122,8 @@ const EMAIL_TEMPLATES: Array<{ key: EmailTemplateKey; label: string; subject: st
   { key: 'custom_message', label: 'Custom Message', subject: '', message: '' },
 ];
 
+const ATTACHMENTS_STORAGE_KEY = 'cictrix_attachments';
+const ATTACHMENT_PREVIEW_CACHE_KEY = 'cictrix_attachment_previews';
 const AUDIT_LOG_STORAGE_KEY = 'cictrix_recruitment_audit_log';
 
 // ── Document Review ────────────────────────────────────────────────────────────
@@ -141,6 +165,18 @@ type RecruitmentAuditLog = {
   actor: string;
 };
 
+type CachedPreviewFile = {
+  applicantId: string;
+  documentType: string;
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+  createdAt: string;
+};
+
+const normalizeDocKey = (value: string) => value.trim().toLowerCase().replace(/\s+/g, '_');
+const looseDocKey = (value: string) => normalizeDocKey(value).replace(/[_-]/g, '');
+
 const appendRecruitmentAuditLog = (entry: Omit<RecruitmentAuditLog, 'id' | 'timestamp'>) => {
   try {
     const nowIso = new Date().toISOString();
@@ -158,6 +194,35 @@ const appendRecruitmentAuditLog = (entry: Omit<RecruitmentAuditLog, 'id' | 'time
   } catch {
     // Best-effort local audit logging only.
   }
+};
+
+const resolveStorageOrDirectUrl = async (filePathOrUrl: string): Promise<string | null> => {
+  if (!filePathOrUrl) return null;
+  if (filePathOrUrl === '#') return null;
+  if (filePathOrUrl.startsWith('http') || filePathOrUrl.startsWith('data:') || filePathOrUrl.startsWith('blob:')) {
+    return filePathOrUrl;
+  }
+  if (filePathOrUrl.startsWith('mock://')) {
+    return null;
+  }
+
+  try {
+    const signedResult = await supabase.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(filePathOrUrl, 120);
+    const signedUrl = (signedResult as any)?.data?.signedUrl as string | undefined;
+    if (signedUrl) return signedUrl;
+  } catch {
+    // Continue to public URL fallback.
+  }
+
+  try {
+    const publicResult = supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(filePathOrUrl);
+    const publicUrl = (publicResult as any)?.data?.publicUrl as string | undefined;
+    if (publicUrl) return publicUrl;
+  } catch {
+    // Final fallback below.
+  }
+
+  return null;
 };
 
 const STATUS_COLORS: Record<ApplicantStatus, string> = {
@@ -400,10 +465,7 @@ export const QualifiedApplicantsPage = () => {
   const [showGuide, setShowGuide] = useState(false);
   const [toast, setToast] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
-  const [previewDocument, setPreviewDocument] = useState<ViewerDocument | null>(null);
-  const [showDocumentCollection, setShowDocumentCollection] = useState(false);
-  const [attachmentsError, setAttachmentsError] = useState('');
-  const attachmentLoad = useRef(0);
+  const [documentActionBusy, setDocumentActionBusy] = useState<string | null>(null);
   const [statusDecisionLocked, setStatusDecisionLocked] = useState(false);
   const [disqualifyReasonDraft, setDisqualifyReasonDraft] = useState('');
   const [disqualificationCategory, setDisqualificationCategory] = useState('incomplete_documents');
@@ -1443,8 +1505,33 @@ export const QualifiedApplicantsPage = () => {
     setPendingStatusAction(null);
   };
 
+  const fetchApplicantAttachments = async (applicantId: string): Promise<ApplicantAttachmentRow[]> => {
+    const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
+    const primaryClient = preferredMode === 'local' ? (mockDatabase as any) : supabase;
+    const secondaryClient = preferredMode === 'local' ? supabase : (mockDatabase as any);
+
+    const runFetch = async (client: any) => {
+      const result = await client
+        .from('applicant_attachments')
+        .select('id,file_name,file_path,document_type,created_at')
+        .eq('applicant_id', applicantId)
+        .order('created_at', { ascending: false });
+      if (result.error) throw result.error;
+      return ((result.data || []) as ApplicantAttachmentRow[]).filter((row) => row.file_path || row.file_name);
+    };
+
+    try {
+      return await runFetch(primaryClient);
+    } catch {
+      try {
+        return await runFetch(secondaryClient);
+      } catch {
+        return [];
+      }
+    }
+  };
+
   const openApplicantDetails = async (applicant: Applicant) => {
-    const request = ++attachmentLoad.current;
     // CRITICAL FIX: Always use the current applicant from state, not the stale copy passed in
     // This ensures status updates are reflected when re-opening an applicant
     const currentApplicant = applicants.find((a) => a.id === applicant.id) ?? applicant;
@@ -1468,26 +1555,14 @@ export const QualifiedApplicantsPage = () => {
     setEmailMessage('');
     setNoteDraft('');
 
-    setAttachmentsError('');
-    if (attachmentsByApplicant[applicant.id]) {
-      setAttachmentsLoading(false);
-      return;
-    }
+    if (attachmentsByApplicant[applicant.id]) return;
     setAttachmentsLoading(true);
-    try {
-      const rows = await listApplicantDocumentAttachments(applicant.id);
-      setAttachmentsByApplicant((prev) => ({ ...prev, [applicant.id]: rows }));
-    } catch (error) {
-      if (request === attachmentLoad.current) setAttachmentsError(error instanceof Error ? error.message : 'Could not load uploaded documents. Try again.');
-    } finally {
-      if (request === attachmentLoad.current) setAttachmentsLoading(false);
-    }
+    const rows = await fetchApplicantAttachments(applicant.id);
+    setAttachmentsByApplicant((prev) => ({ ...prev, [applicant.id]: rows }));
+    setAttachmentsLoading(false);
   };
 
   const closeApplicantDetails = () => {
-    attachmentLoad.current += 1;
-    setPreviewDocument(null);
-    setShowDocumentCollection(false);
     setShowMessageDialog(false);
     setActiveApplicant(null);
     setActiveTab('Overview');
@@ -1527,10 +1602,215 @@ export const QualifiedApplicantsPage = () => {
     setToast('Note saved.');
   };
 
+  const getLocalAttachmentMatches = (applicantId: string, docType: string): StoredAttachment[] => {
+    const attachments = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(ATTACHMENTS_STORAGE_KEY) ?? '[]') as StoredAttachment[];
+      } catch {
+        return [];
+      }
+    })();
+
+    const target = looseDocKey(docType);
+    return attachments.filter((entry) => {
+      if (entry.applicant_id !== applicantId) return false;
+      const byDocumentType = looseDocKey(entry.document_type ?? '') === target;
+      const byName = looseDocKey(entry.file_name).includes(target);
+      return byDocumentType || byName;
+    });
+  };
+
+  const getAnyLocalAttachment = (applicantId: string): StoredAttachment | null => {
+    const attachments = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(ATTACHMENTS_STORAGE_KEY) ?? '[]') as StoredAttachment[];
+      } catch {
+        return [];
+      }
+    })();
+
+    const rows = attachments.filter((entry) => entry.applicant_id === applicantId);
+    return rows[rows.length - 1] ?? null;
+  };
+
+  const getPreviewCacheMatch = (applicantId: string, docType: string): CachedPreviewFile | null => {
+    const entries = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(ATTACHMENT_PREVIEW_CACHE_KEY) ?? '[]') as CachedPreviewFile[];
+      } catch {
+        return [];
+      }
+    })();
+
+    const target = looseDocKey(docType);
+    return (
+      entries.find(
+        (entry) =>
+          entry.applicantId === applicantId &&
+          (looseDocKey(entry.documentType) === target || looseDocKey(entry.fileName).includes(target))
+      ) ?? null
+    );
+  };
+
+  const getAnyPreviewCacheMatch = (applicantId: string): CachedPreviewFile | null => {
+    const entries = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(ATTACHMENT_PREVIEW_CACHE_KEY) ?? '[]') as CachedPreviewFile[];
+      } catch {
+        return [];
+      }
+    })();
+
+    const rows = entries.filter((entry) => entry.applicantId === applicantId);
+    return rows[rows.length - 1] ?? null;
+  };
+
+  const resolveDocumentForApplicant = async (
+    applicantId: string,
+    docType: string,
+    fallbackDoc?: ApplicantDocumentRef
+  ): Promise<ResolvedDocument | null> => {
+    const previewCacheMatch = getPreviewCacheMatch(applicantId, docType);
+    if (previewCacheMatch) {
+      return {
+        fileName: previewCacheMatch.fileName,
+        url: previewCacheMatch.dataUrl,
+      };
+    }
+
+    const anyPreview = getAnyPreviewCacheMatch(applicantId);
+    if (anyPreview) {
+      return {
+        fileName: anyPreview.fileName,
+        url: anyPreview.dataUrl,
+      };
+    }
+
+    const localMatches = getLocalAttachmentMatches(applicantId, docType);
+    for (const match of localMatches) {
+      const resolvedUrl = await resolveStorageOrDirectUrl(match.file_path ?? '');
+      if (resolvedUrl) {
+        return {
+          fileName: match.file_name,
+          url: resolvedUrl,
+        };
+      }
+    }
+
+    const anyLocal = getAnyLocalAttachment(applicantId);
+    if (anyLocal?.file_path) {
+      const resolvedUrl = await resolveStorageOrDirectUrl(anyLocal.file_path);
+      if (resolvedUrl) {
+        return {
+          fileName: anyLocal.file_name,
+          url: resolvedUrl,
+        };
+      }
+    }
+
+    const remote = await supabase
+      .from('applicant_attachments')
+      .select('file_name,file_path,document_type')
+      .eq('applicant_id', applicantId);
+
+    const remoteRows = ((remote as any)?.data ?? []) as Array<{
+      file_name: string;
+      file_path: string;
+      document_type?: string;
+    }>;
+
+    const target = looseDocKey(docType);
+    const remoteMatch = remoteRows.find((entry) => {
+      const byDocumentType = looseDocKey(entry.document_type ?? '') === target;
+      const byName = looseDocKey(entry.file_name ?? '').includes(target);
+      return byDocumentType || byName;
+    });
+
+    if (remoteMatch?.file_path) {
+      const resolvedUrl = await resolveStorageOrDirectUrl(remoteMatch.file_path);
+      if (resolvedUrl) {
+        return {
+          fileName: remoteMatch.file_name,
+          url: resolvedUrl,
+        };
+      }
+    }
+
+    for (const entry of remoteRows) {
+      const resolvedUrl = await resolveStorageOrDirectUrl(entry.file_path ?? '');
+      if (resolvedUrl) {
+        return {
+          fileName: entry.file_name,
+          url: resolvedUrl,
+        };
+      }
+    }
+
+    // Final fallback: use the document URL saved on applicant record itself.
+    if (fallbackDoc?.url) {
+      const fallbackUrl = await resolveStorageOrDirectUrl(fallbackDoc.url);
+      if (fallbackUrl) {
+        return {
+          fileName: fallbackDoc.type,
+          url: fallbackUrl,
+        };
+      }
+    }
+
+    return null;
+  };
+
+  const handlePreviewDocument = async (doc: ApplicantDocumentRef) => {
+    if (!activeApplicant) return;
+
+    const actionKey = `${activeApplicant.id}-${doc.type}-preview`;
+    setDocumentActionBusy(actionKey);
+    try {
+      const resolved = await resolveDocumentForApplicant(activeApplicant.id, doc.type, doc);
+      if (!resolved) {
+        setToast('No previewable file found for this document yet.');
+        return;
+      }
+
+      window.open(resolved.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setToast('Unable to preview this document right now.');
+    } finally {
+      setDocumentActionBusy(null);
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (!activeApplicant) return;
+
+    let downloaded = 0;
+    for (const doc of activeApplicant.documents) {
+      const resolved = await resolveDocumentForApplicant(activeApplicant.id, doc.type, {
+        type: doc.type,
+        url: doc.url,
+      });
+      if (!resolved) continue;
+      const anchor = document.createElement('a');
+      anchor.href = resolved.url;
+      anchor.download = resolved.fileName;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.click();
+      downloaded += 1;
+    }
+
+    if (downloaded === 0) {
+      setToast('No downloadable files were found for this applicant.');
+      return;
+    }
+
+    setToast(`Started ${downloaded} document download${downloaded > 1 ? 's' : ''}.`);
+  };
+
   const META_DOC_TYPES = new Set(['resubmission_request', 'resubmission_resolved', 'doc_validated']);
 
   const getModalDocuments = () => {
-    if (!activeApplicant) return [];
+    if (!activeApplicant) return [] as Array<{ type: string; rawType: string; url: string; verified: boolean; uploadedAt?: string; submissions: string[] }>;
 
     const liveRows = attachmentsByApplicant[activeApplicant.id] || [];
     if (liveRows.length > 0) {
@@ -1555,7 +1835,6 @@ export const QualifiedApplicantsPage = () => {
           return true;
         })
         .map((row) => ({
-          file: applicantAttachmentDocument(row),
           type: toDocumentLabel(row.document_type || row.file_name || 'document'),
           rawType: row.document_type || row.file_name || '',
           url: row.file_path || '#',
@@ -1570,15 +1849,6 @@ export const QualifiedApplicantsPage = () => {
 
   return (
     <div className="admin-layout">
-      {activeApplicant && previewDocument && <DocumentPreviewModal open viewFirst
-        fileUrl={previewDocument.url} fileName={previewDocument.fileName} fileType={previewDocument.fileType}
-        storageBucket={previewDocument.bucket} title={previewDocument.label || previewDocument.fileName}
-        subtitle={`${activeApplicant.personalInfo.firstName} ${activeApplicant.personalInfo.lastName}`}
-        onClose={() => setPreviewDocument(null)} />}
-      {activeApplicant && showDocumentCollection && <DocumentCollectionModal title="Submitted Documents"
-        subtitle={`${activeApplicant.personalInfo.firstName} ${activeApplicant.personalInfo.lastName}`}
-        files={getModalDocuments().map((doc) => ({ ...doc.file, label: doc.type }))}
-        onClose={() => setShowDocumentCollection(false)} />}
       <Sidebar activeModule="RSP" userRole="rsp" />
       <main className="admin-content bg-slate-50">
         <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -1961,9 +2231,9 @@ export const QualifiedApplicantsPage = () => {
 
                 {activeTab === 'Documents' && (
                   <article className="rounded-xl border border-slate-200">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                       <h4 className="text-lg font-semibold" style={{ color: '#363EE8' }}>Submitted Documents</h4>
-                      <div className="abyan-ds flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
                         {(() => {
                           const docReady = getDocReadiness(activeApplicant.id);
                           const hasAnyDocs = getModalDocuments().length > 0;
@@ -1980,9 +2250,8 @@ export const QualifiedApplicantsPage = () => {
                             </button>
                           );
                         })()}
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowDocumentCollection(true)}
-                          disabled={attachmentsLoading || Boolean(attachmentsError) || getModalDocuments().length === 0}>
-                          <Eye size={16} strokeWidth={1.75} aria-hidden="true" /> View Documents
+                        <button className="inline-flex items-center gap-2 text-base font-medium text-blue-600" onClick={handleBulkDownload}>
+                          <Download className="h-5 w-5" /> Download All
                         </button>
                       </div>
                     </div>
@@ -1998,9 +2267,7 @@ export const QualifiedApplicantsPage = () => {
                     )}
 
                     <div className="space-y-3 p-4">
-                      {attachmentsError ? (
-                        <p role="alert" className="text-sm text-[var(--error-700)]">{attachmentsError}</p>
-                      ) : attachmentsLoading ? (
+                      {attachmentsLoading ? (
                         <p className="text-slate-500">Loading uploaded documents...</p>
                       ) : getModalDocuments().length === 0 ? (
                         <p className="text-slate-500">No uploaded documents found for this applicant yet.</p>
@@ -2042,10 +2309,11 @@ export const QualifiedApplicantsPage = () => {
                                   <p className="mt-1 text-xs text-amber-700">Reason: {review.remarks}</p>
                                 )}
                               </div>
-                              <div className="abyan-ds flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-2">
                                 <button
-                                  type="button" className="btn btn-secondary btn-sm"
-                                  onClick={() => setPreviewDocument({ ...doc.file, label: doc.type })}
+                                  className="text-sm font-semibold text-blue-600 hover:underline"
+                                  onClick={() => handlePreviewDocument({ type: doc.type, url: doc.url })}
+                                  disabled={documentActionBusy !== null}
                                 >
                                   View
                                 </button>

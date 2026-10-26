@@ -3,7 +3,9 @@ import {
   Calculator,
   CheckCircle2,
   ChevronRight,
-  Eye,
+  Download,
+  ExternalLink,
+  FileText,
   FolderOpen,
   Info,
   Lock,
@@ -16,9 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { useBackClosesView } from '../hooks/useHistoryBack';
-import { supabase } from '../lib/supabase';
-import { applicantAttachmentDocument, listApplicantDocumentAttachments } from '../lib/documentViewing';
-import { DocumentCollectionModal } from './DocumentCollectionModal';
+import { ATTACHMENTS_BUCKET, supabase } from '../lib/supabase';
 import {
   fetchLatestEvaluationForApplicantOrEmailAnySource,
   subscribeToEvaluationChanges,
@@ -355,6 +355,79 @@ const isUpcoming = (iso?: string | null): boolean => {
   return d.getTime() > today.getTime();
 };
 
+const fmtSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+};
+
+// ─── FilesViewerModal ─────────────────────────────────────────────────────────
+
+interface FilesViewerModalProps {
+  title: string;
+  files: AttachmentRow[];
+  onClose: () => void;
+}
+
+const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
+  const openFile = async (row: AttachmentRow) => {
+    try {
+      const { data } = await (supabase as any).storage
+        .from(ATTACHMENTS_BUCKET)
+        .createSignedUrl(row.file_path, 300);
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      window.open(row.file_path, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      icon={<FileText strokeWidth={1.75} />}
+      title={title}
+      size="sm"
+      footer={<button type="button" onClick={onClose} className="btn btn-md btn-secondary">Close</button>}
+    >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+          {files.length === 0 ? (
+            <p style={{ margin: 0, color: 'var(--text-secondary)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.9rem' }}>
+              No files uploaded for this category.
+            </p>
+          ) : (
+            files.map((f) => (
+              <div
+                key={f.id}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', background: 'var(--bg-sidebar)', border: `1px solid var(--border-subtle)`, borderRadius: 10, padding: '0.75rem 1rem' }}
+              >
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--status-error-light)', color: 'var(--status-error)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileText size={18} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</p>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    {fmtSize(f.file_size)}{f.created_at ? ` · ${fmtDate(f.created_at)}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openFile(f)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.75rem', background: 'var(--accent-blue)', border: 'none', borderRadius: 6, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', flexShrink: 0 }}
+                >
+                  <Download size={13} /> Open
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+    </Modal>
+  );
+};
+
 // ─── ExamScoresModal ─────────────────────────────────────────────────────────
 
 interface ExamScoresModalProps {
@@ -550,6 +623,7 @@ const SM_TITLE: React.CSSProperties = { margin: '0 0 12px', fontWeight: 700, fon
 const SM_LABEL: React.CSSProperties = { margin: 0, fontWeight: 600, fontSize: 14, color: 'var(--color-primary-900)' };
 const SM_NOTE: React.CSSProperties = { margin: 0, fontSize: 12, lineHeight: '16px', color: 'var(--neutral-600)' };
 const SM_CHIP: React.CSSProperties = { width: 28, height: 28, borderRadius: 'var(--radius-chip)', background: 'var(--color-primary-50)', color: 'var(--color-primary)', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+const SM_LINK: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, padding: 0 };
 const SM_FIELD = 'mb-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-[#28343D] focus:border-[#363EE8] focus:outline-none focus:ring-[3px] focus:ring-[#363EE8]/15 disabled:bg-slate-100 disabled:text-slate-400 read-only:bg-slate-50';
 
 interface ApplicantScoringModalProps {
@@ -618,7 +692,6 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   const [filesModal, setFilesModal] = useState<{ catKey: CatKey; files: AttachmentRow[] } | null>(null);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
-  const [filesError, setFilesError] = useState('');
   const [liveEvaluation, setLiveEvaluation] = useState<EvaluationSnapshot | null>(evaluation ?? null);
 
   useEffect(() => {
@@ -692,24 +765,21 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
 
   // Load attachments for this applicant
   useEffect(() => {
-    let disposed = false;
     const fetchAttachments = async () => {
       setLoadingFiles(true);
-      setFilesError('');
       try {
-        const rows = await listApplicantDocumentAttachments(applicant.id);
-        if (!disposed) setAttachments(rows);
-      } catch (error) {
-        if (!disposed) {
-          setAttachments([]);
-          setFilesError(error instanceof Error ? error.message : 'Could not load documents. Close the scores and try again.');
-        }
+        const { data } = await (supabase as any)
+          .from('applicant_attachments')
+          .select('id, file_name, file_path, file_type, document_type, created_at, file_size')
+          .eq('applicant_id', applicant.id);
+        setAttachments(data ?? []);
+      } catch {
+        setAttachments([]);
       } finally {
-        if (!disposed) setLoadingFiles(false);
+        setLoadingFiles(false);
       }
     };
     void fetchAttachments();
-    return () => { disposed = true; };
   }, [applicant.id]);
 
   const getFilesForCat = (catKey: CatKey): AttachmentRow[] => {
@@ -1099,18 +1169,35 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       Score: {cat.finalScore ?? 0}
                     </p>
 
-                    {/* All categories use the same file-by-file, view-first flow. */}
+                    {/* View files — experience opens CV directly in new tab */}
                     <button
                       type="button"
-                      onClick={() => setFilesModal({ catKey, files: catFiles })}
-                      disabled={loadingFiles || Boolean(filesError)}
-                      aria-label={`View ${meta.label} documents`}
-                      className="btn btn-secondary btn-sm"
+                      onClick={async () => {
+                        if (catKey === 'experience') {
+                          const cvRow = attachments.find(a => (a.document_type ?? '').includes('curriculum_vitae'));
+                          const targetRow = cvRow ?? catFiles[0];
+                          if (targetRow) {
+                            try {
+                              const { data } = await (supabase as any).storage
+                                .from(ATTACHMENTS_BUCKET)
+                                .createSignedUrl(targetRow.file_path, 300);
+                              window.open(data?.signedUrl ?? targetRow.file_path, '_blank', 'noopener,noreferrer');
+                            } catch {
+                              window.open(targetRow.file_path, '_blank', 'noopener,noreferrer');
+                            }
+                          } else {
+                            setFilesModal({ catKey, files: catFiles });
+                          }
+                        } else {
+                          setFilesModal({ catKey, files: catFiles });
+                        }
+                      }}
+                      style={SM_LINK}
                     >
-                      <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
-                      View documents ({loadingFiles ? '…' : catFiles.length})
+                      <FileText size={13} />
+                      View {meta.label} Documents ({loadingFiles ? '…' : catFiles.length} files)
+                      <ExternalLink size={11} />
                     </button>
-                    {filesError && <p role="alert" className="text-body-s text-[var(--error-700)]">{filesError}</p>}
                   </div>
                 );
               })}
@@ -1195,14 +1282,12 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       <button
                         type="button"
                         onClick={() => setFilesModal({ catKey, files: catFiles })}
-                        disabled={loadingFiles || Boolean(filesError)}
-                        aria-label={`View ${meta.label} assessment files`}
-                        className="btn btn-secondary btn-sm"
+                        style={SM_LINK}
                       >
-                        <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
-                        View documents ({loadingFiles ? '…' : catFiles.length})
+                        <FileText size={12} />
+                        View {meta.label} Assessment Files ({loadingFiles ? '…' : catFiles.length} files)
+                        <ExternalLink size={11} />
                       </button>
-                      {filesError && <p role="alert" className="text-body-s text-[var(--error-700)]">{filesError}</p>}
                     </div>
                   );
                 })}
@@ -1228,10 +1313,9 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
       </Modal>
 
       {filesModal && (
-        <DocumentCollectionModal
+        <FilesViewerModal
           title={`${CAT_META[filesModal.catKey].label} Files`}
-          subtitle={applicant.full_name}
-          files={filesModal.files.map(applicantAttachmentDocument)}
+          files={filesModal.files}
           onClose={() => setFilesModal(null)}
         />
       )}

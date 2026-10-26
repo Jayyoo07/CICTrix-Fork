@@ -46,6 +46,7 @@ import { SalaryGradeSelect } from '../../components/SalaryGradeSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AdminHeader } from '../../components/AdminHeader';
+import { BackButton } from '../../components/BackButton';
 import { Button } from '../../components/Button';
 import { Sidebar } from '../../components/Sidebar';
 import { useDepartmentNames } from '../../hooks/useDepartmentOptions';
@@ -3794,6 +3795,7 @@ export const RSPDashboard = () => {
                   </>
                 ) : accountsView === 'office' ? (
                   <>
+                    <BackButton onBack={() => setAccountsView('directory')} />
                     <div>
                       <h2 className="!mb-0.5 text-xl font-bold text-[var(--text-primary)]">{selectedDirectoryCard?.office ?? 'Office'}</h2>
                       <p className="!mb-0 text-sm text-[var(--text-secondary)]">{selectedOfficeEmployees.length} employee{selectedOfficeEmployees.length === 1 ? '' : 's'}</p>
@@ -3843,6 +3845,7 @@ export const RSPDashboard = () => {
                   </>
                 ) : (
                   <>
+                    <BackButton onBack={() => setAccountsView('office')} />
                     {/* Header — matches Applicant detail style */}
                     <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
                       <div className="flex items-start gap-4">
@@ -4149,6 +4152,7 @@ export const RSPDashboard = () => {
 
                 {reportsView === 'documents' && (
                   <section className="space-y-4">
+                    <BackButton onBack={() => { setReportsView('overview'); setActiveDocumentTemplateId(null); }} />
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <h2 className="!mb-1 !text-2xl font-bold text-[var(--text-primary)]">{activeDocumentTemplate?.name.replace(' (Statement of Assets, Liabilities and Net Worth)', '') || 'Employee Documents'}</h2>

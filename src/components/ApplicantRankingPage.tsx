@@ -2,6 +2,7 @@ import { useBackClosesView } from '../hooks/useHistoryBack';
 import { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, ChevronRight, Printer, Trophy, UserCheck, Users } from 'lucide-react';
 import { AdminHeader } from './AdminHeader';
+import { BackButton } from './BackButton';
 import { ApplicantsTabBar } from './ApplicantsTabBar';
 import { Sidebar } from './Sidebar';
 import { supabase } from '../lib/supabase';
@@ -385,6 +386,7 @@ export const ApplicantRankingPage = () => {
   if (!activePosition) return (
     <Shell>
       <div className="p-6">
+        <BackButton className="mb-3" onBack={() => setActiveDepartment(null)} />
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div>
@@ -465,6 +467,7 @@ export const ApplicantRankingPage = () => {
   return (
     <Shell>
       <div className="p-6">
+        <BackButton className="no-print mb-3" onBack={() => { setActivePosition(null); setSelected(new Set()); }} />
         {/* Toolbar */}
         <div className="no-print mb-5 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -5,6 +5,8 @@ interface BackButtonProps {
   /** The drill-down's own close function. useBackClosesView pops its history
    *  entry when the view closes, so this stays in step with browser Back. */
   onBack: () => void;
+  /** Spacing for the wrapper, e.g. "mb-3". */
+  className?: string;
 }
 
 /**
@@ -13,9 +15,9 @@ interface BackButtonProps {
  * the §9.1 button styles and tokens only apply inside one, and several portals
  * render drill-downs outside it.
  */
-export function BackButton({ onBack }: BackButtonProps) {
+export function BackButton({ onBack, className = '' }: BackButtonProps) {
   return (
-    <div className="abyan-ds">
+    <div className={`abyan-ds ${className}`.trim()}>
       <Button type="button" variant="secondary" size="sm" onClick={onBack}>
         <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" />
         Back

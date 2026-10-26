@@ -15,4 +15,9 @@ describe('BackButton', () => {
     fireEvent.click(button);
     expect(onBack).toHaveBeenCalledTimes(1);
   });
+
+  it('puts spacing classes on its design-system wrapper', () => {
+    render(<BackButton onBack={() => {}} className="mb-3" />);
+    expect(screen.getByRole('button', { name: 'Back' }).parentElement).toHaveClass('abyan-ds', 'mb-3');
+  });
 });

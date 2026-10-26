@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AdminHeader } from './AdminHeader';
+import { BackButton } from './BackButton';
 import { ErrorBanner } from './ErrorBanner';
 import { describeActionFailure } from '../lib/friendlyErrors';
 import { ApplicantsTabBar } from './ApplicantsTabBar';
@@ -650,6 +651,7 @@ export const ForHiringPage = () => {
   if (!selectedPosition) return (
     <Shell>
       <div className="p-6">
+        <BackButton className="mb-3" onBack={() => { setSelectedDept(null); setSelectedId(null); }} />
         <div className="mb-5">
           <h1 className="text-xl font-bold text-slate-900">{selectedDept}</h1>
           <p className="text-sm text-slate-500">
@@ -719,6 +721,7 @@ export const ForHiringPage = () => {
   return (
     <Shell>
       <div className="p-6">
+        <BackButton className="mb-3" onBack={() => { setSelectedPosition(null); setSelectedId(null); }} />
         {/* Header */}
         <div className="mb-5">
           <div>

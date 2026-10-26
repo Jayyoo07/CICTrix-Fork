@@ -21,6 +21,7 @@ import { createPassword, createUniqueUsername, getEmployeePortalAccounts, upsert
 import { seedEmployeeContactFromApplication } from '../lib/api/employeePortal';
 import type { NewlyHired, NewlyHiredStatus } from '../types/recruitment.types';
 import { AdminHeader } from './AdminHeader';
+import { BackButton } from './BackButton';
 import { Sidebar } from './Sidebar';
 import { Modal } from './modal';
 import { ErrorBanner } from './ErrorBanner';
@@ -514,6 +515,7 @@ export const NewlyHiredPage = () => {
             <header className="sticky top-14 z-30 sm:top-16 border-b border-slate-200 bg-white px-8 py-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
+                  <BackButton className="mb-3" onBack={closeDepartment} />
                   <h1 className="mb-1 text-2xl font-bold text-slate-900">{formatOfficeLabel(selectedDepartment)}</h1>
                   <p className="text-sm text-slate-500">{selectedDepartmentRows.length} newly hired employees</p>
                 </div>

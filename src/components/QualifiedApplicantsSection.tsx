@@ -18,6 +18,7 @@ import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-load
 import { useBackClosesView } from '../hooks/useHistoryBack';
 import { supabase } from '../lib/supabase';
 import { applicantAttachmentDocument, listApplicantDocumentAttachments, type ViewerDocument } from '../lib/documentViewing';
+import { BackButton } from './BackButton';
 import { DocumentCollectionModal } from './DocumentCollectionModal';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import {
@@ -1277,6 +1278,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
 
 interface ApplicantsListViewProps {
   folder:                 PositionFolder;
+  onBack:                 () => void;
   completedEvaluationIds: Set<string>;
   savedCatScores:         Record<string, ApplicantCategoryScores>;
   evaluationsByApplicant?: Record<string, EvaluationSnapshot>;
@@ -1306,6 +1308,7 @@ const PROMOTIONAL_SCORE_COLS: ScoreCol[] = [
 
 const ApplicantsListView = ({
   folder,
+  onBack,
   completedEvaluationIds,
   savedCatScores,
   evaluationsByApplicant,
@@ -1356,6 +1359,7 @@ const ApplicantsListView = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <BackButton onBack={onBack} />
       <div>
         <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{folder.position}</h2>
         <p style={{ margin: '0.15rem 0 0', fontSize: '0.875rem', color: '#64748b' }}>
@@ -1663,6 +1667,7 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
       {liveOpenFolder ? (
         <ApplicantsListView
           folder={liveOpenFolder}
+          onBack={() => setOpenFolder(null)}
           completedEvaluationIds={completedEvaluationIds}
           savedCatScores={catScores}
           evaluationsByApplicant={evaluationsByApplicant}

@@ -2,7 +2,6 @@ import { Download } from 'lucide-react';
 import React from 'react';
 import { Modal } from './modal';
 import { downloadEmployeeDocument } from '../lib/employeeDocuments';
-import { ViewFirstDocumentPreview } from './ViewFirstDocumentPreview';
 
 interface DocumentPreviewModalProps {
   open: boolean;
@@ -14,9 +13,6 @@ interface DocumentPreviewModalProps {
   onClose: () => void;
   /** Optional extra controls rendered next to the Download button (e.g. Approve/Reject). */
   actions?: React.ReactNode;
-  /** Opt-in RSP flow; existing callers retain their current preview behavior. */
-  viewFirst?: boolean;
-  storageBucket?: string;
 }
 
 const isImage = (fileName: string, fileType?: string | null): boolean => {
@@ -42,13 +38,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   subtitle,
   onClose,
   actions,
-  viewFirst = false,
-  storageBucket,
 }) => {
-  if (viewFirst) {
-    return <ViewFirstDocumentPreview open={open} fileUrl={fileUrl} fileName={fileName} fileType={fileType}
-      storageBucket={storageBucket} title={title} subtitle={subtitle} onClose={onClose} actions={actions} />;
-  }
   if (!open) return null;
 
   const handleDownload = () => {

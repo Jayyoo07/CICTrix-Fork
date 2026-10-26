@@ -85,13 +85,12 @@ import { hireApplicant } from '../../lib/api/employeesApi';
 import { getOfficeDirectory, type OfficeDirectoryRow } from '../../lib/api/officeDirectory';
 import {
   EMPLOYEE_DOCUMENTS_UPDATED_EVENT,
-  EMPLOYEE_DOCUMENTS_BUCKET,
+  downloadEmployeeDocument,
   listEmployeeDocumentsByType,
   type EmployeeDocumentSubmission as SupabaseEmployeeDocumentSubmission,
   type EmployeeDocumentType,
 } from '../../lib/employeeDocuments';
 import { DocumentPreviewModal } from '../../components/DocumentPreviewModal';
-import { DocumentCollectionModal } from '../../components/DocumentCollectionModal';
 import { sendEmail } from '../../lib/email';
 import '../../styles/admin.css';
 import type { EmployeeRecord, JobPosting, NewlyHired } from '../../types/recruitment.types';
@@ -768,7 +767,6 @@ export const RSPDashboard = () => {
   const [expandedDocumentOffices, setExpandedDocumentOffices] = useState<Record<string, boolean>>({});
   const [selectedDocumentSubmissionIds, setSelectedDocumentSubmissionIds] = useState<string[]>([]);
   const [previewSubmission, setPreviewSubmission] = useState<EmployeeDocumentSubmission | null>(null);
-  const [documentCollection, setDocumentCollection] = useState<EmployeeDocumentSubmission[] | null>(null);
 
   const [raterSearch, setRaterSearch] = useState('');
   const [raterStatus, setRaterStatus] = useState('all');
@@ -2881,6 +2879,43 @@ export const RSPDashboard = () => {
     });
   };
 
+  const triggerDocumentDownload = (entries: EmployeeDocumentSubmission[]) => {
+    if (entries.length === 0) return;
+    const downloadable = entries.filter((entry) => entry.documentUrl && entry.documentUrl !== '#');
+
+    if (downloadable.length > 0) {
+      downloadable.forEach((entry, index) => {
+        window.setTimeout(() => {
+          const fileName =
+            `${entry.fullName}-${entry.documentType}`.replace(/\s+/g, '_') || 'document';
+          void downloadEmployeeDocument({
+            file_url: entry.documentUrl,
+            file_name: fileName,
+          });
+        }, index * 120);
+      });
+      return;
+    }
+
+    const lines = [
+      'Name,Employee Code,Position,Office,Submitted Date,Status',
+      ...entries.map((entry) =>
+        [entry.fullName, entry.employeeCode, entry.position, entry.office, entry.submittedDate, entry.status]
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(',')
+      ),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${activeDocumentTemplate?.id || 'employee-documents'}-${new Date().getTime()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const toggleHireApplicantSelection = (applicantId: string) => {
     setSelectedHireApplicantIds((prev) =>
       prev.includes(applicantId) ? prev.filter((id) => id !== applicantId) : [...prev, applicantId]
@@ -4098,10 +4133,10 @@ export const RSPDashboard = () => {
                         {totalSelectedDocumentSubmissions > 0 && (
                           <button
                             type="button"
-                            onClick={() => setDocumentCollection(activeDocumentSubmissions.filter((entry) => selectedDocumentSubmissionIds.includes(entry.id)))}
-                            className="btn btn-primary btn-md"
+                            onClick={() => triggerDocumentDownload(activeDocumentSubmissions.filter((entry) => selectedDocumentSubmissionIds.includes(entry.id)))}
+                            className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white"
                           >
-                            View Selected ({totalSelectedDocumentSubmissions})
+                            Download Selected ({totalSelectedDocumentSubmissions})
                           </button>
                         )}
                         {totalSelectedDocumentSubmissions > 0 && (
@@ -4170,10 +4205,10 @@ export const RSPDashboard = () => {
                                 <button type="button" onClick={() => selectAllInOffice(group.office, false)} className="text-[var(--text-secondary)]">Deselect All</button>
                                 <button
                                   type="button"
-                                  onClick={() => setDocumentCollection(group.submissions)}
-                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => triggerDocumentDownload(group.submissions)}
+                                  className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white"
                                 >
-                                  View Documents
+                                  Download All
                                 </button>
                               </div>
                             </div>
@@ -4208,9 +4243,17 @@ export const RSPDashboard = () => {
                                             type="button"
                                             onClick={() => setPreviewSubmission(entry)}
                                             disabled={!entry.documentUrl || entry.documentUrl === '#'}
-                                            className="btn btn-secondary btn-sm"
+                                            className="text-sm font-semibold text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                                           >
                                             View
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => triggerDocumentDownload([entry])}
+                                            disabled={!entry.documentUrl || entry.documentUrl === '#'}
+                                            className="text-sm font-semibold text-purple-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                          >
+                                            Download
                                           </button>
                                         </div>
                                       </div>
@@ -5754,22 +5797,10 @@ export const RSPDashboard = () => {
           </div>
         )}
 
-        {documentCollection && <DocumentCollectionModal
-          title="Employee Documents"
-          subtitle="Select a document to view, print, or download."
-          files={documentCollection.map((entry) => ({
-            id: entry.id, url: entry.documentUrl, fileName: entry.fileName || '', fileType: entry.fileType,
-            bucket: EMPLOYEE_DOCUMENTS_BUCKET, label: `${entry.fullName} — ${entry.documentType}`,
-            subtitle: `${entry.employeeCode} • ${entry.position} • Submitted ${entry.submittedDate}`,
-          }))}
-          onClose={() => setDocumentCollection(null)}
-        />}
         <DocumentPreviewModal
-          viewFirst
           open={previewSubmission !== null}
-          storageBucket={EMPLOYEE_DOCUMENTS_BUCKET}
           fileUrl={previewSubmission?.documentUrl ?? ''}
-          fileName={previewSubmission?.fileName || ''}
+          fileName={previewSubmission?.fileName || previewSubmission?.documentType || ''}
           fileType={previewSubmission?.fileType ?? null}
           title={previewSubmission ? `${previewSubmission.fullName} — ${previewSubmission.documentType}` : ''}
           subtitle={previewSubmission ? `${previewSubmission.employeeCode} • ${previewSubmission.position} • Submitted ${previewSubmission.submittedDate}` : ''}

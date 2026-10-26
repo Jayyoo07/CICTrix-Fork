@@ -59,6 +59,8 @@ The first implementation was merged (`c4b4ea3`) and reverted (`87593cf`) so it c
 
 The applicant details page (`src/modules/interviewer/ApplicantDetailsPage.tsx`), used by RSP admins and interviewers, was missed by the original trace. It opened documents in a new tab with `noopener`, so `window.open` always returned `null` and a "Pop-up blocked" alert showed even when the tab opened. It now uses the same in-site viewer, and View Experience Documents opens the file-by-file list instead of one tab per file.
 
+After that change shipped, the viewer on this page flickered with "Loading applicant details...". Opening the viewer adds a Back marker to `location.state`, and the page's loader re-ran on any change to that state object, so it remounted the page, which reopened the viewer, which added another marker, in a loop. The loader now re-runs only when the route id or the passed-in applicant changes. The page also passed its display label ("Cruz CV") as the file name, which would have saved downloads without an extension and could hide previews of encrypted files with no MIME type. The viewer now gets the uploaded file name and type.
+
 
 ## Steps
 

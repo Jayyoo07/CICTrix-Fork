@@ -15,6 +15,7 @@
  * §9.3–9.6, §9.10.
  */
 
+import { failureText } from '../lib/friendlyErrors';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, Info, Pencil, Search, Wallet, X } from 'lucide-react';
 import { supabase as supabaseClient } from '../lib/supabase';
@@ -107,7 +108,7 @@ export const SalaryGradesPage = () => {
   const load = useCallback(async () => {
     const res = await listSalaryGrades();
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('load the salary schedule', res.error, { mode: 'load' }));
       setLoading(false);
       return;
     }
@@ -395,7 +396,8 @@ function GradeDrawer({ row, reload, onClose, onSaved }: GradeDrawerProps) {
       if (res.ok === false) {
         // Earlier steps may already be saved. Reload so the diff is recomputed
         // against what is actually stored, and say which step stopped it.
-        setSaveError(`Step ${c.step} was not saved: ${res.error}`);
+        // Earlier steps are saved; name the one that stopped it.
+        setSaveError(`Step ${c.step} was not saved, so it and the steps after it are unchanged. ${failureText('save the salary step', res.error)}`);
         setSaving(false);
         await reload();
         return;

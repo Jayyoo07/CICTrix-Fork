@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { SortButton, SortHeader, toTime, useTableSort } from './tableSort';
 import {
-  fetchActiveInterviewers,
+  fetchActiveInterviewersResult,
   isApplicantFullyAssigned,
   saveApplicantAssignment,
   type ApplicantAssignmentFields,
@@ -167,12 +167,19 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
-  useEffect(() => {
-    void fetchActiveInterviewers().then(setInterviewers);
+  // A failed read is shown at the interviewer picker, not as an empty list.
+  const [interviewersFailed, setInterviewersFailed] = useState(false);
 
-    const onRatersUpdated = () => {
-      void fetchActiveInterviewers().then(setInterviewers);
+  useEffect(() => {
+    const loadInterviewers = () => {
+      void fetchActiveInterviewersResult().then((result) => {
+        setInterviewers(result.data);
+        setInterviewersFailed(!result.ok);
+      });
     };
+    loadInterviewers();
+
+    const onRatersUpdated = loadInterviewers;
     window.addEventListener('cictrix:raters-updated', onRatersUpdated);
     return () => {
       window.removeEventListener('cictrix:raters-updated', onRatersUpdated);
@@ -316,6 +323,7 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
     });
     setEditSaving(false);
     if ('error' in result) {
+      // Already the friendly three-part message (src/lib/applicantSchedule.ts).
       setEditError(result.error);
       return;
     }
@@ -840,8 +848,13 @@ export const PendingAssignmentList = ({ applicants, completedEvaluationIds, load
                     </option>
                   ))}
                 </select>
+                {interviewersFailed && (
+                  <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.82rem', fontWeight: 600, color: 'var(--error-700)' }}>
+                    We couldn't load the interviewer list, so it may be incomplete. Reload the page to try again.
+                  </p>
+                )}
               </div>
-              {editError && <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 600, color: '#EF4444' }}>{editError}</p>}
+              {editError && <p role="alert" style={{ margin: 0, fontSize: '0.82rem', fontWeight: 600, color: 'var(--error-700)' }}>{editError}</p>}
             </div>
         )}
       </Modal>

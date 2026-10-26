@@ -90,4 +90,16 @@ describe('Generate Employee Credentials', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke Selection' }));
     await waitFor(() => expect(revokeSlotReservation).toHaveBeenCalledWith('c'));
   });
+  it('explains a failed revoke without database text (Task 2)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    revokeSlotReservation.mockResolvedValue({ ok: false, error: 'permission denied for table plantilla_slots' });
+    await renderPage();
+    const health = screen.getByRole('region', { name: 'City Health Office' });
+    fireEvent.click(within(health).getByRole('button', { name: /Did not report/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke Selection' }));
+    const alert = await screen.findByText(/We couldn't revoke the selection./);
+    expect(alert.textContent).toContain("You don't have permission");
+    expect(alert.textContent).not.toContain('plantilla_slots');
+  });
 });
+

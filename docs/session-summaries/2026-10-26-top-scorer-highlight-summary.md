@@ -18,6 +18,10 @@ plan: docs/plans/2026-10-26-top-scorer-highlight.md
 | Ranking Report (printable) | `src/modules/admin/RSPDashboard.tsx` | position | total; replaces the fixed rank-1 yellow / ranks-2–3 blue tint and legend |
 | RSP Archives, archived ranking | `src/modules/admin/rsp-archives/_internal/ArchiveListModal.tsx` | archived position | stored score |
 
+## Correction: reachable vs unreachable (found during Task 2)
+
+Three of the tables above are in code no screen renders: `ApplicantRankingPage` and its print popup (`/admin/rsp/applicant-ranking` redirects to For Hiring), `QualifiedApplicantsPage` (not imported anywhere), and the RSPDashboard Ranking Report (`activeRankingPosition` is only ever set to null). The highlight users actually see is on **Applicant Score**, **For Hiring** and the **RSP Archives** archived ranking.
+
 ## Not highlighted, and why
 
 - Applicant Ranking positions overview and the Applicant Score folder table: rows are positions, not applicants.

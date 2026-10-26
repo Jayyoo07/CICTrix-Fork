@@ -31,6 +31,7 @@ import {
     getJobPostings,
     isJobPostingsLoaded,
     loadJobPostings,
+    getJobPostingsLoadError,
     saveApplicants,
     saveJobPostings,
     saveJobPostingsAndWait,
@@ -38,7 +39,7 @@ import {
 } from '../lib/recruitmentData';
 import {
     fetchApplicantSlotLinks,
-    fetchSlotApplicantCounts,
+    fetchSlotApplicantCountsChecked,
     saveSlotsForJob,
 } from '../lib/plantillaSlots';
 import {
@@ -58,6 +59,9 @@ import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { Modal } from './modal';
+import { ActionFeedback, useFeedback } from './action-feedback';
+import { ErrorBanner } from './ErrorBanner';
+import { describeActionFailure, type ActionFailure } from '../lib/friendlyErrors';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -202,6 +206,8 @@ export const JobPostingsPage = () => {
   // both card counts and the View Applicants list. Skips findJobIdFromRow so no rows
   // are silently dropped before counting.
   const [allApplicantsRaw, setAllApplicantsRaw] = useState<any[]>([]);
+  // Counts read 0 when this fails; the banner says they couldn't load instead.
+  const [applicantsLoadError, setApplicantsLoadError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | PositionStatus>('all');
   const [officeFilter, setOfficeFilter] = useState<string>('all');
@@ -241,8 +247,24 @@ export const JobPostingsPage = () => {
   /** Validation message for the Plantilla Slots section of the modal. */
   const [slotError, setSlotError] = useState('');
   const [savingJob, setSavingJob] = useState(false);
+  // A failed create/edit, shown at the top of the dialog; the dialog stays open.
+  const [saveFailure, setSaveFailure] = useState<ActionFailure | null>(null);
+  const feedback = useFeedback();
+
+  // Background saves (e.g. a status change) used to fail silently: the event
+  // below had no listener, so the screen kept a change the database refused.
+  useEffect(() => {
+    const onPersistFailed = (event: Event) => {
+      const failure = describeActionFailure('save the job posts', (event as CustomEvent).detail?.error);
+      feedback.error(failure.title, `${failure.message} ${failure.nextStep}`);
+    };
+    window.addEventListener('cictrix:job-postings-persist-failed', onPersistFailed);
+    return () => window.removeEventListener('cictrix:job-postings-persist-failed', onPersistFailed);
+  }, [feedback]);
   /** Applicant counts per slot id, so removing a slot can warn about them. */
   const [slotApplicantCounts, setSlotApplicantCounts] = useState<Map<string, number>>(new Map());
+  // The counts couldn't be read, so "0 applicants" would be a guess.
+  const [slotCountsFailed, setSlotCountsFailed] = useState(false);
 
   const resolveLiveApplicants = async (jobRows: JobPosting[]) => {
     const localApplicants = getApplicants();
@@ -507,19 +529,21 @@ export const JobPostingsPage = () => {
         if (cancelled) return;
         if (error) {
           console.error('[JobPostingsPage] allApplicantsRaw supabase error:', error);
-          setAllApplicantsRaw([]);
+          setApplicantsLoadError(error);
           return;
         }
         const rows = Array.isArray(data) ? data : [];
         console.info('[JobPostingsPage] allApplicantsRaw loaded', { count: rows.length });
         setAllApplicantsRaw(rows);
+        setApplicantsLoadError(null);
         const links = await fetchApplicantSlotLinks();
         if (cancelled) return;
         setApplicantSlotLinks(new Map([...links].map(([applicantId, list]) => [applicantId, list.map((link) => link.slotId)])));
       } catch (err) {
         if (cancelled) return;
         console.error('[JobPostingsPage] allApplicantsRaw fetch exception:', err);
-        setAllApplicantsRaw([]);
+        // Keep the last counts; say they may be out of date.
+        setApplicantsLoadError(err);
       }
     };
 
@@ -688,8 +712,10 @@ export const JobPostingsPage = () => {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const counts = await fetchSlotApplicantCounts();
-      if (!cancelled) setSlotApplicantCounts(counts);
+      const result = await fetchSlotApplicantCountsChecked();
+      if (cancelled) return;
+      setSlotApplicantCounts(result.counts);
+      setSlotCountsFailed(!result.ok);
     })();
     return () => { cancelled = true; };
   }, [showModal, jobs.length]);
@@ -805,6 +831,7 @@ export const JobPostingsPage = () => {
 
   const closeModal = () => {
     setShowModal(false);
+    setSaveFailure(null);
     if (editOpenedFromDetails) {
       setEditOpenedFromDetails(false);
       navigate(-1);
@@ -984,14 +1011,37 @@ export const JobPostingsPage = () => {
 
     // The posting row has to exist in Supabase before its slots can reference
     // it, so this one waits rather than firing the write into the background.
+    const previousJobs = jobs;
+    const action = editingId ? 'save the changes to this position' : 'create this position';
     setJobs(nextJobs);
-    await saveJobPostingsAndWait(nextJobs);
-
-    const slotSave = await saveSlotsForJob(jobId, slotDrafts);
-    setSavingJob(false);
+    setSaveFailure(null);
+    let slotSave: Awaited<ReturnType<typeof saveSlotsForJob>>;
+    try {
+      const persisted = await saveJobPostingsAndWait(nextJobs);
+      if (!persisted.ok) {
+        setJobs(previousJobs);
+        setSaveFailure(describeActionFailure(action, persisted.error));
+        modalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      slotSave = await saveSlotsForJob(jobId, slotDrafts);
+    } catch (error) {
+      setJobs(previousJobs);
+      setSaveFailure(describeActionFailure(action, error));
+      modalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    } finally {
+      setSavingJob(false);
+    }
 
     if (!slotSave.ok) {
-      setSlotError(slotSave.error ?? 'Could not save the plantilla slots.');
+      // The posting saved; only its plantillas did not, so say exactly that.
+      const failure = describeActionFailure('save the plantillas', slotSave.error);
+      setSaveFailure({
+        ...failure,
+        message: 'The position itself was saved, but its plantilla changes were not.',
+      });
+      modalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -1042,12 +1092,21 @@ export const JobPostingsPage = () => {
 
     saveJobs(jobs.filter((row) => row.id !== job.id));
 
-    await Promise.allSettled([
+    // The legacy `jobs` mirror and the title/item-number rows are best effort;
+    // the posting itself (by id) must go, or the delete did not happen.
+    const [primary] = await Promise.allSettled([
       supabase.from('job_postings').delete().eq('id', job.id),
       supabase.from('jobs').delete().eq('id', job.id),
       supabase.from('job_postings').delete().eq('title', job.title).eq('item_number', job.jobCode),
       supabase.from('jobs').delete().eq('title', job.title).eq('item_number', job.jobCode),
     ]);
+    const primaryError = primary.status === 'rejected' ? primary.reason : (primary.value as { error?: unknown }).error;
+    if (primaryError) {
+      void loadJobPostings();
+      const failure = describeActionFailure('delete this job post', primaryError);
+      feedback.error(failure.title, `${failure.message} ${failure.nextStep}`);
+      return;
+    }
 
     setToast(linkedCount > 0 ? 'Job post deleted and applicant data archived to Reports.' : 'Job post deleted.');
   };
@@ -1060,7 +1119,8 @@ export const JobPostingsPage = () => {
   const openVacancy = async (job: JobPosting, input: OpenVacancyInput) => {
     const result = await openVacancyRequest(job.id, input);
     if (!result.ok) {
-      setToast(result.error ?? 'We couldn\'t open this vacancy. Try again.');
+      const failure = describeActionFailure('open this vacancy', result.error);
+      feedback.error(failure.title, `${failure.message} ${failure.nextStep}`);
       return false;
     }
     await loadJobPostings();
@@ -1073,7 +1133,8 @@ export const JobPostingsPage = () => {
     if (!closingJob) return false;
     const result = await closeVacancy(closingJob.id, reason, remarks);
     if (!result.ok) {
-      setCloseError(result.error ?? 'We couldn\'t close this vacancy. Try again.');
+      const failure = describeActionFailure('close this vacancy', result.error);
+      setCloseError(`${failure.title} ${failure.message} ${failure.nextStep}`);
       return false;
     }
     setClosingJob(null);
@@ -1172,6 +1233,23 @@ export const JobPostingsPage = () => {
         </section>
 
         <section className="mt-5">
+          {/* The cache records a failed load; an empty list is not "no job posts". */}
+          {getJobPostingsLoadError() && (
+            <ErrorBanner
+              error={getJobPostingsLoadError()}
+              action="load the job posts"
+              onRetry={() => void loadJobPostings()}
+              className="mb-4"
+            />
+          )}
+          {applicantsLoadError ? (
+            <ErrorBanner
+              error={applicantsLoadError}
+              action="load the applicant counts"
+              onRetry={() => window.dispatchEvent(new CustomEvent('cictrix:applicants-updated'))}
+              className="mb-4"
+            />
+          ) : null}
           {/* No overflow-hidden here: it would make this div the sticky
               scroll container, and the header would pin to the top of the
               table instead of the viewport, i.e. look like it does nothing.
@@ -1303,6 +1381,13 @@ export const JobPostingsPage = () => {
         )}
       >
             <div className="space-y-5">
+              {saveFailure && (
+                <ActionFeedback
+                  {...saveFailure}
+                  onRetry={() => void submitForm()}
+                  onDismiss={() => setSaveFailure(null)}
+                />
+              )}
               {(() => {
                 const applied = editingId ? applicantCountsByJob.get(editingId)?.applicants ?? 0 : 0;
                 if (applied === 0) return null;
@@ -1344,6 +1429,11 @@ export const JobPostingsPage = () => {
                       <span className="text-xs text-slate-400">Enter each plantilla's number, e.g. 21. Numbers must be unique in this job post.</span>
                     </div>
 
+                    {slotCountsFailed && (
+                      <p role="status" className="mb-2 text-sm font-medium text-[var(--warning-700)]">
+                        We couldn't check which plantillas already have applications. If you remove one that does, saving will be refused and nothing will change. Reopen this form to check again.
+                      </p>
+                    )}
                     <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                       {form.slots.map((slot, index) => {
                         const linkedApplicants = slot.id ? slotApplicantCounts.get(slot.id) ?? 0 : 0;

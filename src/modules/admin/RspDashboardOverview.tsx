@@ -8,6 +8,7 @@ import {
   type SuccessionOverview,
   type SuccessionOverviewPosition,
 } from '../../lib/api/succession';
+import { failureText } from '../../lib/friendlyErrors';
 import '../../styles/rsp-dashboard.css';
 import '../../styles/dashboard-scale.css';
 
@@ -292,6 +293,7 @@ export function RspDashboardOverview({
   const [sessionRange, setSessionRange] = useState<'week' | 'month'>('week');
   const [succession, setSuccession] = useState<SuccessionOverview | null>(null);
   const [successionError, setSuccessionError] = useState<string | null>(null);
+  const [successionAttempt, setSuccessionAttempt] = useState(0);
   const [successionListOpen, setSuccessionListOpen] = useState(false);
   const [newlyHired, setNewlyHired] = useState<NewlyHiredStats | null>(null);
 
@@ -307,15 +309,17 @@ export function RspDashboardOverview({
 
   useEffect(() => {
     let cancelled = false;
+    setSuccessionError(null);
     getSuccessionDashboardOverview().then((res) => {
       if (cancelled) return;
       if ('data' in res) setSuccession(res.data);
-      else setSuccessionError('error' in res ? res.error : 'Unknown error');
+      // Friendly text, worked out once; the raw error goes to the console.
+      else setSuccessionError(failureText('load the succession data', 'error' in res ? res.error : null, { mode: 'load' }));
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [successionAttempt]);
 
   const departments = useMemo(() => {
     const names = new Set<string>();
@@ -778,7 +782,12 @@ export function RspDashboardOverview({
           </div>
           <div className="rd-card">
             <div className="rd-h"><h3>Key positions</h3><span className="rd-asof-dark">fewest successors first</span></div>
-            {successionError && <p className="rd-empty">Succession data could not be loaded: {successionError}</p>}
+            {successionError && (
+              <p className="rd-empty" role="alert">
+                {successionError}{' '}
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => setSuccessionAttempt((n) => n + 1)}>Retry</button>
+              </p>
+            )}
             {!successionError && !successionRows && <p className="rd-empty">Ranking successors for each key position…</p>}
             {successionRows && successionRows.length === 0 && (
               <p className="rd-empty">No key positions have been identified yet.</p>

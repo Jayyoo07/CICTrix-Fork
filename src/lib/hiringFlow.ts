@@ -7,6 +7,7 @@ import { createPassword, upsertEmployeePortalAccount } from './employeePortalDat
 import { sendEmail } from './email';
 import { isTerminal, normalizeStatus } from './api/applicantStatus';
 import { formatDisplayDate } from './scheduleSelection';
+import { describeActionFailure } from './friendlyErrors';
 import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
 
 /**
@@ -60,7 +61,7 @@ export interface OtherApplication {
 export const fetchOtherOpenApplications = async (
   email: string,
   excludeApplicantId: string,
-): Promise<OtherApplication[]> => {
+): Promise<OtherApplication[] | null> => {
   const normalized = normalizeApplicantEmail(email);
   if (!normalized) return [];
   try {
@@ -90,7 +91,8 @@ export const fetchOtherOpenApplications = async (
       });
   } catch (err) {
     console.warn('[hiringFlow] other applications lookup failed:', err);
-    return [];
+    // null, not []: "couldn't check" must not read as "has no other applications".
+    return null;
   }
 };
 
@@ -146,6 +148,7 @@ export interface ReservedApplicant {
   interviewScore: number | null;
 }
 
+/** Reserved applicants awaiting credentials. Throws when the read fails, so the page can say so instead of showing "none". */
 export const fetchReservedApplicants = async (): Promise<ReservedApplicant[]> => {
   try {
     const [{ data, error }, slots] = await Promise.all([
@@ -183,7 +186,7 @@ export const fetchReservedApplicants = async (): Promise<ReservedApplicant[]> =>
       });
   } catch (err) {
     console.warn('[hiringFlow] reserved applicants lookup failed:', err);
-    return [];
+    throw err;
   }
 };
 
@@ -269,7 +272,8 @@ export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Pr
       employeeId = employeeRow?.employee_id || '';
     } catch (err: any) {
       console.error(`[hiringFlow] hire failed for ${row.id}:`, err);
-      failures.push(`${row.fullName}: ${String(err?.message ?? err)}`);
+      const failure = describeActionFailure('hire this applicant', err);
+      failures.push(`${row.fullName}: not hired. ${failure.message} ${failure.nextStep}`);
       continue;
     }
 
@@ -277,13 +281,16 @@ export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Pr
     // Reported but not fatal: the employee record already exists.
     if (row.slotId) {
       const placement = await assignApplicantToSlot(row.slotId, row.id);
-      if (!placement.ok) failures.push(`${row.fullName}: hired, but the plantilla was not marked filled (${placement.error ?? 'unknown error'})`);
+      if (!placement.ok) {
+        console.error(`[hiringFlow] plantilla fill failed for ${row.id}:`, placement.error);
+        failures.push(`${row.fullName}: hired, but the plantilla was not marked filled. Mark it filled from the job post.`);
+      }
     } else {
       failures.push(`${row.fullName}: hired, but the application is not linked to a plantilla, so none was filled`);
     }
 
     const tempPassword = createPassword();
-    upsertEmployeePortalAccount({
+    const account = await upsertEmployeePortalAccount({
       id: `portal-${employeeId}`,
       username: employeeId,
       password: tempPassword,
@@ -298,6 +305,9 @@ export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Pr
         hireDate: hiredAt.split('T')[0],
       } as any,
     });
+    if (!account.ok) {
+      failures.push(`${row.fullName}: hired, but the sign-in account was not saved, so these credentials won't work yet. Reset their password from Accounts to create it.`);
+    }
 
     saveApplicants(getApplicants().map((a) => (a.id === row.id ? { ...a, status: 'Hired' as any } : a)));
 
@@ -353,7 +363,10 @@ export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Pr
           template: 'employee_credentials',
         });
         emailSent = true;
-      } catch { /* RSP can print the credentials instead */ }
+      } catch (err) {
+        // Shown on the result as "Print instead"; the RSP can hand them over on paper.
+        console.warn(`[hiringFlow] credentials email failed for ${row.id}:`, err);
+      }
     }
 
     credentials.push({
@@ -369,11 +382,10 @@ export const generateEmployeeCredentials = async (rows: ReservedApplicant[]): Pr
   }
 
   if (newlyHiredRecords.length > 0) {
-    try {
-      await saveNewlyHired(newlyHiredRecords);
-    } catch {
-      /* credentials are already issued; the directory falls back to the
-         portal account's creation date if this write didn't land */
+    // Credentials are already issued; only the Newly Hired listing is behind.
+    const saved = await saveNewlyHired(newlyHiredRecords);
+    if (!saved.ok) {
+      failures.push(`${saved.failed} newly hired record${saved.failed === 1 ? '' : 's'} didn't save, so the Newly Hired page may not list ${saved.failed === 1 ? 'it' : 'them'} yet. The credentials above still work.`);
     }
   }
 
@@ -413,9 +425,10 @@ const PRINT_STYLES = `
   @media print { body { padding: 12px; } }
 `;
 
-export const printCredentialCards = (results: CredentialResult[]): void => {
+/** Returns false when the browser blocked the print window, so the page can say so. */
+export const printCredentialCards = (results: CredentialResult[]): boolean => {
   const win = window.open('', '_blank', 'width=820,height=700');
-  if (!win) return;
+  if (!win) return false;
 
   const issued = formatDisplayDate(new Date().toISOString());
   const cards = results.map((c) => `
@@ -443,4 +456,5 @@ export const printCredentialCards = (results: CredentialResult[]): void => {
   win.focus();
   // Give the logo and font a moment to load before the print dialog opens.
   win.setTimeout(() => win.print(), 300);
+  return true;
 };

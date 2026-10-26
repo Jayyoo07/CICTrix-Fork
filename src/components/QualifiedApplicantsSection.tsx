@@ -9,7 +9,6 @@ import {
   FolderOpen,
   Info,
   Lock,
-  Medal,
   Pencil,
   RefreshCw,
   Save,
@@ -26,6 +25,7 @@ import {
   type EvaluationSnapshot,
 } from '../lib/evaluationScores';
 import { Modal } from './modal';
+import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 import { getAdminRole } from '../lib/adminSession';
 import { fetchWrittenExamTotals, saveWrittenExamTotal, type SaveExamTotalResult } from '../lib/api/examTotalPoints';
 import {
@@ -1387,12 +1387,21 @@ const ApplicantsListView = ({
   const activeCount = scoreTab === 'promotional' ? promotionalCount : originalCount;
   const scoreCols = scoreTab === 'promotional' ? PROMOTIONAL_SCORE_COLS : ORIGINAL_SCORE_COLS;
 
+  // The whole track is the comparison group, so the search filter never
+  // changes who is top (Task 5).
+  const trackRows = useMemo(() =>
+    typed.filter(t => (scoreTab === 'promotional' ? t.apptType === 'promotional' : t.apptType !== 'promotional')),
+    [typed, scoreTab],
+  );
+  const topScorers = useMemo(
+    () => topScorerIds(trackRows, { idOf: (t) => t.id, scoreOf: (t) => t.overallScore }),
+    [trackRows],
+  );
   const ranked = useMemo(() =>
-    typed
-      .filter(t => (scoreTab === 'promotional' ? t.apptType === 'promotional' : t.apptType !== 'promotional'))
+    trackRows
       .filter(a => !search || a.full_name.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => (b.overallScore ?? -1) - (a.overallScore ?? -1)),
-    [typed, scoreTab, search],
+    [trackRows, search],
   );
 
   return (
@@ -1443,114 +1452,96 @@ const ApplicantsListView = ({
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ overflowX: 'auto', borderRadius: 16, border: '1px solid #e2e8f0', background: '#fff' }}>
-        <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse' }}>
+      {/* Table: shared .abyan-table layer, top scorer per track (Task 5) */}
+      <div className="abyan-table-wrap">
+        <table className="abyan-table" style={{ minWidth: 980 }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <th style={{ padding: '0.75rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', width: 48 }}>#</th>
-              <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Applicant Name</th>
-              <th style={{ padding: '0.75rem 0.75rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Exam Schedule</th>
-              <th style={{ padding: '0.75rem 0.75rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Interview Schedule</th>
+            <tr>
+              <th className="is-center" style={{ width: 64 }}>#</th>
+              <th>Applicant Name</th>
+              <th>Exam Schedule</th>
+              <th>Interview Schedule</th>
               {scoreCols.map(c => (
-                <th key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{c.key === 'writtenExam' ? `${c.label} /${examTotal}` : c.label}</th>
+                <th key={c.key} className="is-center">{c.key === 'writtenExam' ? `${c.label} /${examTotal}` : c.label}</th>
               ))}
-              <th style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Status</th>
+              <th className="is-center">Status</th>
             </tr>
           </thead>
           <tbody>
             {ranked.map((a, i) => {
               const isFinalized = !!savedCatScores[a.id] || completedEvaluationIds.has(a.id);
+              const isTop = topScorers.has(a.id);
               const cs = a.catScores;
               const sv = (key: CatKey): string => {
                 const v = cs[key]?.finalScore ?? cs[key]?.initialScore ?? 0;
                 return v > 0 ? String(v) : '—';
               };
+              const schedule = (date?: string | null, time?: string | null) => date ? (
+                <span
+                  title={isUpcoming(date) ? 'Scheduled — not yet held' : 'Completed / past date'}
+                  style={{ whiteSpace: 'nowrap', fontWeight: 600, fontStyle: isUpcoming(date) ? 'italic' : 'normal' }}
+                  className={isUpcoming(date) ? 'abyan-cell-secondary' : 'abyan-cell-primary'}
+                >
+                  {fmtSchedule(date, time)}
+                </span>
+              ) : <span className="abyan-cell-secondary">—</span>;
               return (
                 <tr
                   key={a.id}
                   role="button"
                   tabIndex={0}
-                  aria-label={`Open scores for ${a.full_name}`}
+                  aria-label={`Open scores for ${a.full_name}${isTop ? ', top scorer' : ''}`}
                   onClick={() => onUpdateScores(a)}
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget) return;
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onUpdateScores(a); }
                   }}
-                  className="cursor-pointer transition-colors hover:bg-[#F8FAFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#363EE8]"
-                  style={{ borderBottom: '1px solid #f1f5f9' }}
+                  className={`cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#363EE8] ${topScorerRowClass(isTop)}`}
                 >
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                    {i < 3 ? (
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: i === 0 ? '#fbbf24' : i === 1 ? '#c0c0c0' : '#cd7f32' }}>
-                        <Medal size={14} style={{ color: '#fff' }} />
-                      </div>
-                    ) : (
-                      <span style={{ display: 'inline-flex', width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e0e7ff', color: '#3730a3', fontWeight: 800, fontSize: '0.75rem' }}>#{i + 1}</span>
-                    )}
+                  <td className="is-center">
+                    <span style={{ display: 'inline-flex', width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'var(--color-primary-50)', color: 'var(--color-primary-700)', fontWeight: 700, fontSize: 12 }}>{i + 1}</span>
                   </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <p style={{ margin: 0, fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{a.full_name}</p>
-                    <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>Qualified: {fmtDate(a.created_at)}</p>
+                  <td>
+                    <span className="abyan-cell-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {a.full_name}
+                      {isTop && <TopScorerBadge />}
+                    </span>
+                    <span className="abyan-cell-secondary">Qualified: {fmtDate(a.created_at)}</span>
                   </td>
-                  <td style={{ padding: '0.75rem 0.75rem' }}>
-                    {a.exam_date ? (
-                      <p
-                        title={isUpcoming(a.exam_date) ? 'Scheduled — not yet held' : 'Completed / past date'}
-                        style={{ margin: 0, whiteSpace: 'nowrap', fontSize: '0.8rem', fontWeight: 600, color: isUpcoming(a.exam_date) ? '#64748b' : '#040E6B', fontStyle: isUpcoming(a.exam_date) ? 'italic' : 'normal' }}
-                      >
-                        {fmtSchedule(a.exam_date, a.exam_time)}
-                      </p>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>—</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.75rem' }}>
-                    {a.interview_date ? (
-                      <p
-                        title={isUpcoming(a.interview_date) ? 'Scheduled — not yet held' : 'Completed / past date'}
-                        style={{ margin: 0, whiteSpace: 'nowrap', fontSize: '0.8rem', fontWeight: 600, color: isUpcoming(a.interview_date) ? '#64748b' : '#040E6B', fontStyle: isUpcoming(a.interview_date) ? 'italic' : 'normal' }}
-                      >
-                        {fmtSchedule(a.interview_date, a.interview_time)}
-                      </p>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>—</span>
-                    )}
-                  </td>
+                  <td>{schedule(a.exam_date, a.exam_time)}</td>
+                  <td>{schedule(a.interview_date, a.interview_time)}</td>
                   {scoreCols.map(c => {
                     if (c.key !== 'writtenExam') {
-                      return <td key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{sv(c.key)}</td>;
+                      return <td key={c.key} className="is-center" style={{ fontWeight: 600 }}>{sv(c.key)}</td>;
                     }
                     const raw = cs.writtenExam?.finalScore ?? cs.writtenExam?.initialScore ?? 0;
                     const { exceedsTotal } = convertExamScore(raw, examTotal);
                     return (
-                      <td key={c.key} style={{ padding: '0.75rem 0.75rem', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                      <td key={c.key} className="is-center" style={{ fontWeight: 600 }}>
                         {raw > 0 ? formatScoreOverTotal(raw, examTotal) : '—'}
                         {exceedsTotal && (
-                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 2, fontSize: '0.72rem', fontWeight: 700, color: 'var(--error-700)', whiteSpace: 'nowrap' }}>
-                            <AlertTriangle size={11} aria-hidden="true" /> Score exceeds total
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 2, fontSize: 14, fontWeight: 700, color: 'var(--error-700)', whiteSpace: 'nowrap' }}>
+                            <AlertTriangle size={12} aria-hidden="true" /> Score exceeds total
                           </span>
                         )}
                       </td>
                     );
                   })}
-                  <td style={{ padding: '0.75rem 0.75rem', textAlign: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.2rem 0.65rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, background: isFinalized ? '#dcfce7' : '#fef3c7', color: isFinalized ? '#15803d' : '#92400e', border: `1px solid ${isFinalized ? '#bbf7d0' : '#fde68a'}` }}>
-                      {isFinalized && <CheckCircle2 size={11} />}
+                  <td className="is-center">
+                    <span className={`badge ${isFinalized ? 'badge-success' : 'badge-warning'}`}>
+                      {isFinalized ? <CheckCircle2 size={12} aria-hidden="true" /> : <span className="badge-dot" aria-hidden="true" />}
                       {isFinalized ? 'Finalized' : 'Pending'}
                     </span>
                   </td>
                 </tr>
               );
             })}
-            {ranked.length === 0 && (
-              <tr>
-                <td colSpan={scoreCols.length + 5} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                  <FolderOpen size={40} style={{ display: 'block', margin: '0 auto 0.75rem', opacity: 0.3 }} />
-                  <p style={{ fontWeight: 600, margin: 0 }}>No {scoreTab === 'promotional' ? 'promotional' : 'original'} applicants found</p>
-                </td>
-              </tr>
-            )}
+            <TableStateRows
+              view={ranked.length === 0 ? 'empty' : 'rows'}
+              columns={scoreCols.length + 5}
+              emptyTitle={`No ${scoreTab === 'promotional' ? 'promotional' : 'original'} applicants found`}
+              emptyMessage={search ? 'Clear the search to see every applicant in this track.' : 'Applicants in this track appear here once they are scheduled.'}
+            />
           </tbody>
         </table>
       </div>
@@ -1784,8 +1775,8 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
           </section>
 
           {/* Folder table */}
-          <div className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-white">
-            <table className="w-full min-w-full">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full min-w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>

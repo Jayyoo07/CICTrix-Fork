@@ -35,6 +35,7 @@ import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { RspArchives, type ArchiveRecord } from './rsp-archives';
 import { fetchWrittenExamTotals } from '../../lib/api/examTotalPoints';
+import { TopScorerBadge, topScorerIds, topScorerRowClass } from '../../components/data-table';
 import { WRITTEN_EXAM_FORM_SHARE, convertExamScore, totalForPosition } from '../../lib/examTotalPoints';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
 import { RspDashboardOverview } from './RspDashboardOverview';
@@ -1664,6 +1665,12 @@ export const RSPDashboard = () => {
 
     return rows;
   }, [activeRankingPosition, applicants, completedEvaluationIds, activeRankingCard, jobs, savedScoredApplicantIds, hiredApplicantIds, examTotals]);
+
+  // The ranking report is one position, so it is one comparison group (Task 5).
+  const rankingTopIds = useMemo(
+    () => topScorerIds(activeRankingRows, { idOf: (row) => row.id, scoreOf: (row) => row.total }),
+    [activeRankingRows],
+  );
 
   useEffect(() => {
     const syncSavedScores = () => setSavedScoredApplicantIds(getSavedScoredApplicantIdSet());
@@ -3484,8 +3491,8 @@ export const RSPDashboard = () => {
                   </div>
                 </div>
 
-                <section className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-white shadow-sm">
-                  <table className="w-full border-collapse">
+                <section className="abyan-table-wrap">
+                  <table className="abyan-table w-full">
                     <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-600">
                       <tr>
                         <th className="px-5 py-4">Rater Name</th>
@@ -3679,8 +3686,8 @@ export const RSPDashboard = () => {
                   )}
                   </Modal>
                 <section>
-                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                        <table className="w-full min-w-full">
+                      <div className="abyan-table-wrap">
+                        <table className="abyan-table w-full min-w-full">
                           <thead>
                             <tr className="border-b border-slate-200 bg-slate-50">
                               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Office / Department</th>
@@ -3764,8 +3771,8 @@ export const RSPDashboard = () => {
                       <p className="!mb-0 text-sm text-[var(--text-secondary)]">{selectedOfficeEmployees.length} employee{selectedOfficeEmployees.length === 1 ? '' : 's'}</p>
                     </div>
 
-                    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                      <table className="w-full border-collapse text-sm">
+                    <section className="abyan-table-wrap">
+                      <table className="abyan-table w-full">
                         <thead className="bg-slate-50 text-left">
                           <tr>
                             <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Employee</th>
@@ -4459,9 +4466,9 @@ export const RSPDashboard = () => {
                 {/* Rankings Table */}
                 <div>
                   <h3 className="!mb-3 text-lg font-bold text-gray-900">Applicant Rankings</h3>
-                  <div className="overflow-x-auto rounded-lg border-2 border-slate-300">
-                    <table className="w-full min-w-[900px] border-collapse text-sm">
-                      <thead className="bg-slate-900 text-white">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full min-w-[900px]">
+                      <thead>
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold w-12">Rank</th>
                           <th className="px-4 py-3 text-left font-semibold">Name</th>
@@ -4482,28 +4489,19 @@ export const RSPDashboard = () => {
                           </tr>
                         ) : (
                           activeRankingRows.map((row, index) => {
-                            const isTopApplicant = index === 0;
-                            const isTop3 = index < 3;
+                            const isTop = rankingTopIds.has(row.id);
                             return (
-                              <tr
-                                key={row.id}
-                                className={`border-t border-slate-200 text-sm ${isTopApplicant
-                                    ? 'bg-yellow-100'
-                                    : isTop3
-                                      ? 'bg-blue-50'
-                                      : ''
-                                  }`}
-                              >
-                                <td className="px-4 py-3 font-bold text-gray-900">
-                                  {isTopApplicant ? `🏆 ${index + 1}` : index + 1}
+                              <tr key={row.id} className={topScorerRowClass(isTop)}>
+                                <td className="px-4 py-3 font-bold text-gray-900">{index + 1}</td>
+                                <td className="px-4 py-3 font-semibold text-gray-900">
+                                  <span className="flex flex-wrap items-center gap-2">{row.fullName}{isTop && <TopScorerBadge />}</span>
                                 </td>
-                                <td className="px-4 py-3 font-semibold text-gray-900">{row.fullName}</td>
                                 <td className="px-4 py-3 text-center">{row.experience.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-center">{row.performance.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-center">{row.potential.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-center">{row.written.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-center">{row.interview.toFixed(2)}</td>
-                                <td className="px-4 py-3 text-center font-bold text-blue-600">{row.total.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-center font-bold text-[var(--color-primary-900)]">{row.total.toFixed(2)}</td>
                               </tr>
                             );
                           })
@@ -4518,12 +4516,9 @@ export const RSPDashboard = () => {
                   <h3 className="!mb-3 text-base font-semibold text-gray-900">Legend:</h3>
                   <div className="flex flex-wrap gap-6">
                     <div className="flex items-center gap-2">
-                      <div className="h-4 w-6 rounded bg-yellow-100 border border-yellow-300"></div>
-                      <span className="text-sm text-gray-700">Rank 1 (Top Applicant)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-6 rounded bg-blue-100 border border-blue-300"></div>
-                      <span className="text-sm text-gray-700">Ranks 2-3 (Top 3 Applicants)</span>
+                      <div className="h-4 w-6 rounded border-l-[3px] border-[var(--color-primary)] bg-[var(--color-primary-50)]" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}></div>
+                      <TopScorerBadge />
+                      <span className="text-sm text-gray-700">Highest total score for this position (ties are all marked)</span>
                     </div>
                   </div>
                 </div>
@@ -4982,9 +4977,9 @@ export const RSPDashboard = () => {
                                 )}
 
                                 {/* Point-Based Assessment */}
-                                <div className="mb-3 rounded-md border-2 border-black overflow-hidden">
+                                <div className="abyan-table-wrap mb-3">
                                   <p className="!mb-0 border-b-2 border-black bg-gray-200 px-3 py-2 text-base font-semibold text-black">POINT-BASED ASSESSMENT</p>
-                                  <table className="w-full border-collapse text-sm text-black">
+                                  <table className="abyan-table w-full text-black">
                                     <thead>
                                       <tr>
                                         <th className="border-b-2 border-black px-3 py-2 text-left font-semibold">ASSESSMENT DATA</th>

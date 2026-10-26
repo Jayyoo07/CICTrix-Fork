@@ -53,10 +53,11 @@ export const invalidateDepartmentOptions = (): void => {
   cachedOptions = null;
 };
 
-export const useDepartmentOptions = (): DepartmentOption[] => {
+export const useDepartmentOptions = (enabled = true): DepartmentOption[] => {
   const [options, setOptions] = useState<DepartmentOption[]>(cachedOptions ?? FALLBACK_OPTIONS);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     void loadDepartmentOptions().then((loaded) => {
       if (active) setOptions(loaded);
@@ -64,10 +65,11 @@ export const useDepartmentOptions = (): DepartmentOption[] => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   return options;
 };
 
 /** Names only — for screens that render a plain string dropdown. */
-export const useDepartmentNames = (): string[] => useDepartmentOptions().map((option) => option.value);
+export const useDepartmentNames = (enabled = true): string[] =>
+  useDepartmentOptions(enabled).map((option) => option.value);

@@ -703,23 +703,40 @@ const pcptRawToConverted = (raw: number): number => {
 // No local cache — every read goes through the DB.
 
 export const RSPDashboard = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const section = resolveSection(location.pathname, location.search);
+
+  // The parent only reads the recruitment snapshot for the sections that
+  // render it. Succession's two views load their own data, so they skip both
+  // the reads and the realtime subscriptions below (and every section-scoped
+  // loader further down). Rater Management renders this shell as `raters`.
+  const loadsRecruitmentData =
+    section === 'dashboard' ||
+    section === 'accounts' ||
+    section === 'reports' ||
+    section === 'raters';
+  const loadsNewlyHired = section === 'accounts' || section === 'reports';
+  const loadsAccountData = section === 'accounts';
+
   // Plantilla names for posting/application rows (never their internal keys).
-  const { summaryForPosting } = usePlantillaNames();
+  // Only the legacy Jobs branch prints a plantilla summary.
+  const { summaryForPosting } = usePlantillaNames(section === 'jobs');
 
   // Live updates: both events feed the dashboard's existing syncJobs reload.
   useRealtimeRefresh({
     channel: 'rsp-dashboard-postings',
     tables: ['job_postings'],
     onChange: () => { void loadJobPostings(); },
+    enabled: loadsRecruitmentData,
   });
   useRealtimeRefresh({
     channel: 'rsp-dashboard-applicants',
     tables: ['applicants', 'evaluations'],
     onChange: () => { window.dispatchEvent(new CustomEvent('cictrix:applicants-updated')); },
+    enabled: loadsRecruitmentData,
   });
-  const navigate = useNavigate();
-  const location = useLocation();
-  const section = resolveSection(location.pathname, location.search);
+
   // Which succession view is showing: the ranked plan (default), or the points
   // that produce its Eligibility column (?view=eligibility-points). Kept in the
   // URL like Job Posts' tab, so refresh and Back keep it.
@@ -729,7 +746,8 @@ export const RSPDashboard = () => {
     navigate({ pathname: location.pathname, search: view === 'plan' ? '' : `?view=${view}` });
 
   // Departments come from the canonical Supabase table, shared system-wide.
-  const employeeDirectoryDepartments = useDepartmentNames();
+  // Only the Accounts views render a department dropdown.
+  const employeeDirectoryDepartments = useDepartmentNames(loadsAccountData);
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [applicants, setApplicants] = useState<ApplicantRecord[]>([]);
@@ -737,10 +755,11 @@ export const RSPDashboard = () => {
   const [examTotals, setExamTotals] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    if (section !== 'reports') return;
     let cancelled = false;
     void fetchWrittenExamTotals().then((result) => { if (!cancelled) setExamTotals(result.totals); });
     return () => { cancelled = true; };
-  }, []);
+  }, [section]);
   // Applicants with at least one scored evaluation; the dashboard uses it to
   // flag interviews that were held but never scored.
   const [evaluatedApplicantIds, setEvaluatedApplicantIds] = useState<Set<string>>(new Set());
@@ -1058,6 +1077,8 @@ export const RSPDashboard = () => {
   });
 
   useEffect(() => {
+    if (!loadsRecruitmentData) return;
+
     let inFlight = false;
     let pending = false;
     let disposed = false;
@@ -1075,13 +1096,14 @@ export const RSPDashboard = () => {
       const primaryClient = supabase; // Always use Supabase for applicants
       const secondaryClient = (mockDatabase as any); // Fallback only if Supabase fails
 
+      // The shared recruitment snapshot. `job_postings`/`jobs` used to be read
+      // here too and thrown away; canonical postings are loaded below through
+      // getJobPostingsFromSupabase, which also maps plantilla slots.
       const fetchBundle = async (client: any, cacheKey: string) =>
         runSingleFlight(
           cacheKey,
           () =>
             Promise.allSettled([
-              client.from('job_postings').select('*').order('created_at', { ascending: false }),
-              client.from('jobs').select('*').order('created_at', { ascending: false }),
               client.from('applicants').select('*').order('created_at', { ascending: false }),
               client.from('raters').select('*').order('created_at', { ascending: false }),
               client.from('evaluations').select('*'),
@@ -1089,10 +1111,11 @@ export const RSPDashboard = () => {
           1200,
         );
 
-      let [, , applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
+      let [applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
         primaryClient,
-        `rsp-bundle:supabase:primary` // Always use supabase cache key
+        `rsp-dashboard:recruitment:primary` // Always use supabase cache key
       );
+      if (disposed) return;
 
       const primaryRaters =
         ratersRes.status === 'fulfilled' && !ratersRes.value.error && Array.isArray(ratersRes.value.data)
@@ -1104,14 +1127,16 @@ export const RSPDashboard = () => {
 
       // Fallback only on fetch failure. Empty DB results are authoritative.
       if (!primaryApplicantsFetchSucceeded) {
-        [, , applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
+        [applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
           secondaryClient,
-          `rsp-bundle:supabase:secondary`
+          `rsp-dashboard:recruitment:secondary`
         );
+        if (disposed) return;
       }
 
       // CRITICAL: Fetch job postings from Supabase first (source of truth), fallback to localStorage
       let canonicalJobPostings = await getJobPostingsFromSupabase();
+      if (disposed) return;
       if (canonicalJobPostings.length === 0) {
         console.log('[RSP] No jobs from Supabase, falling back to localStorage');
         canonicalJobPostings = getAuthoritativeJobPostings();
@@ -1353,8 +1378,8 @@ export const RSPDashboard = () => {
 
       // CRITICAL: Invalidate cache when new evaluations are submitted
       // This ensures we fetch fresh evaluation data instead of using cached bundle
-      invalidateCacheKey('rsp-bundle:supabase:primary');
-      invalidateCacheKey('rsp-bundle:supabase:secondary');
+      invalidateCacheKey('rsp-dashboard:recruitment:primary');
+      invalidateCacheKey('rsp-dashboard:recruitment:secondary');
 
       if (inFlight) {
         pending = true;
@@ -1377,7 +1402,9 @@ export const RSPDashboard = () => {
         event.key === 'cictrix_job_postings' ||
         event.key === 'cictrix_authoritative_job_postings'
       ) {
-        void load();
+        // Route through the scheduler so a storage event can never overlap an
+        // in-flight load and let an older response win.
+        syncJobs();
       }
     };
 
@@ -1394,7 +1421,7 @@ export const RSPDashboard = () => {
       window.removeEventListener('cictrix:applicants-updated', syncJobs as EventListener);
       window.removeEventListener('storage', onStorage);
     };
-  }, []);
+  }, [loadsRecruitmentData]);
 
   useEffect(() => {
     // Guard against a stale modal backdrop when users navigate away from Reports.
@@ -1514,6 +1541,7 @@ export const RSPDashboard = () => {
   // exclude applicants the admin has already confirmed for hire.
   const [newlyHiredRows, setNewlyHiredRows] = useState<NewlyHired[]>([]);
   useEffect(() => {
+    if (!loadsNewlyHired) return;
     let cancelled = false;
     const refresh = async () => {
       const rows = await getNewlyHiredFromSupabase();
@@ -1525,7 +1553,7 @@ export const RSPDashboard = () => {
       cancelled = true;
       window.removeEventListener('cictrix:newly-hired-updated', refresh as EventListener);
     };
-  }, [section]);
+  }, [loadsNewlyHired]);
 
   const hiredApplicantIds = useMemo(
     () =>
@@ -2044,6 +2072,7 @@ export const RSPDashboard = () => {
   // source for the employee directory when no portal account is found.
   const [supabaseEmployeeRecords, setSupabaseEmployeeRecords] = useState<EmployeeRecord[]>([]);
   useEffect(() => {
+    if (!loadsAccountData) return;
     let cancelled = false;
     void (async () => {
       const rows = await getEmployeeRecordsFromSupabase();
@@ -2052,7 +2081,7 @@ export const RSPDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadsAccountData]);
 
   // Full personal fields per employee, read straight from the base `employees`
   // table (anon-readable) and keyed by employee_number. The account-detail
@@ -2062,6 +2091,7 @@ export const RSPDashboard = () => {
   // why every employee's profile rendered blank. This is the canonical source.
   const [employeePersonalByNumber, setEmployeePersonalByNumber] = useState<Map<string, any>>(new Map());
   useEffect(() => {
+    if (!loadsAccountData) return;
     let cancelled = false;
     void (async () => {
       const { data, error } = await (supabase as any)
@@ -2080,7 +2110,7 @@ export const RSPDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadsAccountData]);
 
   const fallbackEmployeeDirectorySource = useMemo(() => {
     const seenEmployeeIds = new Set<string>();

@@ -276,7 +276,8 @@ const AddAttendeeModal = ({
   const [loadingOffices, setLoadingOffices] = useState(true);
   const [openOffice, setOpenOffice] = useState<string | null>(null);
   const [employeesByOffice, setEmployeesByOffice] = useState<Record<string, PickerEmployee[]>>({});
-  const [loadingOffice, setLoadingOffice] = useState<string | null>(null);
+  const [loadingOfficesByName, setLoadingOfficesByName] = useState<Record<string, boolean>>({});
+  const [officeErrors, setOfficeErrors] = useState<Record<string, string | null>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [override, setOverride] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -296,17 +297,27 @@ const AddAttendeeModal = ({
     };
   }, [target.competencies]);
 
+  const loadOfficeEmployees = async (office: string) => {
+    setLoadingOfficesByName((prev) => ({ ...prev, [office]: true }));
+    setOfficeErrors((prev) => ({ ...prev, [office]: null }));
+    try {
+      const emps = await getOfficeEmployeesWithScores(office);
+      setEmployeesByOffice((prev) => ({ ...prev, [office]: emps }));
+    } catch {
+      setOfficeErrors((prev) => ({ ...prev, [office]: 'Could not load employees and their IPCR scores. Please try again.' }));
+    } finally {
+      setLoadingOfficesByName((prev) => ({ ...prev, [office]: false }));
+    }
+  };
+
   const openOfficeRow = async (office: string) => {
     if (openOffice === office) {
       setOpenOffice(null);
       return;
     }
     setOpenOffice(office);
-    if (!employeesByOffice[office]) {
-      setLoadingOffice(office);
-      const emps = await getOfficeEmployeesWithScores(office);
-      setEmployeesByOffice((prev) => ({ ...prev, [office]: emps }));
-      setLoadingOffice(null);
+    if (!employeesByOffice[office] && !loadingOfficesByName[office]) {
+      await loadOfficeEmployees(office);
     }
   };
 
@@ -407,8 +418,13 @@ const AddAttendeeModal = ({
                     </button>
                     {open && (
                       <div className="border-t border-gray-100">
-                        {loadingOffice === o.office ? (
+                        {loadingOfficesByName[o.office] ? (
                           <p className="px-4 py-3 text-xs text-gray-500">Loading employees…</p>
+                        ) : officeErrors[o.office] ? (
+                          <div role="alert" className="px-4 py-3 text-xs text-[var(--error-700)]">
+                            <p className="!mb-2 text-[var(--error-700)]">{officeErrors[o.office]}</p>
+                            <button type="button" className="btn btn-sm btn-secondary" onClick={() => void loadOfficeEmployees(o.office)}>Try again</button>
+                          </div>
                         ) : emps.length === 0 ? (
                           <p className="px-4 py-3 text-xs text-gray-500">No active employees in this office.</p>
                         ) : (
@@ -536,8 +552,9 @@ export const SeminarEnrollment = () => {
       // already matched — no manual Regenerate needed. Failures are non-fatal;
       // the pipeline still loads whatever is already there.
       setBusy('regen');
-      await generateRecommendations().catch(() => {});
+      const generation = await generateRecommendations().catch(() => ({ ok: false, error: 'Could not refresh recommendations.' }));
       if (cancelled) return;
+      if (!generation.ok) setNotice({ tone: 'err', text: `${generation.error ?? 'Could not refresh recommendations.'} Showing saved recommendations.` });
       setBusy(null);
       await refresh();
     })();

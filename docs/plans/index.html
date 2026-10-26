@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">88 plans &middot; 73 done</p>
+    <p class="counts">87 plans &middot; 74 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -86,13 +86,18 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-succession-office-weight-scoring.md">Fix succession office-weight scoring</a><p class="summary">Resolve employee office names to department IDs in bulk and report failed lookups rather than silently using unweighted IPCR scores.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-succession-batch-fetch.md">Batch succession candidate loading per department</a><p class="summary">Load the shared succession inputs once per department and evaluate every critical position in memory, replacing the per-position query fan-out.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-rsp-view-first-documents.md">Open RSP documents in a viewer before printing or downloading</a><p class="summary">Make RSP document actions view-first using the existing in-site viewer, with explicit Print and Download controls instead of immediate file downloads. Preserve document access rules and leave report exports unchanged.</p></td>
-        <td class="status"><span class="badge badge-danger">Blocked</span></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -118,11 +123,6 @@
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-performance-followups.md">Reduce remaining Supabase fetch fan-out and polling</a><p class="summary">Batch dashboard succession counts, remove duplicate recruitment reads, scope refreshes to active sections, and reduce redundant polling without changing displayed results.</p></td>
         <td class="status"><span class="badge badge-neutral">Draft</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="2026-10-26-opencode-handoff.md">Retarget the agent handoff to OpenCode</a><p class="summary">Rewrite docs/handoff/agent-handoff.md for OpenCode instead of Claude Code, and add the two missing slash commands so /grill-me and /grill-with-docs work as AGENTS.md describes.</p></td>
-        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -376,11 +376,6 @@
       </tr>
       <tr>
         <td class="date">2026-10-16</td>
-        <td><a href="2026-10-16-security-remediation.md">Security remediation (key rotation, history purge, password hashing, real RLS)</a><p class="summary">Close the gaps that let anyone read or change HR data. Rotate the leaked service-role key, purge secrets from git history, move every portal login to Supabase Auth with hashed passwords, then replace the allow-all database access with per-role RLS, private storage and authenticated backend routes.</p></td>
-        <td class="status"><span class="badge badge-neutral">Draft</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-16</td>
         <td><a href="2026-10-16-pm-dashboard.md">PM dashboard submission rate and IPCR results</a><p class="summary">Replace the PM dashboard header, KPI cards and Performance Distribution donut with a gradient header, an IPCR submission rate KPI, a submission-by-department table and an IPCR results section, all in DESIGN_IDENTITY.md colors.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
@@ -532,7 +527,15 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-succession-scoring-summary.md">Fix succession office-weight scoring — local implementation summary</a><p class="summary">Resolved employee office names to department IDs without a schema change; all 114 live scores matched independent weighted calculations. User authorized publication to fork main and an upstream PR.</p><p class="meta">Plan: <a href="2026-10-26-succession-office-weight-scoring.md">2026-10-26-succession-office-weight-scoring.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-succession-batch-fetch-summary.md">Succession batch fetch: session summary</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-rsp-view-first-documents-summary.md">RSP view-first document viewing</a><p class="meta">Plan: <a href="2026-10-26-rsp-view-first-documents.md">2026-10-26-rsp-view-first-documents.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -553,10 +556,6 @@
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-performance-followups-summary.md">Performance follow-ups: planning session summary</a></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="../session-summaries/2026-10-26-opencode-handoff-summary.md">Session Summary: Retarget the Agent Handoff to OpenCode</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>

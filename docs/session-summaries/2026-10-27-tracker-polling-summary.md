@@ -52,7 +52,7 @@ The final after-window intentionally removed a joined realtime channel; fallback
 - `npx tsc --noEmit`: pass.
 - `npm run lint`: pass, zero warnings.
 - `npm run build:verify`: pass; existing Vite CJS/Browserslist notices remain.
-- Full branch-only Vitest suite: 734 tests / 85 files pass. The earlier run also passed 1,594 tests / 179 files but included older `.claude/worktrees/` checkouts; it is not the branch's test count. Existing fixture/React act warnings remain.
+- Final branch-only Vitest suite after the scoped-read fix and latest upstream integration: 738 tests / 85 files pass. The earlier run also passed 1,594 tests / 179 files but included older `.claude/worktrees/` checkouts; it is not the branch's test count. The final unit run used process-local non-live Supabase settings so unmocked legacy calls could not touch live data. Expected network-failure and existing fixture/React act warnings remain.
 - One independent `openai/gpt-6.1-sol#high` reviewer found three issues (slot failures, pagination, upload ABA race). All were addressed; follow-up review found no remaining actionable issues and independently reran 26 targeted tests successfully.
 - Live read-only request/response comparison, displayed-text parity, disconnected fallback and simulated visibility/catch-up: pass as detailed above. These isolate the component and idle refresh behavior, not page-load speed or the complete deployed route. Actual status/document/upload/slot-change delivery still needs controlled test updates; no live write was authorized.
 - DESIGN_IDENTITY §16 reviewed for scope: no rendered markup, color/type/spacing, controls, badges or breakpoints changed. Visual/responsive live checks were not certified.
@@ -60,4 +60,10 @@ The final after-window intentionally removed a joined realtime channel; fallback
 
 ## Remaining acceptance
 
-Normal local access is restored and the read-only comparison is complete. Still verify actual tracker status changes, document review and re-upload, silent slot changes and event delivery using controlled test updates with separate write approval, plus native hidden-tab return. Do not mark the overall plan Done or lengthen interviewer polling until its separate gates pass. Latest upstream integration and final check/delivery results will be recorded below.
+Normal local access is restored and the read-only comparison is complete. Still verify actual tracker status changes, document review and re-upload, silent slot changes and event delivery using controlled test updates with separate write approval, plus native hidden-tab return. Do not mark the overall plan Done or lengthen interviewer polling until its separate gates pass.
+
+## Integration and delivery
+
+Merged upstream through `f84c544` (the DOCX viewer follow-up) into the feature branch without conflicts, preserving that work. Re-ran type-check, zero-warning lint, all 738 branch-only tests and `build:verify` successfully. Windows locked an older process's esbuild executable during `npm ci`; a non-clean `npm install --ignore-scripts --no-save --no-audit --no-fund` restored dependencies without changing package manifests or the lockfile. No other running process was terminated.
+
+The user authorized pushing the verified changes to `origin/main` (`Jayyoo07/CICTrix-Fork`) and upstream integration by PR into `dehandenver/CICTrix`. GitHub auto-merge is disabled and this account cannot change repository settings; use a normal authorized PR merge subject to required checks, not an admin bypass. Local `.env.local` and the user's pre-existing untracked files are excluded. The plan stays Blocked rather than misreporting step 5 or write-based live acceptance as complete.

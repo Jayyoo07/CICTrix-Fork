@@ -1,7 +1,7 @@
 ---
 title: Configurable written exam total points
 date: 2026-10-26
-status: In Progress
+status: Done
 summary: RSP sets the Written Exam total points per vacancy instead of the hard-coded 100; every conversion, display, ranking and export uses it, capped at the 30-point share.
 ---
 

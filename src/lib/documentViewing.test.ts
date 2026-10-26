@@ -174,4 +174,36 @@ describe('attachment list access', () => {
     mocks.mockFrom.mockImplementation(() => { throw new Error('offline'); });
     await expect(listApplicantDocumentAttachments('applicant-a')).rejects.toThrow('Could not load uploaded documents');
   });
+
+  const listQuery = (result: unknown) => ({ select: () => ({ eq: () => ({ order: vi.fn().mockResolvedValue(result) }) }) });
+
+  it('reports a failed Supabase read even when the local fallback answers with no rows', async () => {
+    mocks.from.mockReturnValue(listQuery({ data: null, error: new Error('offline') }));
+    mocks.mockFrom.mockReturnValue(listQuery({ data: [], error: null }));
+    await expect(listApplicantDocumentAttachments('applicant-a')).rejects.toThrow('Could not load uploaded documents');
+  });
+
+  it('still uses local rows when Supabase fails and the fallback has this applicant\'s files', async () => {
+    const row = { id: 'local-1', file_name: 'cv.pdf', file_path: 'https://files.example.test/cv.pdf', document_type: 'curriculum_vitae' };
+    mocks.from.mockReturnValue(listQuery({ data: null, error: new Error('offline') }));
+    mocks.mockFrom.mockReturnValue(listQuery({ data: [row], error: null }));
+    expect(await listApplicantDocumentAttachments('applicant-a')).toEqual([row]);
+  });
+
+  it('previews local mock:// rows from the cached file of the same applicant and document type only', async () => {
+    localStorage.setItem('cictrix_attachment_previews', JSON.stringify([
+      { applicantId: 'applicant-b', documentType: 'curriculum_vitae', fileName: 'other.pdf', mimeType: 'application/pdf', dataUrl: 'data:application/pdf;base64,b3RoZXI=' },
+      { applicantId: 'applicant-a', documentType: 'transcript_of_records', fileName: 'tor.pdf', mimeType: 'application/pdf', dataUrl: 'data:application/pdf;base64,dG9y' },
+    ]));
+    const cv = { id: 'm1', file_name: 'cv.pdf', file_path: 'mock://attachment/m1', document_type: 'curriculum_vitae' };
+    const tor = { id: 'm2', file_name: 'tor.pdf', file_path: 'mock://attachment/m2', document_type: 'transcript_of_records' };
+    mocks.from.mockReturnValue(listQuery({ data: [cv, tor], error: null }));
+    const rows = await listApplicantDocumentAttachments('applicant-a');
+    // No cached CV for applicant-a: it stays unavailable instead of borrowing applicant-b's file.
+    expect(rows[0]).toEqual(cv);
+    expect(hasDocumentFile(applicantAttachmentDocument(rows[0]))).toBe(false);
+    expect(rows[1]).toEqual({ ...tor, file_path: 'data:application/pdf;base64,dG9y', file_type: 'application/pdf' });
+    expect(hasDocumentFile(applicantAttachmentDocument(rows[1]))).toBe(true);
+    localStorage.clear();
+  });
 });

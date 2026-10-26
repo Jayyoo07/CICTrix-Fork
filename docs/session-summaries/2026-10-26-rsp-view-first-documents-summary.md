@@ -58,3 +58,18 @@ A temporary fixture harness used the actual components and non-sensitive PDF/ima
 - A browser-side print spy confirmed the image Print control invokes printing once with the image inside the printable modal, while the viewer stays open. Unit tests cover the PDF handoff, blocked popups, loading/failure states, late-result cleanup, nested Escape/focus return, browser Back, exact latest attachment selection, and non-RSP compatibility.
 - Checked the applicable `DESIGN_IDENTITY.md` section 16 items: existing Poppins/tokens/shared modal, pill buttons, Lucide icons, white modal heading, responsive dimensions, loading/error/disabled states, and keyboard/focus behavior. Untouched top bars, sidebars, tables, and status badges were not redesigned.
 - Live authenticated Supabase file access, production encryption-key access, actual OS print-dialog output, and physical printing were not verified. Browser screenshots were limited by intermittent pane visibility; native PDF print handoff is covered in tests rather than claimed as physically printed.
+
+## Re-land after revert
+
+The first merge (`c4b4ea3`) was reverted (`87593cf`) for review. Branch `feat/rsp-view-first-documents-v2` re-applies it on `main` (`b1c1b4c`) with five fixes: a failed Supabase read no longer shows as an empty document list; local/demo `mock://` documents preview again from the wizard's cached copy, matched by applicant and exact document type; the Experience card opens the CV directly in the viewer; scoring file rows show size and upload date again; and View is disabled for documents with no file.
+
+New tests: three list-access cases in `src/lib/documentViewing.test.ts`, a disabled-View assertion in `QualifiedApplicantsPage.documents.test.tsx`, and `src/components/QualifiedApplicantsSection.documents.test.tsx` (CV shortcut and file metadata). The two scoring-modal tests fail on the first implementation and pass on this one.
+
+Checks on this branch:
+
+- `npx tsc --noEmit`: pass.
+- `npm run lint`: pass, zero warnings.
+- Full Vitest suite (`--exclude "**/.claude/**" --exclude "**/.worktrees/**" --maxWorkers=2`): 660 of 661 pass. The one failure, `trainingProgress.test.ts` "single-day training as ongoing", fails on clean `main` too under UTC and passes with `TZ=Asia/Manila`, so it is pre-existing and unrelated.
+- `npm run build:verify`: pass.
+- Not run: the browser pass and live authenticated file access. The plans dashboard was not regenerated because `docs/plans/build-plans-index.ps1` is not in the repository; the plan's frontmatter is unchanged, so the restored `index.html` entry is still accurate.
+

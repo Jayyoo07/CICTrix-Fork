@@ -47,6 +47,17 @@ No database migration, storage-policy change, live database write, deployment, o
 
 Detailed results and limitations: `docs/session-summaries/2026-10-26-rsp-view-first-documents-summary.md`.
 
+### Re-land after revert (2026-10-26)
+
+The first implementation was merged (`c4b4ea3`) and reverted (`87593cf`) so it could be reviewed before landing again. Branch `feat/rsp-view-first-documents-v2` re-applies `72a1845` on `main` and fixes five defects the review found:
+
+1. **Failed reads looked like "no documents."** In Supabase mode, a failed attachment read fell through to the local mock database, which answered with an empty list, so the new error state never appeared. An empty fallback after a failed primary read now reports the failure.
+2. **Local/demo previews were removed.** Local rows store `mock://` paths, and the old page previewed them from the applicant wizard's cached copy. That path was deleted, so every local document showed as unavailable. It is restored with an exact applicant and document-type match only, so a missing file still never borrows another one.
+3. **The Experience CV shortcut was dropped** instead of moved into the viewer, as Step 5 required. It now opens the CV in the in-site viewer.
+4. **The scoring file list lost each file's size and upload date.** They are restored as the row subtitle.
+5. **View stayed enabled for documents with no file,** opening a viewer that could only show an error. It is now disabled.
+
+
 ## Steps
 
 1. Obtain approval for this draft's in-site default and collection behavior. Before implementation, use a task branch, mark the plan Approved then In Progress, and regenerate the plans index after status changes.

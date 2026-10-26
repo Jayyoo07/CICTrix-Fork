@@ -17,8 +17,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { useBackClosesView } from '../hooks/useHistoryBack';
 import { supabase } from '../lib/supabase';
-import { applicantAttachmentDocument, listApplicantDocumentAttachments } from '../lib/documentViewing';
+import { applicantAttachmentDocument, listApplicantDocumentAttachments, type ViewerDocument } from '../lib/documentViewing';
 import { DocumentCollectionModal } from './DocumentCollectionModal';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 import {
   fetchLatestEvaluationForApplicantOrEmailAnySource,
   subscribeToEvaluationChanges,
@@ -333,6 +334,19 @@ const fmtDate = (iso: string) => {
   catch { return iso; }
 };
 
+const fmtSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+};
+
+/** A scoring file with its size and upload date, as the old file list showed them. */
+const scoringFileDocument = (row: AttachmentRow): ViewerDocument => ({
+  ...applicantAttachmentDocument(row),
+  subtitle: [fmtSize(row.file_size), row.created_at ? fmtDate(row.created_at) : ''].filter(Boolean).join(' · ') || undefined,
+});
+
 /** "Oct 5, 2026 · 5:07 PM" from a date plus an optional "HH:mm[:ss]" time. */
 const fmtSchedule = (iso: string, time?: string | null) => {
   const date = fmtDate(iso);
@@ -619,6 +633,7 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [filesError, setFilesError] = useState('');
+  const [previewFile, setPreviewFile] = useState<ViewerDocument | null>(null);
   const [liveEvaluation, setLiveEvaluation] = useState<EvaluationSnapshot | null>(evaluation ?? null);
 
   useEffect(() => {
@@ -1099,10 +1114,16 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       Score: {cat.finalScore ?? 0}
                     </p>
 
-                    {/* All categories use the same file-by-file, view-first flow. */}
+                    {/* Experience opens the CV straight in the viewer; the rest list their files. */}
                     <button
                       type="button"
-                      onClick={() => setFilesModal({ catKey, files: catFiles })}
+                      onClick={() => {
+                        const cvRow = catKey === 'experience'
+                          ? attachments.find(a => (a.document_type ?? '').includes('curriculum_vitae')) ?? catFiles[0]
+                          : undefined;
+                        if (cvRow) setPreviewFile(scoringFileDocument(cvRow));
+                        else setFilesModal({ catKey, files: catFiles });
+                      }}
                       disabled={loadingFiles || Boolean(filesError)}
                       aria-label={`View ${meta.label} documents`}
                       className="btn btn-secondary btn-sm"
@@ -1231,8 +1252,21 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
         <DocumentCollectionModal
           title={`${CAT_META[filesModal.catKey].label} Files`}
           subtitle={applicant.full_name}
-          files={filesModal.files.map(applicantAttachmentDocument)}
+          files={filesModal.files.map(scoringFileDocument)}
           onClose={() => setFilesModal(null)}
+        />
+      )}
+      {previewFile && (
+        <DocumentPreviewModal
+          open
+          viewFirst
+          fileUrl={previewFile.url}
+          fileName={previewFile.fileName}
+          fileType={previewFile.fileType}
+          storageBucket={previewFile.bucket}
+          title={previewFile.fileName}
+          subtitle={applicant.full_name}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </>

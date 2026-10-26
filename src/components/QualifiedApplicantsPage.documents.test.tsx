@@ -67,6 +67,8 @@ describe('RSP applicant document entry points', () => {
 
   it('replaces Download All with a file list, keeps missing documents explicit, and never opens multiple tabs', async () => {
     await openDocuments();
+    const missingCard = screen.getByText('application letter').closest('article')!;
+    expect(within(missingCard).getByRole('button', { name: 'View' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Download All' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'View Documents' }));
     const collection = screen.getByRole('dialog', { name: 'Submitted Documents' });

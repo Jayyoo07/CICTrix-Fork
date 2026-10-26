@@ -51,9 +51,42 @@ export const applicantAttachmentDocument = (row: ApplicantDocumentAttachment): V
   bucket: ATTACHMENTS_BUCKET,
 });
 
+const ATTACHMENT_PREVIEW_CACHE_KEY = 'cictrix_attachment_previews';
+
+type CachedPreviewFile = {
+  applicantId: string;
+  documentType: string;
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
+/**
+ * Local/demo rows store `mock://` paths; the applicant wizard caches the file itself
+ * as a data URL. Match on applicant and exact document type so a missing file never
+ * shows another one.
+ */
+const withCachedPreviews = (applicantId: string, rows: ApplicantDocumentAttachment[]): ApplicantDocumentAttachment[] => {
+  if (!rows.some((row) => row.file_path?.startsWith('mock://'))) return rows;
+  let cache: CachedPreviewFile[] = [];
+  try {
+    cache = JSON.parse(localStorage.getItem(ATTACHMENT_PREVIEW_CACHE_KEY) ?? '[]') as CachedPreviewFile[];
+  } catch {
+    return rows;
+  }
+  return rows.map((row) => {
+    if (!row.file_path?.startsWith('mock://')) return row;
+    const cached = cache.find((entry) => entry.applicantId === applicantId
+      && entry.documentType === (row.document_type ?? '')
+      && entry.dataUrl?.startsWith('data:'));
+    return cached ? { ...row, file_path: cached.dataUrl, file_type: row.file_type || cached.mimeType } : row;
+  });
+};
+
 export async function listApplicantDocumentAttachments(applicantId: string): Promise<ApplicantDocumentAttachment[]> {
   const local = isMockModeEnabled || getPreferredDataSourceMode() === 'local';
   const clients = local ? [mockDatabase, supabase] : [supabase, mockDatabase];
+  let primaryFailed = false;
   for (const client of clients) {
     try {
       const { data, error } = await (client as any).from('applicant_attachments')
@@ -61,9 +94,13 @@ export async function listApplicantDocumentAttachments(applicantId: string): Pro
         .eq('applicant_id', applicantId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return ((data ?? []) as ApplicantDocumentAttachment[]).filter((row) => row.file_path || row.file_name);
+      const rows = ((data ?? []) as ApplicantDocumentAttachment[]).filter((row) => row.file_path || row.file_name);
+      // An empty fallback after a failed primary read is not "no documents".
+      if (primaryFailed && rows.length === 0) break;
+      return withCachedPreviews(applicantId, rows);
     } catch {
       // Retain the existing local-data fallback, scoped to this applicant only.
+      primaryFailed = true;
     }
   }
   throw new Error('Could not load uploaded documents. Close the applicant details and try again.');

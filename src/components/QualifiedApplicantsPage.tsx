@@ -30,7 +30,7 @@ import { sendEmail } from '../lib/email';
 import { createPassword, upsertEmployeePortalAccount } from '../lib/employeePortalData';
 import { runSingleFlight } from '../lib/singleFlight';
 import { supabase } from '../lib/supabase';
-import { applicantAttachmentDocument, listApplicantDocumentAttachments, type ApplicantDocumentAttachment, type ViewerDocument } from '../lib/documentViewing';
+import { applicantAttachmentDocument, hasDocumentFile, listApplicantDocumentAttachments, type ApplicantDocumentAttachment, type ViewerDocument } from '../lib/documentViewing';
 import { DocumentCollectionModal } from './DocumentCollectionModal';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { buildDisqualificationActivityDescription, DISQUALIFICATION_REASON_OPTIONS } from '../lib/applicationActivity';
@@ -2046,6 +2046,7 @@ export const QualifiedApplicantsPage = () => {
                                 <button
                                   type="button" className="btn btn-secondary btn-sm"
                                   onClick={() => setPreviewDocument({ ...doc.file, label: doc.type })}
+                                  disabled={!hasDocumentFile(doc.file)}
                                 >
                                   View
                                 </button>

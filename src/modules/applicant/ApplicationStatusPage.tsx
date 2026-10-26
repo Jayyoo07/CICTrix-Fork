@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { ActionFeedback, useFeedback } from '../../components/action-feedback';
 import { describeActionFailure } from '../../lib/friendlyErrors';
 import { ATTACHMENTS_BUCKET, supabase } from '../../lib/supabase';
+import { encryptApplicantFile } from '../../lib/crypto';
 import { getApplicants, saveApplicants } from '../../lib/recruitmentData';
 import {
   FAILURE_TO_ATTEND,
@@ -661,10 +662,11 @@ export const ApplicationStatusPage = () => {
     setUploadErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
     try {
       const newPath = `${record.id}/${Date.now()}-${file.name}`;
+      const encryptedFile = await encryptApplicantFile(file);
 
       const uploadResult = await (supabase as any).storage
         .from(ATTACHMENTS_BUCKET)
-        .upload(newPath, file);
+        .upload(newPath, encryptedFile);
       const uploadError = uploadResult?.error ?? null;
       if (uploadError) throw new Error(String(uploadError.message ?? uploadError));
 
@@ -675,7 +677,7 @@ export const ApplicationStatusPage = () => {
           file_name: file.name,
           file_path: newPath,
           file_type: file.type,
-          file_size: file.size,
+          file_size: encryptedFile.size,
           document_type: doc.document_type,
         });
       if (insErr) throw new Error(insErr.message);

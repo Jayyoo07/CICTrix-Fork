@@ -30,6 +30,7 @@ import { mockDatabase } from '../../lib/mockDatabase';
 import { sendEmail } from '../../lib/email';
 import { getApplicants, getAuthoritativeJobPostings, saveApplicants } from '../../lib/recruitmentData';
 import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../../lib/supabase';
+import { fetchAndDecryptApplicantAttachment } from '../../lib/applicantDocuments';
 import { normalizeStatus } from '../../lib/api/applicantStatus';
 import { getAdminEmail } from '../../lib/adminSession';
 import {
@@ -450,6 +451,15 @@ const computeScoreBreakdown = (
 
 const openDocument = async (filePath: string) => {
   if (!filePath) return;
+  try {
+    const { objectUrl, cleanup } = await fetchAndDecryptApplicantAttachment(filePath);
+    const tab = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    if (!tab) alert('Pop-up blocked. Please allow pop-ups for this site to view the document.');
+    setTimeout(() => cleanup(), 60000);
+    return;
+  } catch (err) {
+    console.error('Failed to open decrypted document:', err);
+  }
   if (isMockModeEnabled) {
     window.open(filePath, '_blank', 'noopener,noreferrer');
     return;

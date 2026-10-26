@@ -16,6 +16,7 @@ import { SalaryGradesPage } from './components/SalaryGradesPage';
 import { findEmployeePortalAccount, findEmployeePortalAccountFromSupabase } from './lib/employeePortalData';
 import { fetchPortalEmployeeByNumber } from './lib/api/employeePortal';
 import { clearAdminSession, readAdminSession, writeAdminSession } from './lib/adminSession';
+import { clearCachedDecryptionKey } from './lib/crypto';
 import { clearEmployeeSession, readEmployeeSession, writeEmployeeSession } from './lib/employeeSession';
 import { supabase } from './lib/supabase';
 import { syncThemeWithRoute } from './lib/theme';
@@ -525,6 +526,7 @@ function AppContent() {
   };
 
   const handleInterviewerLogout = () => {
+    clearCachedDecryptionKey();
     setInterviewerSession(null);
     localStorage.removeItem(INTERVIEWER_SESSION_KEY);
     navigate('/interviewer/login', { replace: true });
@@ -539,6 +541,7 @@ function AppContent() {
 
   const handleRevokedInterviewerAcknowledge = async () => {
     setRevokedInterviewerDialogOpen(false);
+    clearCachedDecryptionKey();
     setInterviewerSession(null);
     localStorage.removeItem(INTERVIEWER_SESSION_KEY);
 

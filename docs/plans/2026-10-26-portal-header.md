@@ -1,7 +1,7 @@
 ---
 title: One shared portal header
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Consolidate AdminHeader, the Dept Head console header, the Employee gradient header and InterviewerNavBar into one PortalHeader built to DESIGN_IDENTITY.md §8.2.
 ---
 

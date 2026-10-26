@@ -12,8 +12,6 @@ import {
   ArrowRight,
   Database,
   Shield,
-  Bell,
-  UserCircle2,
   Lock,
   FileSpreadsheet,
   Send,
@@ -23,12 +21,10 @@ import {
   ChevronDown,
   ChevronRight,
   Target,
-  GitCompare,
-  LogOut
+  GitCompare
 } from 'lucide-react';
-import { LogoutConfirmPopover } from '../../../components/LogoutConfirmPopover';
+import { PortalHeader } from '../../../components/portal-header';
 import { readEmployeeSession } from '../../../lib/employeeSession';
-import abyanLogo from '../../../assets/abyan-logo.png';
 import { supabase } from '../../../lib/supabase';
 import {
   getActiveOfficeRole,
@@ -175,7 +171,6 @@ const INITIAL_TRANSMITTALS: TransmittalRecord[] = [
 
 export const OfficeAccountConsole: React.FC = () => {
   const navigate = useNavigate();
-  const [showSwitchModal, setShowSwitchModal] = useState(false);
 
   // Logged-in office account user info
   const [currentUserName, setCurrentUserName] = useState<string>('Office User');
@@ -230,6 +225,7 @@ export const OfficeAccountConsole: React.FC = () => {
       setBellSeenAt(nowStr);
     }
   };
+  const closeBell = useCallback(() => setShowBellDropdown(false), []);
 
   useRealtimeRefresh({
     channel: 'office-console-ipcr',
@@ -625,203 +621,29 @@ export const OfficeAccountConsole: React.FC = () => {
   return (
     <div className="brand-text min-h-screen bg-slate-100 font-sans text-[#040E6B]">
 
-      {/* ── Top Header ── */}
-      <header
-        className="sticky top-0 z-40 shadow-md print:hidden"
-        style={{ backgroundColor: '#363EE8', fontFamily: "'Poppins', system-ui, -apple-system, sans-serif" }}
-      >
-        <div className="flex w-full items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3">
-
-          {/* Left — Logo & Branding (mirrors AdminHeader) */}
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-            <img
-              src={abyanLogo}
-              alt="ABYAN HRIS"
-              className="h-8 w-auto shrink-0 object-contain sm:h-10"
-              style={{ mixBlendMode: 'screen' }}
-            />
-            <div className="flex min-w-0 flex-col items-start text-left leading-tight">
-              <span className="truncate text-base font-bold tracking-tight sm:text-lg" style={{ color: '#ffffff' }}>
-                ABYAN
-              </span>
-              <span className="hidden truncate text-xs font-medium md:block" style={{ color: 'rgba(255,255,255,0.80)' }}>
-                Human Resource Information System
-              </span>
-            </div>
-          </div>
-
-          {/* Right — Notifications + Switch Account + User info + Logout */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-            <div className="relative">
-              <button
-                className="relative rounded-full p-2 transition hover:bg-white/20"
-                style={{ color: '#ffffff' }}
-                type="button"
-                onClick={handleToggleBell}
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute right-1.5 top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-extrabold text-white">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {showBellDropdown && (
-                <div
-                  className="absolute right-0 mt-2 w-80 rounded-xl bg-white text-slate-800 shadow-xl border border-slate-100 py-2 z-50 animate-fade-in"
-                  style={{ maxHeight: '350px', overflowY: 'auto' }}
-                >
-                  <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-700">Notifications</span>
-                    {unreadCount > 0 && (
-                      <span className="text-[10px] bg-indigo-50 text-indigo-650 px-2 py-0.5 rounded-full font-bold">
-                        {unreadCount} new
-                      </span>
-                    )}
-                  </div>
-                  {bellNotifications.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-xs text-slate-400">
-                      No notifications yet
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-50">
-                      {bellNotifications.map((n) => {
-                        const isUnread = !bellSeenAt || n.created_at > bellSeenAt;
-                        return (
-                          <div
-                            key={n.id}
-                            className={`px-4 py-3 flex gap-3 hover:bg-slate-50 transition ${isUnread ? 'bg-indigo-50/20' : ''}`}
-                          >
-                            <Bell className={`h-4 w-4 mt-0.5 shrink-0 ${n.phase === 'target' ? 'text-indigo-600' : 'text-emerald-600'}`} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700">
-                                {n.phase === 'target' ? 'Targets Needed' : 'Ratings Needed'}
-                              </p>
-                              {n.message && (
-                                <p className="text-[11px] text-slate-600 mt-0.5 break-words line-clamp-3">
-                                  {n.message}
-                                </p>
-                              )}
-                              <p className="text-[9px] text-slate-400 mt-1">
-                                {new Date(n.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* Divider */}
-            <div className="hidden sm:block" style={{ width: '1px', height: '28px', backgroundColor: 'rgba(255,255,255,0.25)' }} />
-
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                {switchEnabled && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowSwitchModal(!showSwitchModal)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-white/30"
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.18)',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: 0
-                      }}
-                      title="Switch Account"
-                    >
-                      <UserCircle2 className="h-5 w-5" style={{ color: '#ffffff' }} />
-                    </button>
-                    {showSwitchModal && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '44px',
-                          zIndex: 100,
-                          width: '240px',
-                          background: '#ffffff',
-                          border: '1.5px solid #C8D1FF',
-                          borderRadius: '12px',
-                          boxShadow: '0 4px 20px rgba(54,62,232,0.15)',
-                          padding: '16px',
-                          textAlign: 'left'
-                        }}
-                      >
-                        <p style={{ margin: '0 0 12px 0', fontSize: '0.8rem', fontWeight: 655, color: '#040E6B', lineHeight: 1.4 }}>
-                          Would you like to switch to your regular Employee Account?
-                        </p>
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            onClick={() => {
-                              setShowSwitchModal(false);
-                              navigate('/employee/dashboard');
-                            }}
-                            style={{
-                              background: '#363EE8',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '0.75rem',
-                              fontWeight: 650,
-                              cursor: 'pointer',
-                              boxShadow: '0 2px 6px rgba(54,62,232,0.3)'
-                            }}
-                          >
-                            Yes, Switch
-                          </button>
-                          <button
-                            onClick={() => setShowSwitchModal(false)}
-                            style={{
-                              background: '#F0F2FD',
-                              color: '#040E6B',
-                              border: '1px solid #C8D1FF',
-                              borderRadius: '6px',
-                              padding: '4px 10px',
-                              fontSize: '0.75rem',
-                              fontWeight: 650,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="hidden min-w-0 max-w-[10rem] flex-col text-left leading-tight sm:flex lg:max-w-[16rem]">
-                  <p className="truncate text-sm font-semibold" style={{ color: '#ffffff' }} title={currentUserName}>{currentUserName}</p>
-                  <p className="truncate text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                    {currentUserPosition ?? 'Office Account Console'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="hidden sm:block" style={{ width: '1px', height: '28px', backgroundColor: 'rgba(255,255,255,0.25)' }} />
-
-            <LogoutConfirmPopover
-              buttonClassName="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:bg-white/20 sm:px-4"
-              buttonStyle={{
-                borderColor: 'rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                color: '#ffffff',
-              }}
-            >
-              <LogOut className="h-4 w-4 shrink-0" style={{ color: '#ffffff' }} />
-              {/* Colour set on the span itself: globals.css colours every <span>
-                  directly, so it would not inherit the button's white. */}
-              <span className="hidden sm:inline" style={{ color: '#ffffff' }}>Logout</span>
-            </LogoutConfirmPopover>
-          </div>
-        </div>
-      </header>
+      {/* ── Top Header: the shared portal bar (§8.2) ── */}
+      <PortalHeader
+        homeHref="/office/dashboard"
+        userName={currentUserName}
+        roleLabel={currentUserPosition ?? 'Office Account Console'}
+        sessionLabel="Office Account Console"
+        notifications={{
+          items: bellNotifications.map((n) => ({
+            id: String(n.id),
+            title: n.phase === 'target' ? 'Targets Needed' : 'Ratings Needed',
+            message: n.message,
+            createdAt: n.created_at,
+            unread: !bellSeenAt || n.created_at > bellSeenAt,
+          })),
+          unreadCount,
+          open: showBellDropdown,
+          onToggle: handleToggleBell,
+          onClose: closeBell,
+        }}
+        accountSwitch={switchEnabled
+          ? { prompt: 'Would you like to switch to your regular Employee Account?', onConfirm: () => navigate('/employee/dashboard') }
+          : undefined}
+      />
 
       {/* ── Main Layout ── */}
       <div className="flex flex-col lg:flex-row">

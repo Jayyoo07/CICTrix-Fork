@@ -3,9 +3,7 @@ import {
   Calculator,
   CheckCircle2,
   ChevronRight,
-  Download,
-  ExternalLink,
-  FileText,
+  Eye,
   FolderOpen,
   Info,
   Lock,
@@ -18,15 +16,16 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { useBackClosesView } from '../hooks/useHistoryBack';
-import { ATTACHMENTS_BUCKET, supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { applicantAttachmentDocument, listApplicantDocumentAttachments, type ViewerDocument } from '../lib/documentViewing';
+import { DocumentCollectionModal } from './DocumentCollectionModal';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 import {
   fetchLatestEvaluationForApplicantOrEmailAnySource,
   subscribeToEvaluationChanges,
   type EvaluationSnapshot,
 } from '../lib/evaluationScores';
 import { Modal } from './modal';
-import { useFeedback } from './action-feedback';
-import { describeActionFailure } from '../lib/friendlyErrors';
 import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 import { getAdminRole } from '../lib/adminSession';
 import { fetchWrittenExamTotals, saveWrittenExamTotal, type SaveExamTotalResult } from '../lib/api/examTotalPoints';
@@ -335,6 +334,19 @@ const fmtDate = (iso: string) => {
   catch { return iso; }
 };
 
+const fmtSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+};
+
+/** A scoring file with its size and upload date, as the old file list showed them. */
+const scoringFileDocument = (row: AttachmentRow): ViewerDocument => ({
+  ...applicantAttachmentDocument(row),
+  subtitle: [fmtSize(row.file_size), row.created_at ? fmtDate(row.created_at) : ''].filter(Boolean).join(' · ') || undefined,
+});
+
 /** "Oct 5, 2026 · 5:07 PM" from a date plus an optional "HH:mm[:ss]" time. */
 const fmtSchedule = (iso: string, time?: string | null) => {
   const date = fmtDate(iso);
@@ -355,93 +367,6 @@ const isUpcoming = (iso?: string | null): boolean => {
   today.setHours(0, 0, 0, 0);
   d.setHours(0, 0, 0, 0);
   return d.getTime() > today.getTime();
-};
-
-const fmtSize = (bytes?: number) => {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
-};
-
-// ─── FilesViewerModal ─────────────────────────────────────────────────────────
-
-interface FilesViewerModalProps {
-  title: string;
-  files: AttachmentRow[];
-  onClose: () => void;
-}
-
-/** Signed-URL lifetime for opening an attachment, in seconds. */
-const ATTACHMENT_LINK_TTL_S = 300;
-
-/**
- * Opens an applicant attachment in a new tab. A failed link or a blocked
- * pop-up is reported instead of silently doing nothing (or opening the raw
- * storage path, which is a broken page).
- */
-const openAttachment = async (filePath: string, feedback: ReturnType<typeof useFeedback>) => {
-  try {
-    const { data, error } = await (supabase as any).storage
-      .from(ATTACHMENTS_BUCKET)
-      .createSignedUrl(filePath, ATTACHMENT_LINK_TTL_S);
-    if (error || !data?.signedUrl) throw error ?? new Error('No signed URL returned');
-    const win = window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-    if (!win) {
-      feedback.warning("The file didn't open.", 'Your browser blocked the new tab. Allow pop-ups for this site, then try again.');
-    }
-  } catch (error) {
-    const failure = describeActionFailure('open the file', error, { mode: 'load' });
-    feedback.error(failure.title, `${failure.message} ${failure.nextStep}`);
-  }
-};
-
-const FilesViewerModal = ({ title, files, onClose }: FilesViewerModalProps) => {
-  const feedback = useFeedback();
-  const openFile = (row: AttachmentRow) => openAttachment(row.file_path, feedback);
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      icon={<FileText strokeWidth={1.75} />}
-      title={title}
-      size="sm"
-      footer={<button type="button" onClick={onClose} className="btn btn-md btn-secondary">Close</button>}
-    >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-          {files.length === 0 ? (
-            <p style={{ margin: 0, color: 'var(--text-secondary)', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.9rem' }}>
-              No files uploaded for this category.
-            </p>
-          ) : (
-            files.map((f) => (
-              <div
-                key={f.id}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', background: 'var(--bg-sidebar)', border: `1px solid var(--border-subtle)`, borderRadius: 10, padding: '0.75rem 1rem' }}
-              >
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--status-error-light)', color: 'var(--status-error)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <FileText size={18} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</p>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    {fmtSize(f.file_size)}{f.created_at ? ` · ${fmtDate(f.created_at)}` : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openFile(f)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.75rem', background: 'var(--accent-blue)', border: 'none', borderRadius: 6, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', flexShrink: 0 }}
-                >
-                  <Download size={13} /> Open
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-    </Modal>
-  );
 };
 
 // ─── ExamScoresModal ─────────────────────────────────────────────────────────
@@ -639,7 +564,6 @@ const SM_TITLE: React.CSSProperties = { margin: '0 0 12px', fontWeight: 700, fon
 const SM_LABEL: React.CSSProperties = { margin: 0, fontWeight: 600, fontSize: 14, color: 'var(--color-primary-900)' };
 const SM_NOTE: React.CSSProperties = { margin: 0, fontSize: 12, lineHeight: '16px', color: 'var(--neutral-600)' };
 const SM_CHIP: React.CSSProperties = { width: 28, height: 28, borderRadius: 'var(--radius-chip)', background: 'var(--color-primary-50)', color: 'var(--color-primary)', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-const SM_LINK: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, padding: 0 };
 const SM_FIELD = 'mb-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-[#28343D] focus:border-[#363EE8] focus:outline-none focus:ring-[3px] focus:ring-[#363EE8]/15 disabled:bg-slate-100 disabled:text-slate-400 read-only:bg-slate-50';
 
 interface ApplicantScoringModalProps {
@@ -657,7 +581,6 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   // Current employees (verified at wizard time via employee auth) submit with
   // application_type === 'promotion'. Their evaluation must be locked to a
   // Promotional Appointment — Original is invalid for an existing employee.
-  const feedback = useFeedback();
   const isCurrentEmployee = String(applicant.application_type ?? '').toLowerCase() === 'promotion';
 
   // hasPersistedScores must mean *complete* prior save — otherwise a partial entry
@@ -709,10 +632,8 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
   const [filesModal, setFilesModal] = useState<{ catKey: CatKey; files: AttachmentRow[] } | null>(null);
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
-  // A failed attachment load reads as "couldn't load", not "0 files".
-  const [filesFailed, setFilesFailed] = useState(false);
-  const filesLabel = (count: number) =>
-    loadingFiles ? '…' : filesFailed ? "files couldn't load; reopen to retry" : `${count} files`;
+  const [filesError, setFilesError] = useState('');
+  const [previewFile, setPreviewFile] = useState<ViewerDocument | null>(null);
   const [liveEvaluation, setLiveEvaluation] = useState<EvaluationSnapshot | null>(evaluation ?? null);
 
   useEffect(() => {
@@ -786,25 +707,24 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
 
   // Load attachments for this applicant
   useEffect(() => {
+    let disposed = false;
     const fetchAttachments = async () => {
       setLoadingFiles(true);
-      setFilesFailed(false);
+      setFilesError('');
       try {
-        const { data, error } = await (supabase as any)
-          .from('applicant_attachments')
-          .select('id, file_name, file_path, file_type, document_type, created_at, file_size')
-          .eq('applicant_id', applicant.id);
-        if (error) throw error;
-        setAttachments(data ?? []);
+        const rows = await listApplicantDocumentAttachments(applicant.id);
+        if (!disposed) setAttachments(rows);
       } catch (error) {
-        console.error('[ApplicantScoringModal] attachments failed to load:', error);
-        setAttachments([]);
-        setFilesFailed(true);
+        if (!disposed) {
+          setAttachments([]);
+          setFilesError(error instanceof Error ? error.message : 'Could not load documents. Close the scores and try again.');
+        }
       } finally {
-        setLoadingFiles(false);
+        if (!disposed) setLoadingFiles(false);
       }
     };
     void fetchAttachments();
+    return () => { disposed = true; };
   }, [applicant.id]);
 
   const getFilesForCat = (catKey: CatKey): AttachmentRow[] => {
@@ -1194,28 +1114,24 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       Score: {cat.finalScore ?? 0}
                     </p>
 
-                    {/* View files — experience opens CV directly in new tab */}
+                    {/* Experience opens the CV straight in the viewer; the rest list their files. */}
                     <button
                       type="button"
-                      onClick={async () => {
-                        if (catKey === 'experience') {
-                          const cvRow = attachments.find(a => (a.document_type ?? '').includes('curriculum_vitae'));
-                          const targetRow = cvRow ?? catFiles[0];
-                          if (targetRow) {
-                            await openAttachment(targetRow.file_path, feedback);
-                          } else {
-                            setFilesModal({ catKey, files: catFiles });
-                          }
-                        } else {
-                          setFilesModal({ catKey, files: catFiles });
-                        }
+                      onClick={() => {
+                        const cvRow = catKey === 'experience'
+                          ? attachments.find(a => (a.document_type ?? '').includes('curriculum_vitae')) ?? catFiles[0]
+                          : undefined;
+                        if (cvRow) setPreviewFile(scoringFileDocument(cvRow));
+                        else setFilesModal({ catKey, files: catFiles });
                       }}
-                      style={SM_LINK}
+                      disabled={loadingFiles || Boolean(filesError)}
+                      aria-label={`View ${meta.label} documents`}
+                      className="btn btn-secondary btn-sm"
                     >
-                      <FileText size={13} />
-                      View {meta.label} Documents ({filesLabel(catFiles.length)})
-                      <ExternalLink size={11} />
+                      <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+                      View documents ({loadingFiles ? '…' : catFiles.length})
                     </button>
+                    {filesError && <p role="alert" className="text-body-s text-[var(--error-700)]">{filesError}</p>}
                   </div>
                 );
               })}
@@ -1300,12 +1216,14 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
                       <button
                         type="button"
                         onClick={() => setFilesModal({ catKey, files: catFiles })}
-                        style={SM_LINK}
+                        disabled={loadingFiles || Boolean(filesError)}
+                        aria-label={`View ${meta.label} assessment files`}
+                        className="btn btn-secondary btn-sm"
                       >
-                        <FileText size={12} />
-                        View {meta.label} Assessment Files ({filesLabel(catFiles.length)})
-                        <ExternalLink size={11} />
+                        <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+                        View documents ({loadingFiles ? '…' : catFiles.length})
                       </button>
+                      {filesError && <p role="alert" className="text-body-s text-[var(--error-700)]">{filesError}</p>}
                     </div>
                   );
                 })}
@@ -1331,10 +1249,24 @@ const ApplicantScoringModal = ({ applicant, savedScores, allApplicants, evaluati
       </Modal>
 
       {filesModal && (
-        <FilesViewerModal
+        <DocumentCollectionModal
           title={`${CAT_META[filesModal.catKey].label} Files`}
-          files={filesModal.files}
+          subtitle={applicant.full_name}
+          files={filesModal.files.map(scoringFileDocument)}
           onClose={() => setFilesModal(null)}
+        />
+      )}
+      {previewFile && (
+        <DocumentPreviewModal
+          open
+          viewFirst
+          fileUrl={previewFile.url}
+          fileName={previewFile.fileName}
+          fileType={previewFile.fileType}
+          storageBucket={previewFile.bucket}
+          title={previewFile.fileName}
+          subtitle={applicant.full_name}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </>

@@ -1,7 +1,7 @@
 ---
 title: Open RSP documents in a viewer before printing or downloading
 date: 2026-10-26
-status: Blocked
+status: Done
 summary: Make RSP document actions view-first using the existing in-site viewer, with explicit Print and Download controls instead of immediate file downloads. Preserve document access rules and leave report exports unchanged.
 ---
 
@@ -37,15 +37,26 @@ No database migration, storage-policy change, live database write, deployment, o
 
 ### Implementation outcome (2026-10-26)
 
-**Current blocker:** After the successful verification below, another session committed `8a32af0` and merged upstream in `9be2c0b` on `feat/applicant-file-encryption`. The resulting checkout restored the legacy `DocumentPreviewModal`, `QualifiedApplicantsPage`, `QualifiedApplicantsSection`, and `RSPDashboard` wiring, including immediate downloads. The new viewer components and tests survive, and `documentViewing.ts` is now tracked, but the feature is not currently connected. Previous check results describe the pre-merge implementation, not the current checkout. Do not mark this plan Done until the RSP wiring is reapplied against the merged baseline and verified. Await confirmation of which session/branch should own that integration before editing those shared files again.
+**Reintegration and verification:** The previous blocker (concurrent PR #40 overwrite) was resolved. On branch `feat/rsp-view-first-documents`, the view-first wiring was reapplied on top of the merged `main` baseline (`4a6abca`, including client-side applicant file encryption). Verification was successfully rerun: `npx tsc --noEmit` passed, `npm run lint` passed with 0 warnings, `npm run build:verify` passed, and `npx vitest run --exclude "**/.claude/**" --exclude "**/.worktrees/**" --maxWorkers=2` passed (all 75 test files, 656 tests).
 
 - RSP entry points now use `DocumentPreviewModal` with the opt-in `viewFirst` flow implemented by `src/components/ViewFirstDocumentPreview.tsx`. Existing non-RSP callers retain their legacy behavior and extra actions.
 - `src/components/DocumentCollectionModal.tsx` replaces immediate batch document downloads with file-by-file review. `src/lib/documentViewing.ts` owns exact-row mapping, metadata reads, signed URLs, local blob preparation, downloads, and the native PDF print-tab handoff. Images reuse the shared modal's existing document-only print styles; no token changes were needed.
 - The concurrent applicant-encryption session added `decryptApplicantBlob` to preview preparation. That integration was preserved, with tests added for decrypted output, decryption failure, and closing during decryption. The crypto implementation, uploads, key management, and migration belong to that separate task, not this plan.
-- The implementation and checks completed before the subsequent concurrent merge removed the RSP wiring. This session made no commit, push, or deployment. Another session's security commit included `documentViewing.ts`.
-- Last successful pre-merge verification: all 567 tests in 65 files passed using two workers and excluding nested worktrees; lint and `npm run build:verify` passed. These results must not be claimed for the checkout after `9be2c0b`. The standard production build encountered the Windows esbuild temporary-file access error. Browser checks used non-sensitive fixtures at 375px, 768px, and 1366px; live authenticated files and physical printing remain unverified.
+- The implementation and checks completed and verified against the current merged codebase. No push or deployment was performed.
+- Current checkout verification: all 656 tests in 75 files passed using two workers and excluding nested worktrees; lint and `npm run build:verify` passed.
 
 Detailed results and limitations: `docs/session-summaries/2026-10-26-rsp-view-first-documents-summary.md`.
+
+### Re-land after revert (2026-10-26)
+
+The first implementation was merged (`c4b4ea3`) and reverted (`87593cf`) so it could be reviewed before landing again. Branch `feat/rsp-view-first-documents-v2` re-applies `72a1845` on `main` and fixes five defects the review found:
+
+1. **Failed reads looked like "no documents."** In Supabase mode, a failed attachment read fell through to the local mock database, which answered with an empty list, so the new error state never appeared. An empty fallback after a failed primary read now reports the failure.
+2. **Local/demo previews were removed.** Local rows store `mock://` paths, and the old page previewed them from the applicant wizard's cached copy. That path was deleted, so every local document showed as unavailable. It is restored with an exact applicant and document-type match only, so a missing file still never borrows another one.
+3. **The Experience CV shortcut was dropped** instead of moved into the viewer, as Step 5 required. It now opens the CV in the in-site viewer.
+4. **The scoring file list lost each file's size and upload date.** They are restored as the row subtitle.
+5. **View stayed enabled for documents with no file,** opening a viewer that could only show an error. It is now disabled.
+
 
 ## Steps
 

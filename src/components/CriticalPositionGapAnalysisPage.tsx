@@ -46,6 +46,8 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [summaries, setSummaries] = useState<Map<string, QualificationSummary>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const [positionSearch, setPositionSearch] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
@@ -56,24 +58,42 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
   const [profile, setProfile] = useState<EmployeeQualificationProfile | null>(null);
   const [comparison, setComparison] = useState<GapAnalysisResult | null>(null);
   const [loadingComparison, setLoadingComparison] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [comparisonAttempt, setComparisonAttempt] = useState(0);
   const showListLoader = useDelayedLoading(loading);
   const listsPending = loading || showListLoader;
   const showComparisonLoader = useDelayedLoading(loadingComparison);
 
   useEffect(() => {
     if (!officeId) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    setPositions([]);
+    setEmployees([]);
+    setSummaries(new Map());
+    setSelectedPositionId(null);
+    setSelectedEmployeeId(null);
     (async () => {
-      const deptRes = await getDepartmentById(officeId);
-      const name = deptRes.success ? deptRes.data.name : officeName;
-      setDepartmentName(name);
-      const [posRes, emps] = await Promise.all([listCriticalPositions(officeId), listEmployeeOptions()]);
-      if (posRes.ok) setPositions(posRes.data);
-      setEmployees(emps);
-      setSummaries(await getQualificationSummaries(emps.map((e) => e.id)));
-      setLoading(false);
+      try {
+        const deptRes = await getDepartmentById(officeId);
+        const name = deptRes.success ? deptRes.data.name : officeName;
+        const [posRes, emps] = await Promise.all([listCriticalPositions(officeId), listEmployeeOptions()]);
+        if ('error' in posRes) throw new Error('Unable to load critical positions.');
+        const employeeSummaries = await getQualificationSummaries(emps.map((e) => e.id));
+        if (cancelled) return;
+        setDepartmentName(name);
+        setPositions(posRes.data);
+        setEmployees(emps);
+        setSummaries(employeeSummaries);
+      } catch {
+        if (!cancelled) setLoadError('Could not load qualifications and IPCR scores. Please try again.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [officeId]);
+    return () => { cancelled = true; };
+  }, [officeId, officeName, loadAttempt]);
 
   const departmentOptions = useMemo(
     () => [...new Set(employees.map((e) => e.department).filter((d): d is string => !!d))].sort((a, b) => a.localeCompare(b)),
@@ -118,28 +138,34 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
   const selectedPosition = positions.find((p) => p.id === selectedPositionId) ?? null;
 
   useEffect(() => {
+    setProfile(null);
+    setComparison(null);
+    setComparisonError(null);
     if (!selectedPositionId || !selectedEmployeeId || !selectedPosition) {
-      setProfile(null);
-      setComparison(null);
+      setLoadingComparison(false);
       return;
     }
     let cancelled = false;
     setLoadingComparison(true);
     (async () => {
-      const [reqs, prof] = await Promise.all([
-        getPositionRequirements(selectedPositionId, selectedPosition),
-        getEmployeeQualificationProfile(selectedEmployeeId),
-      ]);
-      if (cancelled) return;
-      setProfile(prof);
-      setComparison(prof ? compareQualifications(prof, reqs) : null);
-      setLoadingComparison(false);
+      try {
+        const [reqs, prof] = await Promise.all([
+          getPositionRequirements(selectedPositionId, selectedPosition),
+          getEmployeeQualificationProfile(selectedEmployeeId),
+        ]);
+        if (cancelled) return;
+        setProfile(prof);
+        setComparison(prof ? compareQualifications(prof, reqs) : null);
+      } catch {
+        if (!cancelled) setComparisonError('Could not load this comparison and its IPCR score. Please try again.');
+      } finally {
+        if (!cancelled) setLoadingComparison(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPositionId, selectedEmployeeId]);
+  }, [selectedPositionId, selectedEmployeeId, selectedPosition, comparisonAttempt]);
 
   return (
     <div className="space-y-6">
@@ -150,6 +176,13 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
           strengths and gaps before considering them for succession.
         </p>
       </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-[var(--error-300)] bg-[var(--error-100)] p-4 text-sm text-[var(--error-700)]">
+          <p className="!mb-2 text-[var(--error-700)]">{loadError}</p>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setLoadAttempt((n) => n + 1)}>Try again</button>
+        </div>
+      )}
 
       <div className="rounded-xl border border-[var(--border-color)] bg-white p-4">
         <h3 className="!mb-2 text-sm font-semibold text-[var(--text-primary)]">Filters</h3>
@@ -207,7 +240,7 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
           </div>
           <div className="max-h-72 overflow-y-auto rounded-lg border border-[var(--border-color)]">
             {listsPending && <SkeletonList show={showListLoader} rows={4} label="Loading critical positions…" />}
-            {!listsPending && filteredPositions.length === 0 && (
+            {!listsPending && !loadError && filteredPositions.length === 0 && (
               <p className="px-3 py-4 text-center text-sm text-[var(--text-secondary)]">No critical positions found.</p>
             )}
             {!listsPending && filteredPositions.map((p) => (
@@ -246,7 +279,7 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
           </div>
           <div className="max-h-72 overflow-y-auto rounded-lg border border-[var(--border-color)]">
             {listsPending && <SkeletonList show={showListLoader} rows={4} label="Loading employees…" />}
-            {!listsPending && filteredEmployees.length === 0 && (
+            {!listsPending && !loadError && filteredEmployees.length === 0 && (
               <p className="px-3 py-4 text-center text-sm text-[var(--text-secondary)]">No matching employees.</p>
             )}
             {!listsPending && filteredEmployees.map((e) => (
@@ -273,6 +306,11 @@ export const CriticalPositionGapAnalysisPage = ({ officeId, officeName }: Critic
         <div className="rounded-xl border border-dashed border-[var(--border-color)] bg-white px-5 py-10 text-center">
           <p className="!mb-1 text-sm font-medium text-[var(--text-primary)]">Select a critical position and an employee</p>
           <p className="!mb-0 text-sm text-[var(--text-secondary)]">The comparison will be generated automatically once both are picked.</p>
+        </div>
+      ) : comparisonError ? (
+        <div role="alert" className="rounded-lg border border-[var(--error-300)] bg-[var(--error-100)] p-4 text-sm text-[var(--error-700)]">
+          <p className="!mb-2 text-[var(--error-700)]">{comparisonError}</p>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setComparisonAttempt((n) => n + 1)}>Try again</button>
         </div>
       ) : loadingComparison || showComparisonLoader ? (
         <div className="overflow-hidden rounded-xl border border-[var(--border-color)] bg-white" aria-busy="true">

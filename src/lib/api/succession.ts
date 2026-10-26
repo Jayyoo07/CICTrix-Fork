@@ -370,6 +370,51 @@ async function cycleTitles(cycleIds: number[]): Promise<Map<number, string>> {
 /** Core/Strategic/Support split configured for a department, if any. */
 type FunctionWeights = { core: number; strategic: number; support: number };
 
+/** Match the IPCR roll-up's trimmed, exact office-name lookup, but in bulk. */
+async function departmentsByEmployee(employeeIds: string[]): Promise<Map<string, string>> {
+  const failure = 'Unable to resolve employee departments for IPCR scoring. Please try again.';
+  try {
+    // Neither employees nor employees_with_department has a department_id.
+    const { data: employees, error: empError } = await supabase
+      .from('employees')
+      .select('id, department')
+      .in('id', employeeIds);
+    if (empError || !Array.isArray(employees)) throw new Error(failure);
+
+    const nameByEmployee = new Map<string, string>();
+    for (const employee of employees) {
+      const name = typeof employee.department === 'string' ? employee.department.trim() : '';
+      if (!name || nameByEmployee.has(employee.id)) throw new Error(failure);
+      nameByEmployee.set(employee.id, name);
+    }
+    // Missing/hidden/truncated rows must not masquerade as unconfigured offices.
+    if (employeeIds.some((id) => !nameByEmployee.has(id))) throw new Error(failure);
+
+    const names = [...new Set(nameByEmployee.values())];
+    const { data: departments, error: deptError } = await supabase
+      .from('departments')
+      .select('id, name')
+      .in('name', names);
+    if (deptError || !Array.isArray(departments)) throw new Error(failure);
+
+    const idByName = new Map<string, string>();
+    for (const department of departments) {
+      if (!department.id || idByName.has(department.name)) throw new Error(failure);
+      idByName.set(department.name, department.id);
+    }
+    const out = new Map<string, string>();
+    for (const id of employeeIds) {
+      const departmentId = idByName.get(nameByEmployee.get(id)!);
+      if (!departmentId) throw new Error(failure);
+      out.set(id, departmentId);
+    }
+    return out;
+  } catch {
+    // Do not expose database details or employee identity through shared callers.
+    throw new Error(failure);
+  }
+}
+
 /**
  * Active weighting schema per department, in one query.
  *
@@ -382,20 +427,31 @@ async function weightsByDepartment(departmentIds: (string | null)[]): Promise<Ma
   const out = new Map<string, FunctionWeights>();
   if (!ids.length) return out;
 
-  const { data } = await supabase
-    .from('department_weighting_configs')
-    .select('department_id, weighting_schema_options(core_weight, strategic_weight, support_weight)')
-    .in('department_id', ids)
-    .eq('is_active', true);
+  const failure = 'Unable to load department weights for IPCR scoring. Please try again.';
+  try {
+    const { data, error, count } = await supabase
+      .from('department_weighting_configs')
+      .select('department_id, weighting_schema_options(core_weight, strategic_weight, support_weight)', { count: 'exact' })
+      .in('department_id', ids)
+      .eq('is_active', true);
+    // Unlike missing mappings, missing configs are legitimate. Confirm the
+    // response is complete before treating an absent config as unweighted.
+    if (error || !Array.isArray(data) || count !== data.length) throw new Error(failure);
 
-  for (const row of (data ?? []) as any[]) {
-    const opt = row.weighting_schema_options;
-    if (!opt) continue;
-    out.set(String(row.department_id), {
-      core: Number(opt.core_weight) || 0,
-      strategic: Number(opt.strategic_weight) || 0,
-      support: Number(opt.support_weight) || 0,
-    });
+    for (const row of data as any[]) {
+      const opt = row.weighting_schema_options;
+      if (!ids.includes(row.department_id) || !opt || Array.isArray(opt) || out.has(row.department_id)) throw new Error(failure);
+      const values = [opt.core_weight, opt.strategic_weight, opt.support_weight];
+      if (values.some((value) =>
+        !['number', 'string'].includes(typeof value) || String(value).trim() === '' ||
+        !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100,
+      )) throw new Error(failure);
+      const [core, strategic, support] = values.map(Number);
+      if (Math.abs(core + strategic + support - 100) > 0.000001) throw new Error(failure);
+      out.set(String(row.department_id), { core, strategic, support });
+    }
+  } catch {
+    throw new Error(failure);
   }
   return out;
 }
@@ -457,6 +513,8 @@ function overallFromMfoRows(mfoRows: any[], weights: FunctionWeights | null): nu
  * the "current" (fully-completed) cycle so recommendations never pull from a
  * half-collected new semester (see semesterTransition.getLndSourceCycleId). When
  * omitted or null it keeps the original "newest across all semesters" behaviour.
+ * Office mapping/config failures reject, rather than silently returning
+ * unweighted scores. Only a confirmed absence of active configuration falls back.
  */
 export async function getLatestOverallScores(
   employeeIds: string[],
@@ -486,7 +544,7 @@ export async function getLatestOverallScores(
   }
 
   const settingIds = [...latestByEmployee.values()].map((s) => s.id);
-  const [{ data: mfoRows }, titles, { data: empDepts }] = await Promise.all([
+  const [{ data: mfoRows }, titles, deptByEmployee] = await Promise.all([
     supabase
       .from('mfos')
       .select(
@@ -494,10 +552,7 @@ export async function getLatestOverallScores(
       )
       .in('target_setting_id', settingIds),
     cycleTitles([...latestByEmployee.values()].map((s) => s.cycle_id)),
-    supabase
-      .from('employees')
-      .select('id, department_id')
-      .in('id', [...latestByEmployee.keys()]),
+    departmentsByEmployee([...latestByEmployee.keys()]),
   ]);
 
   const mfosBySetting = new Map<string, any[]>();
@@ -511,9 +566,6 @@ export async function getLatestOverallScores(
   // Core/Strategic/Support split, so two employees with identical ratings in
   // differently-configured offices score differently — which is the point of
   // the configuration.
-  const deptByEmployee = new Map<string, string | null>(
-    ((empDepts ?? []) as any[]).map((e) => [String(e.id), e.department_id ?? null]),
-  );
   const weightsByDept = await weightsByDepartment([...deptByEmployee.values()]);
 
   for (const [employeeId, setting] of latestByEmployee) {

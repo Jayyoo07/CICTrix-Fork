@@ -1,7 +1,7 @@
 ---
 title: PM dashboard cleanup
 date: 2026-10-26
-status: Approved
+status: Done
 summary: Remove the Competency & Succession Watchlist and the IPCR Submissions panel from the PM dashboard, after confirming the submissions data exists elsewhere.
 ---
 
@@ -28,3 +28,7 @@ The PM dashboard drops two redundant sections without leaving gaps.
 ## Checks to run
 
 `npx tsc --noEmit`, `npm run lint`, `npm test`.
+
+## Outcome (2026-10-26)
+
+The safeguard stopped half of the removal. The panel's Pending tab is covered by IPCR Management (same `ipcr_submissions` and probationary schedule sources, with stage, type, period and status per employee). Its Recent tab is not: it lists `performance_evaluations` (272 live rows, Approved with final scores), which Summary of Ratings does not read and which no other screen in the PM navigation shows. Decision: keep the IPCR Submissions panel, remove only the Watchlist, and make the panel full width.

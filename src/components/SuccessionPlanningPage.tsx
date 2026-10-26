@@ -81,19 +81,65 @@ type OcboRow = {
  */
 const CRITERION_HOW: Record<string, string> = {
   // succession.ts: ipcrScore / 5, scaled to the weight.
-  ipcr: 'The latest completed IPCR rating out of 5. No rating on file scores 0.',
+  ipcr: 'Latest completed IPCR rating out of 5. No rating on file scores 0.',
   // successionCriteria.ts experienceScore: years, position level, progression.
   experience:
-    'Years of service, position level and career progression together. A part with no data is left out and the rest carry its weight, which is why some read "not assessed" below.',
+    'Years of service, position level and career progression. A part with no data is left out and the rest carry its weight.',
   // succession.ts scoreTraining, threshold mode.
   training:
-    'Hours against the position’s requirement (60%), how recent the latest training is (25%), and how many required categories are covered (15%).',
+    'Hours against the requirement (60%), how recent the latest training is (25%), and required categories covered (15%).',
   // successionCriteria.ts educationScore.
   education:
-    'Only a degree above the position’s minimum counts, and only if it is relevant: one level above scores 60% of the weight, two or more scores all of it.',
+    'Only a relevant degree above the minimum counts: one level above earns 60% of the weight, two or more earns all of it. An irrelevant degree scores 0 however high.',
   // successionCriteria.ts eligibilityScore.
   eligibility:
-    'The points of every unexpired eligibility added up, divided by the points HR set for full marks. Expired or unconfigured ones count nothing.',
+    'Points from every unexpired eligibility, divided by the points HR set for full marks. Expired or unconfigured ones count nothing.',
+};
+
+/** What a candidate would have to do to take this criterion to its weight. */
+const CRITERION_MAX: Record<string, string> = {
+  ipcr: 'A 5.00 IPCR rating.',
+  experience: 'Service of at least twice the position’s minimum, and a salary grade at or near the target’s.',
+  training: 'Meet the required hours, finish a training within the last 12 months, and cover every required category.',
+  education: 'A relevant degree two levels above the minimum.',
+  eligibility: 'Unexpired eligibilities whose configured points reach the full-marks figure.',
+};
+
+/**
+ * Read this candidate's own figure back in words.
+ *
+ * The "how" column is the same for everyone; this column is the only one that
+ * answers "why did *he* get that", which is the question an admin opens the
+ * panel to ask. It is derived from the figure and the inputs already on the
+ * row — nothing here re-scores anyone.
+ */
+const criterionMeaning = (
+  c: { key: string; value: number; max: number },
+  row: Pick<OcboRow, 'experienceParts' | 'eligibility'>,
+): string => {
+  const share = c.max > 0 ? c.value / c.max : 0;
+  const pct = Math.round(share * 100);
+  if (c.key === 'ipcr') {
+    return c.value <= 0
+      ? 'No completed IPCR on file.'
+      : `An IPCR rating of about ${(share * 5).toFixed(2)} out of 5.`;
+  }
+  if (c.key === 'experience') {
+    const missing = row.experienceParts.filter((part) => part.ratio == null).map((part) => part.label);
+    const earned = `${pct}% of the weight earned.`;
+    return missing.length
+      ? `${earned} ${missing.join(' and ')} could not be assessed, so the rest carried the weight.`
+      : earned;
+  }
+  if (c.key === 'education') {
+    return c.value <= 0
+      ? 'Only the minimum degree, or a degree outside the field.'
+      : `${pct}% of the weight: a relevant degree above the minimum.`;
+  }
+  if (c.key === 'eligibility') {
+    return `${row.eligibility.rawPoints} of the ${row.eligibility.pointsForFullMarks} points needed for full marks.`;
+  }
+  return `${pct}% of the weight earned.`;
 };
 
 const CRITERIA_COLUMNS = [
@@ -551,26 +597,49 @@ const OcboTableView = (_props: { admin: string }) => {
                                             <p className="!mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                                               Score breakdown &mdash; {r.score.toFixed(1)} / 100
                                             </p>
-                                            {/* Numeric, not bars: the panel explains a ranking
-                                                between candidates, and a fill would read as
-                                                progress toward a target. */}
-                                            <div className="grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
-                                              {r.criteria.map((c) => (
-                                                <div key={c.key} className="border-b border-slate-100 py-1 last:border-0">
-                                                  <div className="flex items-baseline justify-between gap-3">
-                                                    <span className="text-[11px] font-semibold text-slate-700">{c.label}</span>
-                                                    <span className="text-[11px] tabular-nums text-slate-700">
-                                                      <strong className="font-semibold">{c.value.toFixed(1)}</strong>
-                                                      <span className="text-slate-400"> / {c.max}</span>
-                                                    </span>
-                                                  </div>
-                                                  {CRITERION_HOW[c.key] && (
-                                                    <p className="!mb-0 mt-0.5 text-[10px] leading-snug text-slate-500">
-                                                      {CRITERION_HOW[c.key]}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                              ))}
+                                            {/* A table, not a list of lines: the four things an
+                                                admin asks of a figure — the rule, the number,
+                                                what it says about this candidate, and what would
+                                                raise it — line up column by column, so two
+                                                criteria can be compared by reading down. */}
+                                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                              <table className="w-full border-collapse text-left">
+                                                <thead>
+                                                  <tr className="bg-slate-100 text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                                                    <th scope="col" className="px-2 py-1.5">Criterion</th>
+                                                    <th scope="col" className="px-2 py-1.5">How it is scored</th>
+                                                    <th scope="col" className="px-2 py-1.5 text-right">Score</th>
+                                                    <th scope="col" className="px-2 py-1.5">What this score means</th>
+                                                    <th scope="col" className="px-2 py-1.5">To reach the maximum</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {r.criteria.map((c) => (
+                                                    <tr key={c.key} className="border-t border-slate-100 align-top">
+                                                      <th scope="row" className="whitespace-nowrap px-2 py-1.5 text-left text-[11px] font-semibold text-slate-700">
+                                                        {c.label}
+                                                        <span className="ml-1 font-normal text-slate-400">({c.max})</span>
+                                                      </th>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-500">
+                                                        {CRITERION_HOW[c.key]}
+                                                      </td>
+                                                      {/* Always a number, never blank: an absent
+                                                          record must read as 0, not as a
+                                                          rendering fault. */}
+                                                      <td className="whitespace-nowrap px-2 py-1.5 text-right text-[11px] tabular-nums text-slate-700">
+                                                        <strong className="font-semibold">{c.value.toFixed(1)}</strong>
+                                                        <span className="text-slate-400"> / {c.max}</span>
+                                                      </td>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-600">
+                                                        {criterionMeaning(c, r)}
+                                                      </td>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-500">
+                                                        {CRITERION_MAX[c.key]}
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
                                             </div>
                                             {/* How the Experience figure above was arrived at.
                                                 Every input is listed, including those with no

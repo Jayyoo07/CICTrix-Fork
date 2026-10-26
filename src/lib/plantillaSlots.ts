@@ -337,6 +337,39 @@ export const fetchSlotApplicantCounts = async (jobPostingId?: string): Promise<M
   return counts;
 };
 
+/**
+ * Same counts, but `ok: false` when neither the view nor the link table could
+ * be read, so a screen can tell "no applicants" from "couldn't check".
+ */
+export const fetchSlotApplicantCountsChecked = async (
+  jobPostingId?: string,
+): Promise<{ ok: boolean; counts: Map<string, number>; error?: unknown }> => {
+  const counts = new Map<string, number>();
+  try {
+    let query = client.from('plantilla_slot_applicant_counts').select('plantilla_slot_id, applicant_count');
+    if (jobPostingId) query = query.eq('job_posting_id', jobPostingId);
+    const { data, error } = await query;
+    if (!error) {
+      (data ?? []).forEach((row: any) => counts.set(String(row.plantilla_slot_id), Number(row.applicant_count) || 0));
+      return { ok: true, counts };
+    }
+  } catch (err) {
+    console.warn('[plantillaSlots] slot count view failed, trying the link table:', err);
+  }
+  try {
+    const { data, error } = await client.from('application_plantilla_slots').select('plantilla_slot_id');
+    if (error) throw error;
+    (data ?? []).forEach((row: any) => {
+      const slotId = String(row?.plantilla_slot_id ?? '');
+      if (slotId) counts.set(slotId, (counts.get(slotId) ?? 0) + 1);
+    });
+    return { ok: true, counts };
+  } catch (error) {
+    console.warn('[plantillaSlots] slot applicant counts unavailable:', error);
+    return { ok: false, counts, error };
+  }
+};
+
 /** Link one application to the slots the applicant ticked. */
 export const linkApplicationToSlots = async (
   applicantId: string,

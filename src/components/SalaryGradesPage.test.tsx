@@ -164,7 +164,10 @@ describe('SalaryGradesPage edit drawer', () => {
     fireEvent.change(within(drawer).getByLabelText('Step 2'), { target: { value: '11500' } });
     fireEvent.click(within(drawer).getByRole('button', { name: 'Save SG 1' }));
 
-    expect(await within(drawer).findByText('Step 2 was not saved: permission denied')).toBeInTheDocument();
+    // Names the step and explains it in plain language; the database text stays in the console.
+    const message = await within(drawer).findByText(/Step 2 was not saved/);
+    expect(message.textContent).toContain("You don't have permission");
+    expect(message.textContent).not.toContain('permission denied');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

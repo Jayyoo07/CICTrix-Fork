@@ -41,6 +41,7 @@ vi.mock('../lib/supabase', () => {
 vi.mock('../lib/plantillaSlots', () => ({
   fetchApplicantSlotLinks: () => Promise.resolve(new Map([['x2', [{ applicantId: 'x2', slotId: 'open-s2', status: 'applied' }]]])),
   fetchSlotApplicantCounts: () => Promise.resolve(new Map()),
+  fetchSlotApplicantCountsChecked: () => Promise.resolve({ ok: true, counts: new Map() }),
   saveSlotsForJob: vi.fn(),
 }));
 
@@ -52,6 +53,7 @@ vi.mock('../lib/recruitmentData', () => ({
   formatPHDate: (value: string) => String(value).slice(0, 10),
   getApplicants: () => [],
   getJobPostings: () => jobs,
+  getJobPostingsLoadError: () => null,
   isJobPostingsLoaded: () => true,
   loadJobPostings: () => Promise.resolve(jobs),
   saveApplicants: vi.fn(),

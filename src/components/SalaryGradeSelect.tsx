@@ -11,6 +11,7 @@
  * Form control styling follows DESIGN_IDENTITY.md §9.3.
  */
 
+import { failureText } from '../lib/friendlyErrors';
 import { useEffect, useState } from 'react';
 import {
   formatSalary,
@@ -55,7 +56,7 @@ export const SalaryGradeSelect = ({
     let cancelled = false;
     void listSalaryGrades().then((res) => {
       if (cancelled) return;
-      if (res.ok === false) setError(res.error);
+      if (res.ok === false) setError(failureText('load the salary grades', res.error, { mode: 'load' }));
       else setRows(res.data);
       setLoading(false);
     });

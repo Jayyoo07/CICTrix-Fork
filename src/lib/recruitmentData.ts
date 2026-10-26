@@ -528,7 +528,9 @@ const mapSupabaseStatusToJobPostingStatus = (raw: string | null | undefined): Jo
   return 'Active';
 };
 
-const persistJobPostingsToSupabase = async (rows: JobPosting[]): Promise<void> => {
+export type PersistResult = { ok: boolean; error?: unknown };
+
+const persistJobPostingsToSupabase = async (rows: JobPosting[]): Promise<PersistResult> => {
   // Upsert-only. The previous version also ran
   //   .delete().not('id', 'in', keptIds)
   // to "sync" Supabase to the in-memory list. That nuked rows whenever the
@@ -543,7 +545,7 @@ const persistJobPostingsToSupabase = async (rows: JobPosting[]): Promise<void> =
   console.log('[recruitmentData] Persisting to Supabase, converting:', rows.map(r => ({ id: r.id, title: r.title, appStatus: r.status })), 'to:', supabaseRows);
   if (supabaseRows.length === 0) {
     console.warn('[recruitmentData] No valid rows to persist');
-    return;
+    return { ok: true };
   }
 
   try {
@@ -562,9 +564,10 @@ const persistJobPostingsToSupabase = async (rows: JobPosting[]): Promise<void> =
           }),
         );
       }
-    } else {
-      console.log('[RECRUITMENT] Upsert succeeded, rows persisted:', supabaseRows.length);
+      return { ok: false, error: upsertError };
     }
+    console.log('[RECRUITMENT] Upsert succeeded, rows persisted:', supabaseRows.length);
+    return { ok: true };
   } catch (err) {
     console.error('[RECRUITMENT] Error persisting job postings to Supabase:', err);
     if (typeof window !== 'undefined') {
@@ -574,6 +577,7 @@ const persistJobPostingsToSupabase = async (rows: JobPosting[]): Promise<void> =
         }),
       );
     }
+    return { ok: false, error: err };
   }
 };
 
@@ -599,13 +603,22 @@ export const saveJobPostings = (rows: JobPosting[]): void => {
  * Anything that writes a child row pointing at a posting — plantilla_slots
  * above all — has to await this first, otherwise a brand-new posting's slots
  * hit a foreign key that does not exist yet.
+ *
+ * Resolves `{ ok: false, error }` when Supabase rejected the rows; the cache is
+ * then rolled back so the screen never shows a posting the database lacks.
  */
-export const saveJobPostingsAndWait = async (rows: JobPosting[]): Promise<void> => {
+export const saveJobPostingsAndWait = async (rows: JobPosting[]): Promise<PersistResult> => {
   const normalizedRows = Array.isArray(rows) ? rows : [];
+  const previous = jobPostingsCache;
   jobPostingsCache = normalizedRows;
   jobPostingsLoaded = true;
   dispatchJobPostingsUpdated();
-  await persistJobPostingsToSupabase(normalizedRows);
+  const result = await persistJobPostingsToSupabase(normalizedRows);
+  if (!result.ok) {
+    jobPostingsCache = previous;
+    dispatchJobPostingsUpdated();
+  }
+  return result;
 };
 
 export const getApplicants = () => safeJsonParse<Applicant[]>(localStorage.getItem(APPLICANTS_KEY), []);
@@ -828,7 +841,10 @@ export const getNewlyHiredFromSupabase = async (): Promise<NewlyHired[]> => {
   }
 };
 
-export const saveNewlyHired = async (rows: NewlyHired[]) => {
+/** Resolves `{ ok: false }` when any row failed to reach Supabase; `failed` counts them. */
+export const saveNewlyHired = async (rows: NewlyHired[]): Promise<{ ok: boolean; failed: number; error?: unknown }> => {
+  let failed = 0;
+  let firstError: unknown;
   // Source of truth: Supabase newly_hired table. No localStorage.
 
   // Hire records built from stale UI rows can arrive with blank position/
@@ -892,12 +908,17 @@ export const saveNewlyHired = async (rows: NewlyHired[]) => {
 
       if (result.error) {
         console.error('Supabase upsert newly_hired failed:', result.error);
+        failed++;
+        firstError ??= result.error;
       }
     } catch (err) {
       console.error('Supabase upsert newly_hired exception:', err);
+      failed++;
+      firstError ??= err;
     }
   }
   dispatchNewlyHiredUpdated();
+  return { ok: failed === 0, failed, error: firstError };
 };
 
 export const getRaterAssignments = () =>

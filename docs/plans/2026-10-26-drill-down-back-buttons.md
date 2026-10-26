@@ -1,7 +1,7 @@
 ---
 title: In-page Back buttons on drill-downs, alongside browser Back
 date: 2026-10-26
-status: In Progress
+status: Done
 summary: Add a visible Back button to every in-page drill-down that lost its back link in the 2026-10-07 change, keeping browser Back closing one level.
 ---
 

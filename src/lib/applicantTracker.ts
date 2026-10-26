@@ -172,8 +172,13 @@ export const fetchPendingResubmissionIds = async (applicantIds: string[]): Promi
     .in('applicant_id', applicantIds);
   if (error || !Array.isArray(data)) return new Set();
 
+  return pendingResubmissionIds(data as TrackerAttachment[]);
+};
+
+/** Reuse the document snapshot rather than querying again for list-row flags. */
+export const pendingResubmissionIds = (attachments: TrackerAttachment[]): Set<string> => {
   const byApplicant = new Map<string, TrackerAttachment[]>();
-  (data as TrackerAttachment[]).forEach((row) => {
+  attachments.forEach((row) => {
     const id = String(row.applicant_id ?? '');
     byApplicant.set(id, [...(byApplicant.get(id) ?? []), row]);
   });

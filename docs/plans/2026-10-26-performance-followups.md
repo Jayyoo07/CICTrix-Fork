@@ -1,7 +1,7 @@
 ---
 title: Reduce remaining Supabase fetch fan-out and polling
 date: 2026-10-26
-status: Draft
+status: Blocked
 summary: Batch dashboard succession counts, remove duplicate recruitment reads, scope refreshes to active sections, and reduce redundant polling without changing displayed results.
 ---
 
@@ -9,7 +9,17 @@ summary: Batch dashboard succession counts, remove duplicate recruitment reads, 
 
 Make the RSP dashboard, Job Posts, applicant tracker, and interviewer portal issue fewer repeated requests while preserving their counts, matching rules, and update behavior. Ship one measured change at a time.
 
-This follows [Batch succession candidate loading per department](2026-10-26-succession-batch-fetch.md), which is already upstream. That implementation is not repeated here. Publishing this plan does not authorize implementation, deployment, or database changes; polling intervals and interviewer revocation latency remain decisions to confirm.
+This follows [Batch succession candidate loading per department](2026-10-26-succession-batch-fetch.md), which is already upstream. That implementation is not repeated here. Publishing this plan did not authorize implementation, deployment, or database changes. The user approved the remaining polling work on 2026-10-27 after the decisions below; no push, deployment, or database change is authorized.
+
+### Approved execution scope (2026-10-27)
+
+- Steps 1–3 are already complete per the user; do not repeat or modify them in this run.
+- Implement step 4 first: a named 15-second visible-tab fallback, paused while hidden, with coalesced catch-up on return/reconnect. Preserve realtime, post-upload refresh, last-good data on transient failures, and stale-search protection. Refresh attachments and slot outcomes even when the record timestamp/status is unchanged.
+- Evaluate step 5 separately. A 30-second fallback is approved only after actual realtime delivery and independent server-side denial are verified. Keep polling in hidden interviewer tabs and check immediately on focus/return/reconnect; browser timer throttling prevents a hard hidden-tab latency guarantee. Until the gates pass, leave the existing three-second check unchanged.
+- Keep new/moved reads and subscriptions in `src/lib/`. Use a tracker-scoped refresh coordinator, not a new global caching framework. Share attachment rows between document display and resubmission flags where possible. Ignore obsolete requests after a new search, row switch, upload invalidation, or unmount.
+- Add fake-timer/request-budget and race regression tests, then type-check, lint, the full suite, and a build. Record live checks separately from mocked checks. One read-only independent reviewer is approved using `openai/gpt-6.1-sol#high`.
+- Read-only preflight: `raters` is not in `supabase_realtime`; `evaluations` has RLS disabled and authenticated INSERT/UPDATE grants. Step 5 cannot pass its current gates. Do not change publication/policies here; record that blocker separately.
+- Live-verification follow-up: the user supplied a current publishable key for gitignored local configuration and authorized pushing to `origin/main` and merging by upstream PR after testing. Initial live measurement reduced requests but increased bytes because every fallback fetched all slots. Scope tracker slot metadata to IDs from that person's slot links (skip it when there are no links), preserve other callers' all-slot behavior, and repeat the measurement before delivery.
 
 ## Approach
 
@@ -79,7 +89,7 @@ Job Posts independently fetches applicants and slot links for raw rows and for `
 The tracker polls the record and attachments every two seconds while also subscribing to both datasets. That timer alone schedules about 60 reads per minute per open tab and continues when hidden. Slot-outcome reads can add requests when record status or timestamps change.
 
 - Keep realtime as the primary update path and retain immediate refresh after search and upload.
-- Proposed fallback: a named 15-second interval while visible, pending approval. Recheck whether a 30-second interval is acceptable after validating realtime delivery.
+- Approved fallback (2026-10-27): a named 15-second interval while visible. Do not lengthen it to 30 seconds in this run.
 - Pause fallback polling when hidden and perform one coalesced catch-up refresh on return or reconnect.
 - Deduplicate overlapping realtime and poll refreshes; protect against stale results from an earlier applicant search.
 - Keep record, attachment, and plantilla-outcome updates correct. A record-only refresh must not miss an attachment or slot-link change.
@@ -96,7 +106,7 @@ Interviewer routes check rater access every three seconds, approximately 20 time
 
 - Preserve immediate same-browser revocation and focus checks.
 - Verify an identity-scoped realtime subscription can observe access changes under the actual permissions. Realtime is an invalidation signal, not a replacement for server-side authorization.
-- Propose a named 30-60-second fallback only after agreeing on maximum cross-browser revocation latency and testing realtime failure. Until then, keep the existing revocation bound.
+- Approved conditional fallback (2026-10-27): 30 seconds only after testing actual realtime delivery, realtime failure, and independent server-side denial. Continue checks while hidden and immediately on return/focus/reconnect; background browser throttling prevents a hard hidden-tab guarantee. Until the gates pass, keep the existing three-second check.
 - Prefer an identity-scoped access read where existing email normalization and permissions permit it; do not fetch the entire roster merely to check one interviewer.
 - Preserve current behavior on transient failures and ensure subscription and timer cleanup on logout or identity changes.
 
@@ -137,3 +147,14 @@ For each later implementation PR:
 - Compare returned counts and displayed data; test failure, authoritative empty results, overlapping triggers, stale responses, and post-write invalidation.
 - Complete a signed-in UI pass on affected routes, including hidden-tab return, navigation, and realtime-disconnected fallback tests.
 - Record measured outcomes and deviations in the plan and session summary; regenerate the plans dashboard. Do not mark implementation Done based only on this plan being merged.
+
+## Execution results (2026-10-27)
+
+- Steps 1–3 are complete per the user and were left unchanged.
+- Step 4 implementation: `src/lib/applicantTrackerRefresh.ts` owns the visible 15-second fallback, realtime subscription, catch-up events, serialization, invalidation and cleanup. The page keeps only search/row/upload state. One paginated attachment snapshot supplies document display and action-required flags for every application. Stable ordering and exact counts avoid truncation even below the requested page size. Independent slot/link reads run on each refresh; checked failures retain last-good outcomes. Search, row and upload-attempt generations reject obsolete responses, including React StrictMode effect replay.
+- Fake-clock verification: four refreshes per visible minute, one record and one document service read each, plus one link and one slot read each: 16 steady-state reads/minute for single-page results, not eight total. Eight is only the record/document subset; pagination, realtime and catch-up can add reads. Hidden fallback timers make zero reads. No live timing or byte-volume improvement is claimed.
+- Step 5 preflight failed: `raters` is not published to `supabase_realtime`. `evaluations` has RLS disabled and authenticated INSERT/UPDATE grants; `raters` policies also allow unconditional public updates. Server-side revocation denial therefore cannot be certified. The three-second interviewer check and `src/App.tsx` remain unchanged. Publication/policy fixes require separate approval; see [Supabase RLS advisory guidance](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public).
+- Initial live checks returned HTTP 401 because the configured legacy API key was disabled. The user then supplied a current publishable key, saved only in gitignored `.env.local`; no server secrets, auth settings, policies, publications or live records changed.
+- Live read-only component comparison after restoring access: same lookup, two application rows and seven displayed document cards; displayed text matches the baseline. In matching 60.3-second visible idle windows, REST reads fell from 90 (30 tracker + 60 attachments) to 16 (four each tracker/attachments/links/scoped slots), and decoded JSON fell from 254,880 to 31,868 bytes. All reads returned 200. The final after-window intentionally disconnected realtime, verifying the fallback still reads; a joined subscription alone is not proof of delivery. An intermediate version reduced requests but increased bytes to 450,476 because it polled all slots; linked-slot scoping fixed that before delivery.
+- With simulated browser visibility set to hidden, a 30.3-second window made zero reads; restoring visibility with focus/online in the same turn produced one four-read catch-up. The browser tool kept background tabs visible, so this is event simulation against live reads, not certification of native hidden-tab lifecycle behavior. The temporary harness was removed. Actual database status/review/upload/slot-change delivery remains untested because no live writes were authorized.
+- Independent review found missing slot-failure handling, attachment pagination, and an A → B → A upload race; fixes and focused regression tests were added. Follow-up review, including the scoped slot reads, found no remaining actionable issues. After integrating upstream through `f84c544`, type-check, lint, all 738 tests across 85 files in the isolated branch-only suite, and `build:verify` pass. The unit suite used process-local non-live Supabase settings so unmocked legacy calls could not touch live data. The overall plan remains Blocked on write-based live acceptance and step 5. Details are recorded in the [session summary](../session-summaries/2026-10-27-tracker-polling-summary.md).

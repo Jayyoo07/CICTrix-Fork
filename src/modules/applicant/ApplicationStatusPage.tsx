@@ -15,20 +15,19 @@ import {
 } from '../../lib/applicationActivity';
 import { APPLICANT_MESSAGES, normalizeStatus, regretLetter, signingForfeitWarning } from '../../lib/api/applicantStatus';
 import { formatDisplayDate } from '../../lib/scheduleSelection';
-import { fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../../lib/plantillaSlots';
 import { plantillaLabel } from '../../lib/plantillaRules';
+import { loadTrackerDetails, startTrackerRefresh, type TrackerSlotOutcome } from '../../lib/applicantTrackerRefresh';
 import {
-  fetchPendingResubmissionIds,
   fetchTrackerApplications,
   isClosedApplicationStatus,
   latestNoticesByDocType,
   parseNotice,
   pendingResubmissionTypes as pendingResubmissionTypesOf,
   pickDefaultApplicationId,
-  refetchTrackerApplications,
+  pendingResubmissionIds,
+  type TrackerAttachment,
   type TrackerLookup,
 } from '../../lib/applicantTracker';
-import type { ApplicationSlotStatus, PlantillaSlot } from '../../types/recruitment.types';
 
 interface ApplicationRecord {
   id: string;
@@ -374,7 +373,8 @@ export const ApplicationStatusPage = () => {
   // Applications with a resubmission notice still waiting on the applicant,
   // for the per-row "Action required" flag.
   const [actionIds, setActionIds] = useState<Set<string>>(new Set());
-  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
+  const [trackerAttachments, setTrackerAttachments] = useState<TrackerAttachment[]>([]);
+  const attachments = trackerAttachments.filter((a) => a.applicant_id === openId);
   const [docReviews, setDocReviews] = useState<Record<string, DocReview>>({});
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<{ message: string; nextStep: string } | null>(null);
@@ -385,16 +385,28 @@ export const ApplicationStatusPage = () => {
    * plantilla items, and they settle independently — "Shortlisted for
    * Plantilla 1, Not selected for Plantilla 3" is a valid state.
    */
-  const [slotOutcomes, setSlotOutcomes] = useState<Array<{ slot: PlantillaSlot; status: ApplicationSlotStatus }>>([]);
+  const [outcomesByApplicant, setOutcomesByApplicant] = useState<Map<string, TrackerSlotOutcome[]>>(new Map());
+  const slotOutcomes = outcomesByApplicant.get(openId ?? '') ?? [];
 
   // Stores the lookup params from the last successful search so polling reuses
   // the SAME query path that handleSearch already uses (which we know works).
   // Querying by UUID (.eq('id',...)) can silently fail on some Supabase RLS configs;
   // querying by item_number / email always works because handleSearch proved it.
-  const searchParamsRef = useRef<TrackerLookup | null>(null);
+  const [lookup, setLookup] = useState<TrackerLookup | null>(null);
+  const searchGenerationRef = useRef(0);
+  const autoSearchedRef = useRef(false);
+  const refreshRef = useRef<ReturnType<typeof startTrackerRefresh> | null>(null);
+  useEffect(() => () => {
+    searchGenerationRef.current++;
+    refreshRef.current?.dispose();
+    autoSearchedRef.current = false;
+  }, []);
   // Read by async callbacks, so a response for a row the applicant has since
   // closed never lands under the row they opened instead.
   const openIdRef = useRef<string | null>(null);
+  const rowGenerationRef = useRef(0);
+  const uploadAttemptRef = useRef(0);
+  if (openIdRef.current !== openId) rowGenerationRef.current++;
   openIdRef.current = openId;
   const applicationIds = applications.map((a) => a.id);
   const applicationIdsKey = applicationIds.join(',');
@@ -433,116 +445,33 @@ export const ApplicationStatusPage = () => {
     hired_elsewhere_plantilla_label: row.hired_elsewhere_plantilla_label ? String(row.hired_elsewhere_plantilla_label) : null,
   });
 
-  const fetchAttachments = async (applicantId: string) => {
-    try {
-      const { data, error: err } = await (supabase as any)
-        .from('applicant_attachments')
-        .select('id, file_name, file_path, document_type, created_at')
-        .eq('applicant_id', applicantId)
-        .order('created_at', { ascending: false });
-      if (applicantId !== openIdRef.current) return;
-      if (!err && Array.isArray(data)) setAttachments(data as AttachmentRow[]);
-    } catch { /* silently ignore */ }
-  };
-
-  // Re-reads every application. Reuses the same query column/value as the
-  // search so we are guaranteed to get fresh data even if UUID-based lookups
-  // are restricted by RLS. The open row stays open unless it has gone.
-  const fetchApplications = async () => {
-    if (!searchParamsRef.current) return;
-    try {
-      const rows = await refetchTrackerApplications(searchParamsRef.current);
-      if (!rows || rows.length === 0) return;
-      const mapped = rows.map(mapRow);
-      const flagged = await fetchPendingResubmissionIds(mapped.map((a) => a.id));
-      setApplications(mapped);
-      setActionIds(flagged);
-      const current = openIdRef.current;
-      if (mapped.length === 1) setOpenId(mapped[0].id);
-      else if (current && !mapped.some((a) => a.id === current)) setOpenId(pickDefaultApplicationId(mapped, flagged));
-    } catch { /* silently ignore */ }
-  };
-
-  // Which plantilla items this application is riding on, and where each stands.
-  // Re-reads whenever the record is refreshed by polling, so a hire on one
-  // plantilla shows up without the applicant searching again.
+  // One search-scoped coordinator handles realtime, visible fallback polling,
+  // return/reconnect and post-upload invalidation. Opening a row uses the same
+  // document/outcome snapshot and does not start another request.
   useEffect(() => {
-    const applicantId = record?.id;
-    if (!applicantId) {
-      setSlotOutcomes([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const [linksByApplicant, slotsByJob] = await Promise.all([
-        fetchApplicantSlotLinks([applicantId]),
-        fetchSlotsByJobPosting(),
-      ]);
-      if (cancelled) return;
-
-      const slotById = new Map<string, PlantillaSlot>();
-      slotsByJob.forEach((slots) => slots.forEach((slot) => slotById.set(slot.id, slot)));
-
-      const outcomes = (linksByApplicant.get(applicantId) ?? [])
-        .map((link) => {
-          const slot = slotById.get(link.slotId);
-          return slot ? { slot, status: link.status } : null;
-        })
-        .filter(Boolean) as Array<{ slot: PlantillaSlot; status: ApplicationSlotStatus }>;
-
-      outcomes.sort((a, b) => a.slot.slotNumber - b.slot.slotNumber);
-      setSlotOutcomes(outcomes);
-    })();
-    return () => { cancelled = true; };
-  }, [record?.id, record?.updated_at, record?.status]);
-
-  // Real-time: applicant_attachments — uses filtered subscription (works with REPLICA IDENTITY FULL).
-  // Polling fallback below covers the case where the filter doesn't fire.
-  // Only the open row's documents are shown, so only it is subscribed.
-  useEffect(() => {
-    if (!openId) return;
-    const rid = openId;
-    const channel = (supabase as any)
-      .channel(`tracker_attachments_${rid}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'applicant_attachments', filter: `applicant_id=eq.${rid}` }, () => {
-        void fetchAttachments(rid);
-      })
-      .subscribe();
-    return () => { void (supabase as any).removeChannel(channel); };
-  }, [openId]);
-
-  // Real-time: applicants status — UNFILTERED so it works without REPLICA IDENTITY FULL.
-  // Server-side filtered subscriptions are silently dropped when REPLICA IDENTITY is not FULL;
-  // listening to the whole table and filtering client-side on payload.new.id is reliable.
-  // Any of the person's applications changing refreshes the whole list, so a
-  // collapsed row's badge stays as current as the open one's.
-  useEffect(() => {
-    if (!applicationIdsKey) return;
-    const ids = new Set(applicationIdsKey.split(','));
-    const channel = (supabase as any)
-      .channel(`tracker_applicants_${applicationIdsKey}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'applicants' }, (payload: any) => {
-        const changedId = (payload.new as { id?: string })?.id;
-        if (!changedId || !ids.has(changedId)) return;
-        void fetchApplications();
-        if (changedId === openIdRef.current) void fetchAttachments(changedId);
-      })
-      .subscribe();
-    return () => { void (supabase as any).removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationIdsKey]);
-
-  // Polling fallback — 2 s so status changes (disqualify, validate docs, etc.) feel instant.
-  // Covers every application, plus the open row's documents.
-  useEffect(() => {
-    if (!applicationIdsKey) return;
-    const interval = setInterval(() => {
-      if (openIdRef.current) void fetchAttachments(openIdRef.current);
-      void fetchApplications();
-    }, 2000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationIdsKey]);
+    if (!lookup || !applicationIdsKey) return;
+    const refresh = startTrackerRefresh(lookup, applicationIdsKey.split(','), (snapshot) => {
+      const flagged = snapshot.attachments === null ? null : pendingResubmissionIds(snapshot.attachments);
+      if (snapshot.attachments !== null) setTrackerAttachments(snapshot.attachments);
+      if (flagged !== null) setActionIds(flagged);
+      if (snapshot.outcomesByApplicant !== null) setOutcomesByApplicant(snapshot.outcomesByApplicant);
+      if (snapshot.rows !== null) {
+        const mapped = snapshot.rows.map(mapRow);
+        setApplications(mapped);
+        const current = openIdRef.current;
+        if (mapped.length === 0) setOpenId(null);
+        else if (mapped.length === 1) setOpenId(mapped[0].id);
+        else if (current && !mapped.some((a) => a.id === current)) {
+          setOpenId(pickDefaultApplicationId(mapped, flagged ?? new Set()));
+        }
+      }
+    });
+    refreshRef.current = refresh;
+    return () => {
+      refresh.dispose();
+      if (refreshRef.current === refresh) refreshRef.current = null;
+    };
+  }, [lookup, applicationIdsKey]);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
@@ -558,14 +487,12 @@ export const ApplicationStatusPage = () => {
   // Opening another row starts it clean: nothing the applicant saw or picked
   // under the previous application carries over to this one.
   useEffect(() => {
-    setAttachments([]);
-    setSlotOutcomes([]);
+    setUploadingKey(null);
     setUploadSuccess(null);
     setUploadErrors({});
     setPendingFiles({});
     setResolvedDocTypes(new Set());
     setSubmittedFileNames({});
-    if (openId) void fetchAttachments(openId);
   }, [openId]);
 
   const getReviewKey = (applicantId: string, filePath: string) => `${applicantId}::${filePath}`;
@@ -591,9 +518,14 @@ export const ApplicationStatusPage = () => {
     setError(null);
     setLoading(true);
     setSearched(false);
-    searchParamsRef.current = null;
+    const generation = ++searchGenerationRef.current;
+    refreshRef.current?.dispose();
+    refreshRef.current = null;
+    setLookup(null);
     setApplications([]);
     setOpenId(null);
+    setTrackerAttachments([]);
+    setOutcomesByApplicant(new Map());
     setActionIds(new Set());
     setDocReviews({});
 
@@ -602,6 +534,7 @@ export const ApplicationStatusPage = () => {
       // "abyan 123 456", "ABYAN-123-456" and "abyan123456" all find the same
       // person, and an old alias finds them too.
       const { rows, lookup } = await fetchTrackerApplications(trimmed);
+      if (generation !== searchGenerationRef.current) return;
 
       if (!lookup || rows.length === 0) {
         setSearched(true);
@@ -609,24 +542,31 @@ export const ApplicationStatusPage = () => {
       }
 
       const mapped = rows.map(mapRow);
-      const flagged = await fetchPendingResubmissionIds(mapped.map((a) => a.id));
+      const details = await loadTrackerDetails(mapped.map((a) => a.id));
+      if (generation !== searchGenerationRef.current) return;
+      const flagged = pendingResubmissionIds(details.attachments ?? []);
+      setTrackerAttachments(details.attachments ?? []);
+      setOutcomesByApplicant(details.outcomesByApplicant ?? new Map());
 
       // Store search params so polling can reuse the same query (not UUID lookup)
-      searchParamsRef.current = lookup;
+      setLookup(lookup);
       setApplications(mapped);
       setActionIds(flagged);
-      // Opening the row fetches its documents (the openId effect above).
+      // All rows share this snapshot, including their documents and outcomes.
       setOpenId(pickDefaultApplicationId(mapped, flagged));
 
       // Load doc reviews from localStorage
       const allReviews = loadDocReviews();
       setDocReviews(allReviews);
     } catch (err) {
+      if (generation !== searchGenerationRef.current) return;
       const described = describeActionFailure('look up your application', err);
       setError({ message: described.message, nextStep: described.nextStep });
     } finally {
-      setLoading(false);
-      setSearched(true);
+      if (generation === searchGenerationRef.current) {
+        setLoading(false);
+        setSearched(true);
+      }
     }
   };
 
@@ -638,7 +578,6 @@ export const ApplicationStatusPage = () => {
   // Arriving with a Reference No. already in hand — straight from the
   // submission dialog, or via a /track?ref=... link — looks it up immediately.
   // Runs once: re-running on every render would fight the applicant's typing.
-  const autoSearchedRef = useRef(false);
   useEffect(() => {
     if (autoSearchedRef.current) return;
 
@@ -656,6 +595,11 @@ export const ApplicationStatusPage = () => {
 
   const handleReupload = async (doc: AttachmentRow, file: File) => {
     if (!record) return;
+    const generation = searchGenerationRef.current;
+    const rowGeneration = rowGenerationRef.current;
+    const attempt = ++uploadAttemptRef.current;
+    const isCurrent = () => generation === searchGenerationRef.current
+      && rowGeneration === rowGenerationRef.current && attempt === uploadAttemptRef.current;
     const key = getReviewKey(record.id, doc.file_path);
     setUploadingKey(key);
     // Clear any prior inline error for this card
@@ -684,16 +628,7 @@ export const ApplicationStatusPage = () => {
 
       // Clear localStorage resubmission review for this doc
       clearDocReview(key);
-      setDocReviews((prev) => { const n = { ...prev }; delete n[key]; return n; });
-
-      // Refresh attachments list — the new row's created_at will be after the
-      // notice's created_at, so pendingResubmissionTypes auto-resolves on refetch.
-      const { data: refreshed } = await (supabase as any)
-        .from('applicant_attachments')
-        .select('id, file_name, file_path, document_type, created_at')
-        .eq('applicant_id', record.id)
-        .order('created_at', { ascending: false });
-      if (Array.isArray(refreshed) && record.id === openIdRef.current) setAttachments(refreshed as AttachmentRow[]);
+      if (isCurrent()) setDocReviews((prev) => { const n = { ...prev }; delete n[key]; return n; });
 
       // Update overall applicant status to "Under Review" (Status Synchronization)
       try {
@@ -723,6 +658,11 @@ export const ApplicationStatusPage = () => {
         console.warn('Failed to update status in localStorage:', lsErr);
       }
 
+      if (generation === searchGenerationRef.current) {
+        refreshRef.current?.invalidate();
+        refreshRef.current?.request();
+      }
+      if (!isCurrent()) return;
       setApplications((prev) => prev.map((a) => (
         a.id === record.id ? { ...a, status: 'Under Review', updated_at: new Date().toISOString() } : a
       )));
@@ -736,12 +676,13 @@ export const ApplicationStatusPage = () => {
       }
       setUploadSuccess(key);
       notifySuccess('Document uploaded', 'RSP will review the new file.');
-      setTimeout(() => setUploadSuccess(null), 5000);
+      setTimeout(() => { if (isCurrent()) setUploadSuccess(null); }, 5000);
     } catch (err) {
+      if (!isCurrent()) return;
       const described = describeActionFailure('upload this document', err);
       setUploadErrors((prev) => ({ ...prev, [key]: described.message }));
     } finally {
-      setUploadingKey(null);
+      if (isCurrent()) setUploadingKey(null);
     }
   };
 

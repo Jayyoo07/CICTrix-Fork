@@ -75,18 +75,27 @@ const toSlot = (row: any): PlantillaSlot => ({
 
 /** Every slot in the system, grouped by job posting id. */
 export const fetchSlotsByJobPosting = async (): Promise<Map<string, PlantillaSlot[]>> => {
+  const result = await fetchSlotsByJobPostingChecked();
+  return result.data ?? new Map();
+};
+
+/** Callers retaining last-good data must distinguish failure from no slots. */
+export const fetchSlotsByJobPostingChecked = async (slotIds?: string[]): Promise<SlotResult<Map<string, PlantillaSlot[]>>> => {
   const grouped = new Map<string, PlantillaSlot[]>();
+  if (slotIds?.length === 0) return { ok: true, data: grouped };
   try {
-    const { data, error } = await client
+    let query = client
       .from('plantilla_slots')
       .select('*')
       .order('slot_number', { ascending: true });
+    if (slotIds) query = query.in('id', slotIds);
+    const { data, error } = await query;
 
     if (error) {
       if (!isMissingSlotSchema(error)) {
         console.warn('[plantillaSlots] slot fetch failed:', error);
       }
-      return grouped;
+      return { ok: false, error: String(error.message ?? error) };
     }
 
     (data ?? []).forEach((row: any) => {
@@ -98,8 +107,9 @@ export const fetchSlotsByJobPosting = async (): Promise<Map<string, PlantillaSlo
     });
   } catch (err) {
     console.warn('[plantillaSlots] slot fetch threw:', err);
+    return { ok: false, error: String((err as Error)?.message ?? err) };
   }
-  return grouped;
+  return { ok: true, data: grouped };
 };
 
 export const fetchSlotsForJob = async (jobPostingId: string): Promise<PlantillaSlot[]> => {
@@ -131,6 +141,13 @@ export type ApplicantSlotLink = {
 export const fetchApplicantSlotLinks = async (
   applicantIds?: string[],
 ): Promise<Map<string, ApplicantSlotLink[]>> => {
+  const result = await fetchApplicantSlotLinksChecked(applicantIds);
+  return result.data ?? new Map();
+};
+
+export const fetchApplicantSlotLinksChecked = async (
+  applicantIds?: string[],
+): Promise<SlotResult<Map<string, ApplicantSlotLink[]>>> => {
   const grouped = new Map<string, ApplicantSlotLink[]>();
   try {
     let query = client.from('application_plantilla_slots').select('applicant_id, plantilla_slot_id, status');
@@ -140,7 +157,7 @@ export const fetchApplicantSlotLinks = async (
     const { data, error } = await query;
     if (error) {
       if (!isMissingSlotSchema(error)) console.warn('[plantillaSlots] link fetch failed:', error);
-      return grouped;
+      return { ok: false, error: String(error.message ?? error) };
     }
     (data ?? []).forEach((row: any) => {
       const applicantId = String(row?.applicant_id ?? '');
@@ -156,8 +173,9 @@ export const fetchApplicantSlotLinks = async (
     });
   } catch (err) {
     console.warn('[plantillaSlots] link fetch threw:', err);
+    return { ok: false, error: String((err as Error)?.message ?? err) };
   }
-  return grouped;
+  return { ok: true, data: grouped };
 };
 
 // ─── Writes ─────────────────────────────────────────────────────────────────

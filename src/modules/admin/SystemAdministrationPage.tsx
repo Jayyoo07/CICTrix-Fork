@@ -1,4 +1,5 @@
 import { useBackClosesView } from '../../hooks/useHistoryBack';
+import { BackButton } from '../../components/BackButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAdminEmail } from '../../lib/adminSession';
 import { AlertCircle, Building2, Check, CheckCircle2, ClipboardList, History, Search, ShieldCheck, UserMinus, UserPlus, Users, X } from 'lucide-react';
@@ -133,6 +134,7 @@ const OfficeDirectory = () => {
   if (drillOfficeRow !== null) {
     return (
       <div>
+        <BackButton className="mb-4" onBack={() => setDrillOfficeRow(null)} />
 
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '20px', color: '#1f2937', marginBottom: '4px' }}>

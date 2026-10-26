@@ -154,4 +154,29 @@ describe('evaluateAutoSuccessors', () => {
       manualNote: 'Chosen by HR',
     });
   });
+
+  it('leaves out the incumbent and employees from another office', () => {
+    const sameOffice = employee('emp-in', 'Engineer I', 'Bachelor of Science in Civil Engineering');
+    const incumbent = employee('emp-inc', 'Engineer I', 'Bachelor of Science in Civil Engineering');
+    const otherOffice = employee('emp-out', 'Engineer I', 'Bachelor of Science in Civil Engineering', {
+      department: 'Finance',
+    });
+    const ctx = context({
+      employees: [sameOffice, incumbent, otherOffice],
+      employeeById: new Map([
+        ['emp-in', sameOffice],
+        ['emp-inc', incumbent],
+        ['emp-out', otherOffice],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(
+      position({ incumbent_employee_id: 'emp-inc' }),
+      ctx,
+      'Engineering',
+    );
+
+    const ids = [...result.qualified, ...result.notQualified].map((c) => c.employeeId);
+    expect(ids).toEqual(['emp-in']);
+  });
 });

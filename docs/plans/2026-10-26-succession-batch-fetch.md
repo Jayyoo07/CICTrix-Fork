@@ -51,4 +51,4 @@ Split the function into a context loader and a per-position evaluator:
   - After: 14 REST requests, 1.26 s.
   - Candidate output: 10 of 10 positions deep-equal to the old implementation.
 - The first batch version took 3.06 s because its shared reads still ran serially. Overlapping the independent reads brought it to 1.39 s, then 1.26 s on the comparison run.
-- `npx tsc --noEmit` passes and the full Vitest suite passes. `npm run lint` cannot run because the repo has no ESLint config (pre-existing).
+- `npx tsc --noEmit` passes and the full Vitest suite passes. `npm run lint` was blocked on the original base (no ESLint config); it passes after the rebase onto `feat/ipcr-character-limits-v2`.

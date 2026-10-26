@@ -35,12 +35,23 @@ The batch refactor is in commit `cbb7ca1`. The parallel-loading follow-up and th
 - `npx vitest run src/lib/api/successionAutoSuccessors.test.ts`: 4/4 passed.
 - `npm test`: 197 files, 1,768 tests passed.
 - `npm run build`: `tsc` passes, then Vite fails while removing an esbuild temp file (`Access is denied`) on this Windows host. All 3,094 modules transform. This is environmental and reproduces with `TEMP` pointed at the approved temp directory.
-- `npm run lint`: cannot run because no ESLint configuration is tracked at the repo root. Pre-existing.
+- `npm run lint`: clean (zero warnings) after rebasing onto `feat/ipcr-character-limits-v2`, which carries the ESLint config.
+- Re-verified after the rebase: `npx tsc --noEmit` clean, `npm test` 62 files / 535 tests passed, `npm run check:migrations` OK.
 - Live request, time and parity check as above.
+
+## Rebase onto the IPCR branch (2026-10-26)
+
+The branch was rebased onto `origin/feat/ipcr-character-limits-v2`, dropping its duplicate copy of the IPCR character-limit commit (`d660691`; the same change is `a84c004` upstream). That branch had since changed `listAutoSuccessors`, so the batch path now carries those changes:
+
+- Department scope and pool exclusion (`poolExclusionReason`): the incumbent, a same-title peer and employees from another office are left out. The batch resolves each position's office name once for the whole call and passes it to `evaluateAutoSuccessors`.
+- Title-based downward-move check (`isDownwardTitleMove`) when the SRP grade cannot decide.
+- `SuccessionPlanningPage.test.tsx` now mocks `listAutoSuccessorsForPositions`; one new evaluator test covers the incumbent and other-office exclusions.
+
+The live request-count and parity numbers above were measured before the rebase and have not been re-measured against the new filters.
 
 ## Known issues, not fixed
 
 - The live admin UI route was not clicked through because of the auth gate. The API-level check exercises the same client and database, but a signed-in visual pass is still worth doing before release.
 - The batch scores every active employee rather than only the keyword-matched pool. Accepted at 221 employees; it is why a one-position department now reads more rows than before.
-- `cbb7ca1` also contains the pre-existing `.env` deletion that was staged before this work. It is unrelated to the succession change and has not been pushed.
+- `getSuccessionDashboardOverview` still calls `listAutoSuccessors` once per position (four at a time). It could use `listAutoSuccessorsForPositions` for the same counts in far fewer requests; left out of scope.
 - The working tree was on `fix/modal-close-buttons` with unrelated in-progress `PMIPCRManagement.tsx` changes during verification. Those changes were not touched and are not part of this work.

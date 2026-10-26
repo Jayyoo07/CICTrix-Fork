@@ -11,6 +11,7 @@
  * notice, then a bordered table edited in place.
  */
 
+import { failureText } from '../lib/friendlyErrors';
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Award, Check, Plus, Trash2 } from 'lucide-react';
 import {
@@ -32,12 +33,14 @@ export const EligibilityPointsPanel = () => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
+  // Which add/remove/cap write is in flight; blocks a second click from sending another.
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await listEligibilityTypes();
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('load the eligibility types', res.error, { mode: 'load' }));
       setLoading(false);
       return;
     }
@@ -67,7 +70,7 @@ export const EligibilityPointsPanel = () => {
     });
     setSavingId(null);
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('save the eligibility type', res.error));
       return;
     }
     setTypes((prev) => prev.map((x) => (x.id === t.id ? res.data : x)));
@@ -75,11 +78,14 @@ export const EligibilityPointsPanel = () => {
   };
 
   const saveCap = async () => {
+    if (busyAction) return;
     const value = Number(cap);
     setError(null);
+    setBusyAction('cap');
     const res = await setPointsForFullMarks(value);
+    setBusyAction(null);
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('save the points for full marks', res.error));
       return;
     }
     setTypes((prev) => prev.map((t) => ({ ...t, pointsForFullMarks: value })));
@@ -87,8 +93,9 @@ export const EligibilityPointsPanel = () => {
 
   const addType = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || busyAction) return;
     setError(null);
+    setBusyAction('add');
     const res = await upsertEligibilityType({
       name,
       points: 0,
@@ -96,8 +103,9 @@ export const EligibilityPointsPanel = () => {
       isActive: true,
       sortOrder: types.length + 1,
     });
+    setBusyAction(null);
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('add the eligibility type', res.error));
       return;
     }
     setTypes((prev) => [...prev, res.data]);
@@ -108,10 +116,13 @@ export const EligibilityPointsPanel = () => {
     // Deleting a type does not delete anybody's eligibility record; those keep
     // their text and simply stop scoring, which the breakdown reports as "no
     // points configured". Said here so the action does not read as destructive.
+    if (busyAction) return;
     setError(null);
+    setBusyAction(`remove:${t.id}`);
     const res = await deleteEligibilityType(t.id);
+    setBusyAction(null);
     if (res.ok === false) {
-      setError(res.error);
+      setError(failureText('remove the eligibility type', res.error));
       return;
     }
     setTypes((prev) => prev.filter((x) => x.id !== t.id));
@@ -214,9 +225,11 @@ export const EligibilityPointsPanel = () => {
                     <button
                       type="button"
                       onClick={() => void removeType(t)}
+                      disabled={busyAction !== null}
+                      aria-busy={busyAction === `remove:${t.id}` || undefined}
                       aria-label={`Remove ${t.name}`}
                       title="Remove this type. Employee records keep their eligibility; it stops scoring."
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
                     </button>
@@ -241,7 +254,8 @@ export const EligibilityPointsPanel = () => {
               <button
                 type="button"
                 onClick={() => void addType()}
-                disabled={!newName.trim()}
+                disabled={!newName.trim() || busyAction !== null}
+                aria-busy={busyAction === 'add' || undefined}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#363EE8] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#191FA8] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus className="h-4 w-4" /> Add type

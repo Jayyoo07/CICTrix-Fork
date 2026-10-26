@@ -23,6 +23,9 @@ import type { NewlyHired, NewlyHiredStatus } from '../types/recruitment.types';
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
 import { Modal } from './modal';
+import { ErrorBanner } from './ErrorBanner';
+import { ActionFeedback, useFeedback } from './action-feedback';
+import { describeActionFailure, type ActionFailure } from '../lib/friendlyErrors';
 
 type ViewMode = 'overview' | 'department';
 
@@ -42,6 +45,9 @@ export const NewlyHiredPage = () => {
   const [rows, setRows] = useState<NewlyHired[]>([]);
   // First load only; focus and update-event refetches stay silent.
   const [initialLoad, setInitialLoad] = useState(true);
+  // A failed read is reported, not rendered as "no newly hired employees".
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const feedback = useFeedback();
   const departmentsLoad = useTableLoading(initialLoad, rows.length > 0);
   const [mode, setMode] = useState<ViewMode>('overview');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
@@ -65,6 +71,7 @@ export const NewlyHiredPage = () => {
 
         if (error) {
           console.error('[NewlyHiredPage] Supabase applicants error:', error);
+          throw error;
         }
 
         // Already-saved newly_hired rows (carries persisted employee_id so credentials survive reloads)
@@ -176,9 +183,11 @@ export const NewlyHiredPage = () => {
           }))
         });
         setRows(hiredFromDb);
+        setLoadError(null);
       } catch (err) {
         console.error('[NewlyHiredPage] Exception:', err);
-        setRows([]);
+        // Keep whatever is already on screen; say the refresh failed.
+        setLoadError(err);
       } finally {
         setInitialLoad(false);
       }
@@ -260,12 +269,19 @@ export const NewlyHiredPage = () => {
 
     const selectedRows = selectedDepartmentRows.filter((row) => selectedIds.includes(row.id) && !row.employeeId);
     if (selectedRows.length === 0) {
-      alert('The selected employees already have credentials or cannot be processed.');
+      feedback.info('Nothing to generate', 'The selected employees already have credentials.');
       return;
     }
 
     const reservedEmployeeIds = rows.map((row) => row.employeeId).filter(Boolean) as string[];
-    const allocator = await createEmployeeNumberAllocator(reservedEmployeeIds);
+    let allocator: Awaited<ReturnType<typeof createEmployeeNumberAllocator>>;
+    try {
+      allocator = await createEmployeeNumberAllocator(reservedEmployeeIds);
+    } catch (error) {
+      const failure = describeActionFailure('generate employee numbers', error);
+      feedback.error(failure.title, `No credentials were created. ${failure.nextStep}`);
+      return;
+    }
 
     const existingAccounts = getEmployeePortalAccounts();
     const occupiedUsernames = new Set(existingAccounts.map((account) => account.username.toLowerCase()));
@@ -331,7 +347,7 @@ export const NewlyHiredPage = () => {
   const clearGeneratedCache = () => setGeneratedCredentials([]);
 
   const [savingCredentials, setSavingCredentials] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<ActionFailure | null>(null);
 
   const saveAccountDetails = async () => {
     if (generatedCredentials.length === 0) {
@@ -342,6 +358,7 @@ export const NewlyHiredPage = () => {
     setSavingCredentials(true);
     setSaveError(null);
 
+    let savedCount = 0;
     try {
       for (const credential of generatedCredentials) {
         const info = selectedDepartmentRows.find((row) => row.id === credential.id)?.employeeInfo;
@@ -349,7 +366,7 @@ export const NewlyHiredPage = () => {
         const mobileNumber = info?.phone ?? '';
         const homeAddress = info?.address ?? '';
 
-        upsertEmployeePortalAccount({
+        const account = await upsertEmployeePortalAccount({
           id: `portal-${credential.employeeNumber}`,
           username: credential.username,
           password: credential.password,
@@ -378,6 +395,11 @@ export const NewlyHiredPage = () => {
         // has no address column, and the portal's Personal Information reads
         // `employees` anyway. Without this the new hire is asked to retype an
         // address they already gave on their application.
+        // Without the database copy the employee can't sign in from any other
+        // browser, so this has to succeed before the save counts.
+        if (!account.ok) throw account.error ?? new Error('Portal account was not saved');
+        savedCount++;
+
         await seedEmployeeContactFromApplication(credential.employeeNumber, {
           homeAddress,
           mobileNumber,
@@ -385,16 +407,24 @@ export const NewlyHiredPage = () => {
         });
       }
 
-      await saveNewlyHired(rows);
+      const hired = await saveNewlyHired(rows);
+      if (!hired.ok) throw hired.error ?? new Error('Newly hired rows were not saved');
       setShowCredentialsModal(false);
       clearGeneratedCache();
       // Clear the selection so the Generate button correctly disables —
       // the just-saved rows now have employeeId and aren't generatable.
       setSelectedIds([]);
+      feedback.success('Credentials saved', `${generatedCredentials.length} employee account${generatedCredentials.length === 1 ? '' : 's'} can now sign in.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       console.error('saveAccountDetails: persist failed', error);
-      setSaveError(message);
+      const failure = describeActionFailure('save the employee accounts', error);
+      const total = generatedCredentials.length;
+      setSaveError({
+        ...failure,
+        message: savedCount > 0
+          ? `${savedCount} of ${total} accounts were saved; the rest were not. Saving again is safe: saved accounts are updated, not duplicated.`
+          : failure.message,
+      });
     } finally {
       setSavingCredentials(false);
     }
@@ -415,6 +445,13 @@ export const NewlyHiredPage = () => {
             </header>
 
             <section className="space-y-6 p-8">
+              {loadError ? (
+                <ErrorBanner
+                  error={loadError}
+                  action="load the newly hired employees"
+                  onRetry={() => window.dispatchEvent(new Event('cictrix:applicants-updated'))}
+                />
+              ) : null}
               <div>
                 <h2 className="mb-4 text-2xl font-semibold text-slate-900">Departments</h2>
                 <div className="abyan-table-wrap">
@@ -591,9 +628,12 @@ export const NewlyHiredPage = () => {
         )}
       >
             {saveError && (
-              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {saveError}
-              </p>
+              <ActionFeedback
+                {...saveError}
+                className="mb-4"
+                onRetry={() => void saveAccountDetails()}
+                onDismiss={() => setSaveError(null)}
+              />
             )}
 
             <div className="space-y-4">

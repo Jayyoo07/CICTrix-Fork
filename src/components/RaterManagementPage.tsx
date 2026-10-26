@@ -24,6 +24,9 @@ import { RaterManagementNavigationGuide } from './RaterManagementNavigationGuide
 import { AdminHeader } from './AdminHeader';
 import { Sidebar } from './Sidebar';
 import { ConfirmModal } from './modal';
+import { TableStateRows } from './data-table';
+import { useFeedback } from './action-feedback';
+import { describeActionFailure, failureText } from '../lib/friendlyErrors';
 
 type RaterStatus = 'Active' | 'Inactive';
 type ClientSource = 'preferred' | 'fallback';
@@ -211,6 +214,9 @@ export const RaterManagementPage = () => {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [addError, setAddError] = useState('');
+  // The rater list failed to load; never shown as "No raters found".
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const feedback = useFeedback();
   const [adding, setAdding] = useState(false);
   /** Active employees, for the suggestions and the account check. */
   const [candidates, setCandidates] = useState<RaterCandidate[]>([]);
@@ -240,10 +246,15 @@ export const RaterManagementPage = () => {
 
           return {
             source,
+            error: (response as any)?.error ?? null,
             rows: Array.isArray((response as any)?.data) ? (response as any).data : [],
           };
         })
       );
+      // The preferred source is the one this page writes to; if it can't be
+      // read, the list would be a guess.
+      const preferredResponse = responses.find((r) => r.source === 'preferred') ?? responses[0];
+      if (preferredResponse?.error) throw preferredResponse.error;
 
       if (!isMockModeEnabled) {
         const { data: profilesData, error: profilesError } = await supabase
@@ -330,8 +341,10 @@ export const RaterManagementPage = () => {
       setRatersData(
         Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name))
       );
-    } catch {
-      setRatersData([]);
+      setLoadError(null);
+    } catch (error) {
+      console.error('[RaterManagementPage] raters failed to load:', error);
+      setLoadError(error);
     } finally {
       setInitialLoad(false);
     }
@@ -447,7 +460,7 @@ export const RaterManagementPage = () => {
         .insert({ name: trimmedName, email: trimmedEmail, is_active: true });
       if (error) {
         console.error('[RaterManagementPage] add failed', error);
-        setAddError(error.message ?? 'Could not add the rater.');
+        setAddError(failureText('add the rater', error));
         return;
       }
       await loadRaters();
@@ -464,7 +477,7 @@ export const RaterManagementPage = () => {
       setToast(notified ? `${trimmedName} added and notified.` : `${trimmedName} added.`);
     } catch (err) {
       console.error('[RaterManagementPage] add threw', err);
-      setAddError('Could not add the rater.');
+      setAddError(failureText('add the rater', err));
     } finally {
       setAdding(false);
     }
@@ -492,7 +505,8 @@ export const RaterManagementPage = () => {
       setToast(`${rater.name} removed.`);
     } catch (err) {
       console.error('[RaterManagementPage] remove failed', err);
-      setToast(`Could not remove ${rater.name}.`);
+      const failure = describeActionFailure(`remove ${rater.name}`, err);
+      feedback.error(failure.title, `${rater.name} is still a rater. ${failure.nextStep}`);
     } finally {
       await loadRaters();
     }
@@ -557,9 +571,10 @@ export const RaterManagementPage = () => {
       saveRaterAccessState(rater.email, nextIsActive);
       setToast(nextIsActive ? 'Interviewer access granted.' : 'Interviewer access revoked.');
       await loadRaters();
-    } catch {
+    } catch (error) {
       setRatersData(previousRows);
-      setToast('Failed to update interviewer access.');
+      const failure = describeActionFailure("update this interviewer's access", error);
+      feedback.error(failure.title, `${rater.name}'s access is unchanged. ${failure.nextStep}`);
       await loadRaters();
     } finally {
       setTogglingEmail(null);
@@ -793,11 +808,15 @@ export const RaterManagementPage = () => {
                 ))}
 
                 {!ratersLoad.initialLoading && filteredRaters.length === 0 && (
-                  <tr>
-                    <td className="px-6 py-8 text-sm text-gray-500" colSpan={3}>
-                      No raters found.
-                    </td>
-                  </tr>
+                  <TableStateRows
+                    view={loadError && ratersData.length === 0 ? 'error' : 'empty'}
+                    columns={3}
+                    error={loadError}
+                    errorAction="load the raters"
+                    onRetry={() => void loadRaters()}
+                    emptyTitle="No raters found"
+                    emptyMessage="Add a rater above, or clear the search."
+                  />
                 )}
               </tbody>
             </table>

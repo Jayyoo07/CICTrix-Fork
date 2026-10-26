@@ -244,3 +244,13 @@ export const fieldErrorsFrom = (error: unknown): Record<string, string> => {
   }
   return {};
 };
+
+/**
+ * The three parts of a failure (what failed, whether it completed, the next
+ * step) as one line, for screens that show a single error string. The raw
+ * error is logged, never returned.
+ */
+export const failureText = (action: string, error: unknown, options?: DescribeFailureOptions): string => {
+  const failure = describeActionFailure(action, error, options);
+  return `${failure.title} ${failure.message} ${failure.nextStep}`;
+};

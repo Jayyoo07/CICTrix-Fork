@@ -11,11 +11,12 @@ import { plantillaLabel } from '../lib/plantillaRules';
  *
  * Unknown values resolve to '' — callers show nothing rather than a code.
  */
-export function usePlantillaNames() {
+export function usePlantillaNames(enabled = true) {
   const [byKey, setByKey] = useState<Map<string, string>>(new Map());
   const [byPosting, setByPosting] = useState<Map<string, string[]>>(new Map());
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void fetchSlotsByJobPosting().then((grouped) => {
       if (cancelled) return;
@@ -29,7 +30,7 @@ export function usePlantillaNames() {
       setByPosting(postings);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   const nameFor = (itemNumber: string | null | undefined): string =>
     byKey.get(normalizeItemNumber(itemNumber)) ?? '';

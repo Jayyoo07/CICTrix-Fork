@@ -35,6 +35,8 @@ import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { RspArchives, type ArchiveRecord } from './rsp-archives';
 import { fetchWrittenExamTotals } from '../../lib/api/examTotalPoints';
+import { failureText } from '../../lib/friendlyErrors';
+import { useFeedback } from '../../components/action-feedback';
 import { TopScorerBadge, topScorerIds, topScorerRowClass } from '../../components/data-table';
 import { WRITTEN_EXAM_FORM_SHARE, convertExamScore, totalForPosition } from '../../lib/examTotalPoints';
 import { SuccessionPlanningPage } from '../../components/SuccessionPlanningPage';
@@ -703,23 +705,40 @@ const pcptRawToConverted = (raw: number): number => {
 // No local cache — every read goes through the DB.
 
 export const RSPDashboard = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const section = resolveSection(location.pathname, location.search);
+
+  // The parent only reads the recruitment snapshot for the sections that
+  // render it. Succession's two views load their own data, so they skip both
+  // the reads and the realtime subscriptions below (and every section-scoped
+  // loader further down). Rater Management renders this shell as `raters`.
+  const loadsRecruitmentData =
+    section === 'dashboard' ||
+    section === 'accounts' ||
+    section === 'reports' ||
+    section === 'raters';
+  const loadsNewlyHired = section === 'accounts' || section === 'reports';
+  const loadsAccountData = section === 'accounts';
+
   // Plantilla names for posting/application rows (never their internal keys).
-  const { summaryForPosting } = usePlantillaNames();
+  // Only the legacy Jobs branch prints a plantilla summary.
+  const { summaryForPosting } = usePlantillaNames(section === 'jobs');
 
   // Live updates: both events feed the dashboard's existing syncJobs reload.
   useRealtimeRefresh({
     channel: 'rsp-dashboard-postings',
     tables: ['job_postings'],
     onChange: () => { void loadJobPostings(); },
+    enabled: loadsRecruitmentData,
   });
   useRealtimeRefresh({
     channel: 'rsp-dashboard-applicants',
     tables: ['applicants', 'evaluations'],
     onChange: () => { window.dispatchEvent(new CustomEvent('cictrix:applicants-updated')); },
+    enabled: loadsRecruitmentData,
   });
-  const navigate = useNavigate();
-  const location = useLocation();
-  const section = resolveSection(location.pathname, location.search);
+
   // Which succession view is showing: the ranked plan (default), or the points
   // that produce its Eligibility column (?view=eligibility-points). Kept in the
   // URL like Job Posts' tab, so refresh and Back keep it.
@@ -729,7 +748,8 @@ export const RSPDashboard = () => {
     navigate({ pathname: location.pathname, search: view === 'plan' ? '' : `?view=${view}` });
 
   // Departments come from the canonical Supabase table, shared system-wide.
-  const employeeDirectoryDepartments = useDepartmentNames();
+  // Only the Accounts views render a department dropdown.
+  const employeeDirectoryDepartments = useDepartmentNames(loadsAccountData);
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [applicants, setApplicants] = useState<ApplicantRecord[]>([]);
@@ -737,10 +757,11 @@ export const RSPDashboard = () => {
   const [examTotals, setExamTotals] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    if (section !== 'reports') return;
     let cancelled = false;
     void fetchWrittenExamTotals().then((result) => { if (!cancelled) setExamTotals(result.totals); });
     return () => { cancelled = true; };
-  }, []);
+  }, [section]);
   // Applicants with at least one scored evaluation; the dashboard uses it to
   // flag interviews that were held but never scored.
   const [evaluatedApplicantIds, setEvaluatedApplicantIds] = useState<Set<string>>(new Set());
@@ -792,6 +813,10 @@ export const RSPDashboard = () => {
   const [resetPwUsername, setResetPwUsername] = useState<string | null>(null);
   const [resetPwValue, setResetPwValue] = useState<string | null>(null);
   const [resetPwError, setResetPwError] = useState<string | null>(null);
+  // The live applicants read failed on the last load (see the main load).
+  const [liveDataError, setLiveDataError] = useState<unknown>(null);
+  const [officeDirectoryAttempt, setOfficeDirectoryAttempt] = useState(0);
+  const feedback = useFeedback();
   const [lastResetInfo, setLastResetInfo] = useState<EmployeePasswordResetLog | null>(null);
 
   // Prefer matching by email (most authoritative since it's per-person), then by employee_number.
@@ -932,18 +957,25 @@ export const RSPDashboard = () => {
 
       const accountId = existingAccount?.id ?? `employee-account-${empNumber || username}`;
 
-      upsertEmployeePortalAccount({
+      const saved = await upsertEmployeePortalAccount({
         id: accountId,
         username,
         password: newPassword,
         employee: realignedEmployee,
         mustChangePassword: true,
       });
+      // The employee signs in against the database copy; until it is stored,
+      // the new password only works in this browser.
+      if (!saved.ok) {
+        setResetPwError(`${failureText('reset the password', saved.error)} The employee can't sign in with the new password yet.`);
+        setResetPwState('error');
+        return;
+      }
 
       // Sanity-check the new credential pair authenticates.
       const verify = findEmployeePortalAccount(username, newPassword);
       if (!verify) {
-        setResetPwError('Password generated but verification failed. Please retry.');
+        setResetPwError("We couldn't confirm the new password. It may not be active yet. Try resetting it again.");
         setResetPwState('error');
         return;
       }
@@ -963,7 +995,7 @@ export const RSPDashboard = () => {
       setResetPwState('done');
     } catch (error) {
       console.error('handleResetEmployeePasswordConfirm: failed', error);
-      setResetPwError(error instanceof Error ? error.message : String(error));
+      setResetPwError(failureText('reset the password', error));
       setResetPwState('error');
     }
   };
@@ -979,8 +1011,10 @@ export const RSPDashboard = () => {
   const copyResetPwValue = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
+      feedback.success('Copied', 'Paste it where you need it.');
     } catch (error) {
       console.warn('clipboard write failed', error);
+      feedback.warning("We couldn't copy it.", 'Your browser blocked the clipboard. Select the text and copy it yourself.');
     }
   };
   const [savedScoredApplicantIds, setSavedScoredApplicantIds] = useState<Set<string>>(getSavedScoredApplicantIdSet);
@@ -1058,6 +1092,8 @@ export const RSPDashboard = () => {
   });
 
   useEffect(() => {
+    if (!loadsRecruitmentData) return;
+
     let inFlight = false;
     let pending = false;
     let disposed = false;
@@ -1075,13 +1111,14 @@ export const RSPDashboard = () => {
       const primaryClient = supabase; // Always use Supabase for applicants
       const secondaryClient = (mockDatabase as any); // Fallback only if Supabase fails
 
+      // The shared recruitment snapshot. `job_postings`/`jobs` used to be read
+      // here too and thrown away; canonical postings are loaded below through
+      // getJobPostingsFromSupabase, which also maps plantilla slots.
       const fetchBundle = async (client: any, cacheKey: string) =>
         runSingleFlight(
           cacheKey,
           () =>
             Promise.allSettled([
-              client.from('job_postings').select('*').order('created_at', { ascending: false }),
-              client.from('jobs').select('*').order('created_at', { ascending: false }),
               client.from('applicants').select('*').order('created_at', { ascending: false }),
               client.from('raters').select('*').order('created_at', { ascending: false }),
               client.from('evaluations').select('*'),
@@ -1089,10 +1126,11 @@ export const RSPDashboard = () => {
           1200,
         );
 
-      let [, , applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
+      let [applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
         primaryClient,
-        `rsp-bundle:supabase:primary` // Always use supabase cache key
+        `rsp-dashboard:recruitment:primary` // Always use supabase cache key
       );
+      if (disposed) return;
 
       const primaryRaters =
         ratersRes.status === 'fulfilled' && !ratersRes.value.error && Array.isArray(ratersRes.value.data)
@@ -1102,16 +1140,24 @@ export const RSPDashboard = () => {
       const primaryApplicantsFetchSucceeded =
         applicantsRes.status === 'fulfilled' && !applicantsRes.value.error && Array.isArray(applicantsRes.value.data);
 
+      // Say when the live read failed: the fallback below is the local mock
+      // store, so the page would otherwise show sample records as real ones.
+      setLiveDataError(primaryApplicantsFetchSucceeded
+        ? null
+        : (applicantsRes.status === 'rejected' ? applicantsRes.reason : applicantsRes.value.error) ?? 'Applicants could not be read');
+
       // Fallback only on fetch failure. Empty DB results are authoritative.
       if (!primaryApplicantsFetchSucceeded) {
-        [, , applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
+        [applicantsRes, ratersRes, evaluationsRes] = await fetchBundle(
           secondaryClient,
-          `rsp-bundle:supabase:secondary`
+          `rsp-dashboard:recruitment:secondary`
         );
+        if (disposed) return;
       }
 
       // CRITICAL: Fetch job postings from Supabase first (source of truth), fallback to localStorage
       let canonicalJobPostings = await getJobPostingsFromSupabase();
+      if (disposed) return;
       if (canonicalJobPostings.length === 0) {
         console.log('[RSP] No jobs from Supabase, falling back to localStorage');
         canonicalJobPostings = getAuthoritativeJobPostings();
@@ -1353,8 +1399,8 @@ export const RSPDashboard = () => {
 
       // CRITICAL: Invalidate cache when new evaluations are submitted
       // This ensures we fetch fresh evaluation data instead of using cached bundle
-      invalidateCacheKey('rsp-bundle:supabase:primary');
-      invalidateCacheKey('rsp-bundle:supabase:secondary');
+      invalidateCacheKey('rsp-dashboard:recruitment:primary');
+      invalidateCacheKey('rsp-dashboard:recruitment:secondary');
 
       if (inFlight) {
         pending = true;
@@ -1377,7 +1423,9 @@ export const RSPDashboard = () => {
         event.key === 'cictrix_job_postings' ||
         event.key === 'cictrix_authoritative_job_postings'
       ) {
-        void load();
+        // Route through the scheduler so a storage event can never overlap an
+        // in-flight load and let an older response win.
+        syncJobs();
       }
     };
 
@@ -1394,7 +1442,7 @@ export const RSPDashboard = () => {
       window.removeEventListener('cictrix:applicants-updated', syncJobs as EventListener);
       window.removeEventListener('storage', onStorage);
     };
-  }, []);
+  }, [loadsRecruitmentData]);
 
   useEffect(() => {
     // Guard against a stale modal backdrop when users navigate away from Reports.
@@ -1514,6 +1562,7 @@ export const RSPDashboard = () => {
   // exclude applicants the admin has already confirmed for hire.
   const [newlyHiredRows, setNewlyHiredRows] = useState<NewlyHired[]>([]);
   useEffect(() => {
+    if (!loadsNewlyHired) return;
     let cancelled = false;
     const refresh = async () => {
       const rows = await getNewlyHiredFromSupabase();
@@ -1525,7 +1574,7 @@ export const RSPDashboard = () => {
       cancelled = true;
       window.removeEventListener('cictrix:newly-hired-updated', refresh as EventListener);
     };
-  }, [section]);
+  }, [loadsNewlyHired]);
 
   const hiredApplicantIds = useMemo(
     () =>
@@ -1845,9 +1894,8 @@ export const RSPDashboard = () => {
         setActiveDocumentSubmissions(mapped);
       } catch (error) {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : String(error);
         console.error('listEmployeeDocumentsByType: refresh failed', error);
-        setDocumentsError(message);
+        setDocumentsError(failureText('load the document submissions', error, { mode: 'load' }));
         setActiveDocumentSubmissions([]);
       } finally {
         if (!cancelled) setDocumentsLoading(false);
@@ -2044,6 +2092,7 @@ export const RSPDashboard = () => {
   // source for the employee directory when no portal account is found.
   const [supabaseEmployeeRecords, setSupabaseEmployeeRecords] = useState<EmployeeRecord[]>([]);
   useEffect(() => {
+    if (!loadsAccountData) return;
     let cancelled = false;
     void (async () => {
       const rows = await getEmployeeRecordsFromSupabase();
@@ -2052,7 +2101,7 @@ export const RSPDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadsAccountData]);
 
   // Full personal fields per employee, read straight from the base `employees`
   // table (anon-readable) and keyed by employee_number. The account-detail
@@ -2062,6 +2111,7 @@ export const RSPDashboard = () => {
   // why every employee's profile rendered blank. This is the canonical source.
   const [employeePersonalByNumber, setEmployeePersonalByNumber] = useState<Map<string, any>>(new Map());
   useEffect(() => {
+    if (!loadsAccountData) return;
     let cancelled = false;
     void (async () => {
       const { data, error } = await (supabase as any)
@@ -2080,7 +2130,7 @@ export const RSPDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadsAccountData]);
 
   const fallbackEmployeeDirectorySource = useMemo(() => {
     const seenEmployeeIds = new Set<string>();
@@ -2199,7 +2249,7 @@ export const RSPDashboard = () => {
       }
       setOfficeDirectoryLoading(false);
     });
-  }, [section, officeDirectoryRows.length]);
+  }, [section, officeDirectoryRows.length, officeDirectoryAttempt]);
 
   // Headcount comes from getOfficeDirectory() so this page, PM and System
   // Administration all report the same numbers from one query.
@@ -2884,6 +2934,10 @@ export const RSPDashboard = () => {
     const downloadable = entries.filter((entry) => entry.documentUrl && entry.documentUrl !== '#');
 
     if (downloadable.length > 0) {
+      // Files download one after another (120ms apart), so say it started.
+      if (downloadable.length > 1) {
+        feedback.info(`Downloading ${downloadable.length} files`, "They save one after another. If one can't download, it opens in a new tab instead.");
+      }
       downloadable.forEach((entry, index) => {
         window.setTimeout(() => {
           const fileName =
@@ -3150,8 +3204,9 @@ export const RSPDashboard = () => {
         body,
       });
       closeBulkRequestDialog();
+      feedback.success('Request sent', `Emailed ${emails.length} employee${emails.length === 1 ? '' : 's'}.`);
     } catch (error) {
-      setBulkRequestError(error instanceof Error ? error.message : String(error));
+      setBulkRequestError(failureText('send the request', error));
     } finally {
       setBulkRequestSending(false);
     }
@@ -3172,6 +3227,18 @@ export const RSPDashboard = () => {
         <Sidebar activeModule="RSP" />
 
         <main className="admin-content !p-0">
+          {liveDataError ? (
+            <div className="px-6 pt-6">
+              <ErrorBanner
+                error={liveDataError}
+                action="load the live applicant data"
+                onRetry={() => window.dispatchEvent(new Event('cictrix:applicants-updated'))}
+              />
+              <p className="!mb-0 mt-2 text-sm text-[var(--neutral-800)]">
+                Until it loads, counts and lists on this page may come from sample data stored in this browser, not the database.
+              </p>
+            </div>
+          ) : null}
           {/* The dashboard draws its own gradient header strip with filters. */}
           {/* dash-lg: dashboard text enlarged (src/styles/dashboard-scale.css).
               Must be an ANCESTOR of .rspdash so the generated rules outrank
@@ -3573,7 +3640,7 @@ export const RSPDashboard = () => {
                       <p className="text-sm text-slate-500">{officeDirectoryTotalEmployees} total employees</p>
                     </div>
 
-                    <ErrorBanner error={officeDirectoryError} context="server" />
+                    <ErrorBanner error={officeDirectoryError} action="load the office directory" onRetry={() => setOfficeDirectoryAttempt((n) => n + 1)} />
 
 <Modal
                     open={showPositionChangeModal && Boolean(selectedEmployeeDetails)}
@@ -4160,8 +4227,7 @@ export const RSPDashboard = () => {
 
                     {documentsError && (
                       <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-                        <p className="!mb-1 font-semibold">Could not load submissions.</p>
-                        <p className="!mb-0">{documentsError}</p>
+                        <p className="!mb-0" role="alert">{documentsError}</p>
                       </div>
                     )}
 
@@ -5900,7 +5966,7 @@ export const RSPDashboard = () => {
 
                 {resetPwState === 'error' && (
                   <p className="!mb-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {resetPwError ?? 'Something went wrong. Please try again.'}
+                    {resetPwError ?? "We couldn't reset the password. Try again."}
                   </p>
                 )}
               </div>

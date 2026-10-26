@@ -4,6 +4,7 @@ import { ApplicantsTabBar } from './ApplicantsTabBar';
 import { PendingAssignmentList } from './PendingAssignmentList';
 import { QualifiedApplicantsSection } from './QualifiedApplicantsSection';
 import { Sidebar } from './Sidebar';
+import { ErrorBanner } from './ErrorBanner';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { supabase } from '../lib/supabase';
 import { buildEvaluationSnapshotMap, subscribeToEvaluationChanges, type EvaluationSnapshot } from '../lib/evaluationScores';
@@ -51,6 +52,8 @@ export const QualifiedApplicantsRSPPage = ({ mode = 'score' }: QualifiedApplican
   const [completedEvaluationIds, setCompletedEvaluationIds] = useState<Set<string>>(new Set());
   const [evaluationsByApplicant, setEvaluationsByApplicant] = useState<Record<string, InterviewerEvaluation>>({});
   const [loading, setLoading] = useState(true);
+  // A failed load, so the sections never render it as "no applicants".
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   // Live updates: the page and its sections reload on this event.
   useRealtimeRefresh({
@@ -67,31 +70,35 @@ export const QualifiedApplicantsRSPPage = ({ mode = 'score' }: QualifiedApplican
         // Primary: Supabase. Fallback: Python backend (which currently 500s but
         // remains as a path in case it's brought online). Both errors are logged
         // so silent failures surface.
+        // Throws when neither source answers, so a failed load is reported
+        // instead of rendering as an empty list.
         const fetchApplicants = async (): Promise<any[]> => {
+          let primaryError: unknown = null;
           try {
             const { data, error } = await (supabase as any).from('applicants').select('*');
             if (error) {
               console.warn('[QualifiedApplicantsRSPPage] supabase applicants error:', error);
+              primaryError = error;
             } else if (Array.isArray(data)) {
               return data;
             }
           } catch (err) {
             console.warn('[QualifiedApplicantsRSPPage] supabase applicants threw:', err);
+            primaryError = err;
           }
           try {
             const res = await fetch('/api/applicants/?skip=0&limit=1000');
-            if (!res.ok) {
-              console.warn('[QualifiedApplicantsRSPPage] backend status', res.status);
-              return [];
-            }
             const ct = res.headers.get('content-type') ?? '';
-            if (!ct.includes('application/json')) return [];
-            const payload = await res.json();
-            return Array.isArray(payload) ? payload : [];
+            if (res.ok && ct.includes('application/json')) {
+              const payload = await res.json();
+              if (Array.isArray(payload)) return payload;
+            }
+            console.warn('[QualifiedApplicantsRSPPage] backend status', res.status);
           } catch (err) {
             console.warn('[QualifiedApplicantsRSPPage] backend threw:', err);
-            return [];
           }
+          if (primaryError) throw primaryError;
+          return [];
         };
 
         const preferredMode = isMockModeEnabled ? 'local' : getPreferredDataSourceMode();
@@ -180,8 +187,10 @@ export const QualifiedApplicantsRSPPage = ({ mode = 'score' }: QualifiedApplican
         });
         setCompletedEvaluationIds(completedIds);
         setEvaluationsByApplicant(byApplicant);
+        setLoadError(null);
       } catch (error) {
         console.error('Error loading qualified applicants:', error);
+        setLoadError(error);
       } finally {
         setLoading(false);
       }
@@ -209,7 +218,15 @@ export const QualifiedApplicantsRSPPage = ({ mode = 'score' }: QualifiedApplican
             subtitle={mode === 'pending' ? 'Applicants who passed evaluation and are eligible for further processing' : 'View and update applicant evaluation scores for original and promotional applicants'}
           />
           <div className="p-6">
-            {mode === 'pending' ? (
+            {loadError && (
+              <ErrorBanner
+                error={loadError}
+                action="load the applicants"
+                onRetry={() => window.dispatchEvent(new CustomEvent('cictrix:applicants-updated'))}
+                className="mb-4"
+              />
+            )}
+            {loadError && applicants.length === 0 ? null : mode === 'pending' ? (
               <PendingAssignmentList
                 loading={loading}
                 applicants={applicants}

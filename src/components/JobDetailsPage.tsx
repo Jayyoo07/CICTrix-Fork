@@ -17,7 +17,9 @@ import { isOpenVacancy } from '../lib/vacancySearch';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useHistoryBack } from '../hooks/useHistoryBack';
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
-import { getJobPostings, loadJobPostings } from '../lib/recruitmentData';
+import { getJobPostings, getJobPostingsLoadError, loadJobPostings } from '../lib/recruitmentData';
+import { ErrorBanner } from './ErrorBanner';
+import { failureText } from '../lib/friendlyErrors';
 import { useSalarySchedule } from '../hooks/useSalarySchedule';
 import { formatSalaryRange, stepRangeFor } from '../lib/api/salaryGrades';
 import { supabase } from '../lib/supabase';
@@ -102,7 +104,7 @@ export const JobDetailsPage = () => {
     if (!job) return false;
     const result = await closeVacancy(job.id, reason, remarks);
     if (!result.ok) {
-      setCloseError(result.error ?? 'We couldn\'t close this vacancy. Try again.');
+      setCloseError(failureText('close this vacancy', result.error));
       return false;
     }
     const fresh = await loadJobPostings();
@@ -130,7 +132,7 @@ export const JobDetailsPage = () => {
         const match = find(jobs);
         if (match) setJob(match);
       })
-      .catch(() => undefined)
+      .catch((error) => { console.error('[JobDetailsPage] postings failed to load:', error); })
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [jobId]);
@@ -229,6 +231,13 @@ export const JobDetailsPage = () => {
                   <div className="af-skel" style={{ height: 72 }} />
                 </div>
               </div>
+            ) : getJobPostingsLoadError() ? (
+              // The postings didn't load, so "not found" would be a guess.
+              <ErrorBanner
+                error={getJobPostingsLoadError()}
+                action="load this job posting"
+                onRetry={() => window.location.reload()}
+              />
             ) : (
               <div className="af-card af-empty">
                 <Briefcase size={32} strokeWidth={1.75} aria-hidden="true" />

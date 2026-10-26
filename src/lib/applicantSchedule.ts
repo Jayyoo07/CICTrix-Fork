@@ -6,6 +6,7 @@
 //   exam_date, exam_time, interview_date, interview_time,
 //   assigned_interviewer_email
 
+import { describeActionFailure } from './friendlyErrors';
 import { supabase } from './supabase';
 import { partitionForStatusAdvance, SCHEDULED_STATUS } from './scheduleSelection';
 
@@ -111,7 +112,7 @@ export async function saveApplicantAssignment(
 
   if (error) {
     console.error('[saveApplicantAssignment] update failed:', error);
-    return { success: false, error: error.message ?? 'Could not save assignment.' };
+    return { success: false, error: failureText('save the schedule', error) };
   }
 
   // Mirror to localStorage so Applicant Score can read schedule data even if
@@ -138,24 +139,32 @@ export async function saveApplicantAssignment(
 }
 
 export async function fetchActiveInterviewers(): Promise<InterviewerOption[]> {
-  const { data, error } = await (supabase as any)
-    .from('raters')
-    .select('name, email, is_active')
-    .order('name', { ascending: true });
+  return (await fetchActiveInterviewersResult()).data;
+}
 
-  if (error) {
+/** Same list, but tells a failed read apart from "no active interviewers". */
+export async function fetchActiveInterviewersResult(): Promise<{ ok: boolean; data: InterviewerOption[]; error?: unknown }> {
+  let data: unknown;
+  try {
+    const response = await (supabase as any)
+      .from('raters')
+      .select('name, email, is_active')
+      .order('name', { ascending: true });
+    if (response.error) throw response.error;
+    data = response.data;
+  } catch (error) {
     console.error('[fetchActiveInterviewers] fetch failed:', error);
-    return [];
+    return { ok: false, data: [], error };
   }
 
   const rows = Array.isArray(data) ? data : [];
-  return rows
+  return { ok: true, data: rows
     .filter((r: any) => Boolean(r?.is_active) && typeof r?.email === 'string' && r.email.trim())
     .map((r: any) => ({
       email: String(r.email).trim(),
       name: String(r.name ?? r.email ?? 'Interviewer').trim(),
       designation: String(r.designation ?? '').trim(),
-    }));
+    })) };
 }
 
 export interface BatchScheduleInput {
@@ -212,7 +221,7 @@ export async function scheduleApplicantsBatch(input: BatchScheduleInput): Promis
       .select('id');
     if (error) {
       console.error('[scheduleApplicantsBatch] update failed:', error);
-      return { success: false, error: error.message ?? 'Could not save the schedule.' };
+      return { success: false, error: failureText('save the schedule', error) };
     }
     const updated = Array.isArray(data) ? data.length : 0;
     if (updated !== batch.ids.length) {
@@ -229,4 +238,10 @@ export async function scheduleApplicantsBatch(input: BatchScheduleInput): Promis
     window.dispatchEvent(new CustomEvent('cictrix:applicants-updated'));
   }
   return { success: true, scheduled, advanced: advance.length };
+}
+
+/** What a failed schedule write shows: what failed, that nothing saved, and the next step. Never the raw database text. */
+function failureText(action: string, error: unknown): string {
+  const failure = describeActionFailure(action, error);
+  return `${failure.title} ${failure.message} ${failure.nextStep}`;
 }

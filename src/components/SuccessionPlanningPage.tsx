@@ -13,6 +13,7 @@ import {
 } from '../lib/api/succession';
 import { RANKING_WEIGHTS, type EligibilityScore } from '../lib/api/successionCriteria';
 import { SkeletonList, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
+import { TableStateRows } from './data-table';
 
 // The Succession Planning view lives inside the RSP Portal, which is already
 // access-gated to the RSP admin. Management actions therefore key off "am I in
@@ -69,6 +70,78 @@ type OcboRow = {
  * disagrees with the score it labels is worse than no header, and the figures
  * on the /succession explainer had already drifted that way once.
  */
+/**
+ * One line per criterion saying how it is scored, in the reader's words rather
+ * than the formula's.
+ *
+ * The panel used to show a figure for all five criteria but explain only two,
+ * so a 0.0 on Education read as a fault in the system rather than a rule doing
+ * its job. Each line is checked against the code it describes: a caption that
+ * disagrees with its own number is worse than none.
+ */
+const CRITERION_HOW: Record<string, string> = {
+  // succession.ts: ipcrScore / 5, scaled to the weight.
+  ipcr: 'Latest completed IPCR rating out of 5. No rating on file scores 0.',
+  // successionCriteria.ts experienceScore: years, position level, progression.
+  experience:
+    'Years of service, position level and career progression. A part with no data is left out and the rest carry its weight.',
+  // succession.ts scoreTraining, threshold mode.
+  training:
+    'Hours against the requirement (60%), how recent the latest training is (25%), and required categories covered (15%).',
+  // successionCriteria.ts educationScore.
+  education:
+    'Only a relevant degree above the minimum counts: one level above earns 60% of the weight, two or more earns all of it. An irrelevant degree scores 0 however high.',
+  // successionCriteria.ts eligibilityScore.
+  eligibility:
+    'Points from every unexpired eligibility, divided by the points HR set for full marks. Expired or unconfigured ones count nothing.',
+};
+
+/** What a candidate would have to do to take this criterion to its weight. */
+const CRITERION_MAX: Record<string, string> = {
+  ipcr: 'A 5.00 IPCR rating.',
+  experience: 'Service of at least twice the position’s minimum, and a salary grade at or near the target’s.',
+  training: 'Meet the required hours, finish a training within the last 12 months, and cover every required category.',
+  education: 'A relevant degree two levels above the minimum.',
+  eligibility: 'Unexpired eligibilities whose configured points reach the full-marks figure.',
+};
+
+/**
+ * Read this candidate's own figure back in words.
+ *
+ * The "how" column is the same for everyone; this column is the only one that
+ * answers "why did *he* get that", which is the question an admin opens the
+ * panel to ask. It is derived from the figure and the inputs already on the
+ * row — nothing here re-scores anyone.
+ */
+const criterionMeaning = (
+  c: { key: string; value: number; max: number },
+  row: Pick<OcboRow, 'experienceParts' | 'eligibility'>,
+): string => {
+  const share = c.max > 0 ? c.value / c.max : 0;
+  const pct = Math.round(share * 100);
+  if (c.key === 'ipcr') {
+    return c.value <= 0
+      ? 'No completed IPCR on file.'
+      : `An IPCR rating of about ${(share * 5).toFixed(2)} out of 5.`;
+  }
+  if (c.key === 'experience') {
+    const missing = row.experienceParts.filter((part) => part.ratio == null).map((part) => part.label);
+    const earned = `${pct}% of the weight earned.`;
+    return missing.length
+      ? `${earned} ${missing.join(' and ')} could not be assessed, so the rest carried the weight.`
+      : earned;
+  }
+  if (c.key === 'education') {
+    return c.value <= 0
+      ? 'Only the minimum degree, or a degree outside the field.'
+      : `${pct}% of the weight: a relevant degree above the minimum.`;
+  }
+  if (c.key === 'eligibility') {
+    return `${row.eligibility.rawPoints} of the ${row.eligibility.pointsForFullMarks} points needed for full marks.`;
+  }
+  return `${pct}% of the weight earned.`;
+};
+
 const CRITERIA_COLUMNS = [
   { key: 'ipcr', label: 'Performance', weight: RANKING_WEIGHTS.ipcr },
   { key: 'experience', label: 'Experience', weight: RANKING_WEIGHTS.experience },
@@ -203,14 +276,26 @@ const OcboTableView = (_props: { admin: string }) => {
     });
   };
   const [loadingDept, setLoadingDept] = useState<Record<string, boolean>>({});
+  // Failed reads, kept apart from "none" so the plan never states something false.
+  const [deptError, setDeptError] = useState<unknown>(null);
+  const [positionsFailed, setPositionsFailed] = useState<Record<string, boolean>>({});
+  const [candidatesFailed, setCandidatesFailed] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
 
-  useEffect(() => {
-    listDepartmentSummaries().then((r) => {
-      if (r.ok) setDepartments(r.data);
+  const loadDepartments = () => {
+    setLoading(true);
+    void listDepartmentSummaries().then((r) => {
+      if (r.ok) {
+        setDepartments(r.data);
+        setDeptError(null);
+      } else {
+        setDeptError('error' in r ? r.error : 'Failed to load departments.');
+      }
       setLoading(false);
     });
-  }, []);
+  };
+
+  useEffect(loadDepartments, []);
 
   const toggle = async (deptId: string) => {
     const isOpen = expanded.has(deptId);
@@ -223,7 +308,14 @@ const OcboTableView = (_props: { admin: string }) => {
     if (isOpen || posByDept[deptId]) return;
     setLoadingDept((p) => ({ ...p, [deptId]: true }));
     const pr = await listCriticalPositions(deptId);
-    const positions = pr.ok ? pr.data : [];
+    if (!pr.ok) {
+      // Not cached, so collapsing and reopening the office retries.
+      setPositionsFailed((p) => ({ ...p, [deptId]: true }));
+      setLoadingDept((p) => ({ ...p, [deptId]: false }));
+      return;
+    }
+    setPositionsFailed((p) => ({ ...p, [deptId]: false }));
+    const positions = pr.data;
     setPosByDept((p) => ({ ...p, [deptId]: positions }));
     const candidateResults = await listAutoSuccessorsForPositions(positions.map((pos) => pos.id));
     setCandByPos((prev) => {
@@ -232,6 +324,12 @@ const OcboTableView = (_props: { admin: string }) => {
         const cr = candidateResults.get(pos.id);
         if (cr?.ok) next[pos.id] = cr.data;
       }
+      return next;
+    });
+    // A position with no ok result failed to load; say so instead of "no candidates".
+    setCandidatesFailed((prev) => {
+      const next = { ...prev };
+      for (const pos of positions) next[pos.id] = !candidateResults.get(pos.id)?.ok;
       return next;
     });
     setLoadingDept((p) => ({ ...p, [deptId]: false }));
@@ -313,9 +411,15 @@ const OcboTableView = (_props: { admin: string }) => {
         <TableSkeletonRows show={departmentsLoad.showSkeleton} columns={['text', 'text', 'text', 'badge']} label="Loading succession plan…" />
       )}
       {!departmentsLoad.initialLoading && departments.length === 0 && (
-        <tr>
-          <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-500">No departments to show yet.</td>
-        </tr>
+        <TableStateRows
+          view={deptError ? 'error' : 'empty'}
+          columns={4}
+          error={deptError}
+          errorAction="load the succession plan"
+          onRetry={loadDepartments}
+          emptyTitle="No departments to show yet"
+          emptyMessage="Departments appear here once they have critical positions."
+        />
       )}
       {!departmentsLoad.initialLoading && departments.map((dept) => {
         const open = expanded.has(dept.departmentId);
@@ -362,7 +466,12 @@ const OcboTableView = (_props: { admin: string }) => {
               <tr className="last:border-0">
               <td colSpan={4} className="border-y-2 border-slate-300 bg-slate-100 px-5 py-5 shadow-inner">
                 {loadingDept[dept.departmentId] && <SkeletonList show rows={3} label="Loading positions…" />}
-                {!loadingDept[dept.departmentId] && positions.length === 0 && (
+                {!loadingDept[dept.departmentId] && positionsFailed[dept.departmentId] && (
+                  <p role="alert" className="text-sm font-medium text-[var(--error-700)]">
+                    We couldn't load this office's critical positions, so none are shown. Collapse the office and open it again to retry.
+                  </p>
+                )}
+                {!loadingDept[dept.departmentId] && !positionsFailed[dept.departmentId] && positions.length === 0 && (
                   <p className="text-sm text-[var(--text-secondary)]">No critical positions flagged for this office.</p>
                 )}
                 {positions.map((pos) => {
@@ -430,7 +539,11 @@ const OcboTableView = (_props: { admin: string }) => {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {rows.length === 0 && (
-                              <tr><td colSpan={9} className="px-3 py-4 text-center text-slate-400">No employee meets all four minimum requirements for this position.</td></tr>
+                              candidatesFailed[pos.id] ? (
+                                <tr><td colSpan={9} role="alert" className="px-3 py-4 text-center font-medium text-[var(--error-700)]">We couldn't load the candidates for this position, so none are shown. Reload the page to try again.</td></tr>
+                              ) : (
+                                <tr><td colSpan={9} className="px-3 py-4 text-center text-slate-400">No employee meets all four minimum requirements for this position.</td></tr>
+                              )
                             )}
                             {rows.map((r) => {
                               const detailOpen = openDetail.has(`${pos.id}:${r.employeeId}`);
@@ -484,19 +597,49 @@ const OcboTableView = (_props: { admin: string }) => {
                                             <p className="!mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                                               Score breakdown &mdash; {r.score.toFixed(1)} / 100
                                             </p>
-                                            {/* Numeric, not bars: the panel explains a ranking
-                                                between candidates, and a fill would read as
-                                                progress toward a target. */}
-                                            <div className="grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
-                                              {r.criteria.map((c) => (
-                                                <div key={c.key} className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-0.5 last:border-0">
-                                                  <span className="text-[11px] text-slate-600">{c.label}</span>
-                                                  <span className="text-[11px] tabular-nums text-slate-700">
-                                                    <strong className="font-semibold">{c.value.toFixed(1)}</strong>
-                                                    <span className="text-slate-400"> / {c.max}</span>
-                                                  </span>
-                                                </div>
-                                              ))}
+                                            {/* A table, not a list of lines: the four things an
+                                                admin asks of a figure — the rule, the number,
+                                                what it says about this candidate, and what would
+                                                raise it — line up column by column, so two
+                                                criteria can be compared by reading down. */}
+                                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                              <table className="w-full border-collapse text-left">
+                                                <thead>
+                                                  <tr className="bg-slate-100 text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                                                    <th scope="col" className="px-2 py-1.5">Criterion</th>
+                                                    <th scope="col" className="px-2 py-1.5">How it is scored</th>
+                                                    <th scope="col" className="px-2 py-1.5 text-right">Score</th>
+                                                    <th scope="col" className="px-2 py-1.5">What this score means</th>
+                                                    <th scope="col" className="px-2 py-1.5">To reach the maximum</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {r.criteria.map((c) => (
+                                                    <tr key={c.key} className="border-t border-slate-100 align-top">
+                                                      <th scope="row" className="whitespace-nowrap px-2 py-1.5 text-left text-[11px] font-semibold text-slate-700">
+                                                        {c.label}
+                                                        <span className="ml-1 font-normal text-slate-400">({c.max})</span>
+                                                      </th>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-500">
+                                                        {CRITERION_HOW[c.key]}
+                                                      </td>
+                                                      {/* Always a number, never blank: an absent
+                                                          record must read as 0, not as a
+                                                          rendering fault. */}
+                                                      <td className="whitespace-nowrap px-2 py-1.5 text-right text-[11px] tabular-nums text-slate-700">
+                                                        <strong className="font-semibold">{c.value.toFixed(1)}</strong>
+                                                        <span className="text-slate-400"> / {c.max}</span>
+                                                      </td>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-600">
+                                                        {criterionMeaning(c, r)}
+                                                      </td>
+                                                      <td className="px-2 py-1.5 text-[10px] leading-snug text-slate-500">
+                                                        {CRITERION_MAX[c.key]}
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
                                             </div>
                                             {/* How the Experience figure above was arrived at.
                                                 Every input is listed, including those with no

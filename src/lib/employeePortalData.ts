@@ -57,7 +57,7 @@ const portalAccountFromRow = (row: PortalAccountRow): EmployeePortalAccount => (
   } as Employee,
 });
 
-const upsertPortalAccountToSupabase = async (account: EmployeePortalAccount): Promise<void> => {
+const upsertPortalAccountToSupabase = async (account: EmployeePortalAccount): Promise<{ ok: boolean; error?: unknown }> => {
   try {
     const { error } = await (supabase as any)
       .from('employee_portal_accounts')
@@ -78,9 +78,12 @@ const upsertPortalAccountToSupabase = async (account: EmployeePortalAccount): Pr
       );
     if (error) {
       console.error('[employeePortalData] Supabase upsert failed:', error);
+      return { ok: false, error };
     }
+    return { ok: true };
   } catch (err) {
     console.error('[employeePortalData] Supabase upsert threw:', err);
+    return { ok: false, error: err };
   }
 };
 
@@ -254,8 +257,10 @@ export const upsertEmployeePortalAccount = (
   saveEmployeePortalAccounts(accounts);
 
   // Mirror to Supabase so the employee can log in from any browser, not
-  // just the RSP admin's browser where this was originally generated.
-  void upsertPortalAccountToSupabase(upserted);
+  // just the RSP admin's browser where this was originally generated. Callers
+  // that report success await this: until it resolves ok, the account exists
+  // only in this browser.
+  return upsertPortalAccountToSupabase(upserted);
 };
 
 export interface EmployeePasswordResetLog {

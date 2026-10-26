@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AdminHeader } from './AdminHeader';
+import { ErrorBanner } from './ErrorBanner';
+import { describeActionFailure } from '../lib/friendlyErrors';
 import { ApplicantsTabBar } from './ApplicantsTabBar';
 import { Sidebar } from './Sidebar';
 import { useBackClosesView } from '../hooks/useHistoryBack';
@@ -115,6 +117,8 @@ const fmtScore = (v: number | null) => (v != null ? v.toFixed(2) : '—');
 export const ForHiringPage = () => {
   const [rows, setRows]                         = useState<HiringRow[]>([]);
   const [loading, setLoading]                   = useState(true);
+  // The applicant list failed to load; never shown as "No qualified applicants".
+  const [loadError, setLoadError]               = useState<unknown>(null);
   const [selectedDept, setSelectedDept]         = useState<string | null>(null);
   // One plantilla takes one hire, so exactly one applicant is selected at a time.
   const [selectedId, setSelectedId]             = useState<string | null>(null);
@@ -303,13 +307,19 @@ export const ForHiringPage = () => {
           }
         } catch { /* fallback */ }
 
+        let applicantsError: unknown = null;
         if (remoteData.length === 0) {
           try {
-            const { data } = await (supabase as any)
+            const { data, error } = await (supabase as any)
               .from('applicants')
               .select('id,first_name,last_name,middle_name,full_name,email,position,office,department,status,qualification_score,total_score');
+            if (error) throw error;
             if (Array.isArray(data)) remoteData.push(...data);
-          } catch { /* local store only */ }
+          } catch (error) {
+            // Local rows still show, but the list may be incomplete: say so.
+            console.error('[ForHiringPage] applicants failed to load:', error);
+            applicantsError = error;
+          }
         }
 
         // Build remote map — API data is authoritative
@@ -424,6 +434,10 @@ export const ForHiringPage = () => {
           (a.position   || 'zzz').localeCompare(b.position   || 'zzz')
         );
         setRows(all);
+        setLoadError(applicantsError);
+      } catch (error) {
+        console.error('[ForHiringPage] load failed:', error);
+        setLoadError(error);
       } finally {
         setLoading(false);
       }
@@ -513,6 +527,12 @@ export const ForHiringPage = () => {
     setDeadline(addDays(SIGNING_WINDOW_DAYS));
     setInstructions(DEFAULT_SIGNING_INSTRUCTIONS);
     const others = await fetchOtherOpenApplications(selectedRow.email, selectedRow.id);
+    if (others === null) {
+      setOtherApps([]);
+      setSelectError("We couldn't check whether this applicant has other open applications. Nothing is reserved yet. Confirm it another way before you continue, or close this and try again.");
+      setSelectStep('confirm');
+      return;
+    }
     setOtherApps(others);
     setSelectStep(others.length > 0 ? 'notice' : 'confirm');
   };
@@ -527,7 +547,8 @@ export const ForHiringPage = () => {
     const result = await reserveSlotForApplicant(selectTarget.slot.id, selectTarget.id, deadline, instructions);
     setReserving(false);
     if (!result.ok) {
-      setSelectError(result.error ?? 'The selection could not be saved. Try again.');
+      const failure = describeActionFailure('reserve this plantilla', result.error);
+      setSelectError(`${failure.title} ${failure.message} ${failure.nextStep}`);
       return;
     }
     saveApplicants(getApplicants().map(a => (a.id === selectTarget.id ? { ...a, status: RESERVED_STATUS as any } : a)));
@@ -548,6 +569,15 @@ export const ForHiringPage = () => {
             title="For Hiring"
             subtitle="Select one applicant per plantilla. Their credentials are generated after they sign."
           />
+          {loadError ? (
+            <div className="px-6 pt-6">
+              <ErrorBanner
+                error={loadError}
+                action="load the applicants for hiring"
+                onRetry={() => window.dispatchEvent(new Event('cictrix:applicants-updated'))}
+              />
+            </div>
+          ) : null}
           {children}
         </main>
       </div>
@@ -558,7 +588,7 @@ export const ForHiringPage = () => {
   if (!selectedDept) return (
     <Shell>
       <div className="p-6">
-        {!rowsLoad.initialLoading && departmentList.length === 0 ? (
+        {!rowsLoad.initialLoading && departmentList.length === 0 && loadError ? null : !rowsLoad.initialLoading && departmentList.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-slate-400">
             <Users className="mb-3 h-10 w-10" />
             <p className="font-medium">No qualified applicants yet.</p>

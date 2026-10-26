@@ -28,7 +28,7 @@ export interface PreparedDocument {
   url: string;
   blob: Blob;
   fileName: string;
-  kind: 'pdf' | 'image' | 'unsupported';
+  kind: 'pdf' | 'image' | 'docx' | 'unsupported';
   dispose: () => void;
 }
 
@@ -38,6 +38,9 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
   webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif',
 };
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+// Some uploads report a .docx (a zip package) as a plain zip.
+const ZIP_MIMES = ['application/zip', 'application/x-zip-compressed'];
 
 export const hasDocumentFile = (file: Pick<ViewerDocument, 'url'>): boolean =>
   Boolean(file.url?.trim() && file.url.trim() !== '#' && !file.url.startsWith('mock://'));
@@ -136,13 +139,14 @@ export async function prepareDocumentPreview(file: ViewerDocument, signal: Abort
   const receivedType = original.type.split(';')[0].toLowerCase();
   const genericType = !receivedType || receivedType === 'application/octet-stream';
   const type = genericType
-    ? (file.fileType || (extension === 'pdf' ? 'application/pdf' : IMAGE_MIME_BY_EXTENSION[extension]) || 'application/octet-stream')
+    ? (file.fileType || (extension === 'pdf' ? 'application/pdf' : extension === 'docx' ? DOCX_MIME : IMAGE_MIME_BY_EXTENSION[extension]) || 'application/octet-stream')
     : receivedType;
   if (receivedType === 'text/html' || receivedType === 'application/xhtml+xml') {
     throw new Error('The document link returned a web page instead of a file. Close the viewer and try again.');
   }
   const kind = type === 'application/pdf' ? 'pdf'
-    : Object.values(IMAGE_MIME_BY_EXTENSION).includes(type) ? 'image' : 'unsupported';
+    : Object.values(IMAGE_MIME_BY_EXTENSION).includes(type) ? 'image'
+      : type === DOCX_MIME || (extension === 'docx' && ZIP_MIMES.includes(type)) ? 'docx' : 'unsupported';
   // A PDF stored as octet-stream still needs a PDF blob type for the native viewer.
   const blob = genericType && kind !== 'unsupported' ? new Blob([original], { type }) : original;
   const blobUrl = URL.createObjectURL(blob);

@@ -1,5 +1,5 @@
 import { Download, ExternalLink, FileText, LoaderCircle, Printer } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useBackClosesView } from '../hooks/useHistoryBack';
 import { downloadPreparedDocument, openPdfForPrinting, prepareDocumentPreview, type PreparedDocument } from '../lib/documentViewing';
 import { Modal } from './modal';
@@ -16,13 +16,54 @@ interface Props {
   actions?: ReactNode;
 }
 
-/** RSP's opt-in viewer: local PDF/image previews, no third-party document viewer. */
+// Pages sit on the modal's page background; print drops the on-screen page gaps and shadows.
+const DOCX_FRAME_DOCUMENT = `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent}
+.docx-wrapper{background:transparent!important}
+@media print{.docx-wrapper{padding:0!important}.docx-wrapper>section.docx{box-shadow:none!important;margin:0!important}}
+</style></head><body><div id="docx-styles"></div><div id="docx-body"></div></body></html>`;
+
+interface DocxFrameProps {
+  file: PreparedDocument;
+  frameRef: RefObject<HTMLIFrameElement>;
+  onLoaded: () => void;
+  onError: (message: string) => void;
+}
+
+/**
+ * Renders a .docx in the browser. The frame isolates the document's styles from the
+ * portal's, and its sandbox allows no scripts or popups: only same-origin access for
+ * the renderer and modals for Print.
+ */
+const DocxFrame = ({ file, frameRef, onLoaded, onError }: DocxFrameProps) => {
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, [file]);
+
+  const render = () => {
+    // renderAsync empties both containers, so neither may hold the frame's own styles.
+    const body = frameRef.current?.contentDocument?.getElementById('docx-body');
+    const styles = frameRef.current?.contentDocument?.getElementById('docx-styles');
+    if (!body || !styles) return;
+    void import('docx-preview')
+      .then(({ renderAsync }) => renderAsync(file.blob, body, styles, { ignoreLastRenderedPageBreak: true, useBase64URL: true }))
+      .then(() => { if (active.current) onLoaded(); })
+      .catch(() => { if (active.current) onError('This Word document could not be displayed. Download it to open it in Word.'); });
+  };
+
+  return (
+    <iframe ref={frameRef} srcDoc={DOCX_FRAME_DOCUMENT} title={file.fileName} sandbox="allow-same-origin allow-modals"
+      className="min-h-0 w-full flex-1 border-0" onLoad={render} />
+  );
+};
+
+/** RSP's opt-in viewer: local PDF/image/Word previews, no third-party document viewer. */
 export const ViewFirstDocumentPreview = ({ open, fileUrl, fileName, fileType, storageBucket, title, subtitle, onClose, actions }: Props) => {
   const [prepared, setPrepared] = useState<PreparedDocument | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [retry, setRetry] = useState(0);
+  const docxFrame = useRef<HTMLIFrameElement>(null);
   useBackClosesView(open, onClose, 'rsp-document-preview', { fromMount: true });
 
   useEffect(() => {
@@ -49,6 +90,7 @@ export const ViewFirstDocumentPreview = ({ open, fileUrl, fileName, fileType, st
     if (!prepared || !loaded) return;
     try {
       if (prepared.kind === 'image') window.print();
+      else if (prepared.kind === 'docx') docxFrame.current?.contentWindow?.print();
       else {
         openPdfForPrinting(prepared);
         setNotice('Use the PDF viewer’s Print button or Ctrl+P (⌘P on Mac) in the new tab. If it does not display a PDF, this browser does not support PDF preview.');
@@ -103,11 +145,15 @@ export const ViewFirstDocumentPreview = ({ open, fileUrl, fileName, fileType, st
         ) : prepared.kind === 'pdf' ? (
           <iframe src={prepared.url} title={prepared.fileName} className="min-h-0 w-full flex-1 border-0"
             onLoad={() => setLoaded(true)} onError={() => setError('This PDF could not be displayed. Close the viewer and try again.')} />
+        ) : prepared.kind === 'docx' ? (
+          <DocxFrame file={prepared} frameRef={docxFrame} onLoaded={() => setLoaded(true)} onError={setError} />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-6 text-center">
             <FileText size={24} strokeWidth={1.75} aria-hidden="true" />
             <p className="!m-0 text-title-s">Preview unavailable for this file type</p>
-            <p className="!m-0 max-w-prose text-body-l">PDFs and images can be viewed and printed here. Download this file to open and print it in a compatible app. It has not been sent to an external viewer.</p>
+            <p className="!m-0 max-w-prose text-body-l">{/\.doc$/i.test(prepared.fileName)
+              ? 'This is an older Word format (.doc) that can’t be previewed here. Download it to open and print it in Word. It has not been sent to an external viewer.'
+              : 'PDFs, images and Word (.docx) files can be viewed and printed here. Download this file to open and print it in a compatible app. It has not been sent to an external viewer.'}</p>
           </div>
         )}
       </div>

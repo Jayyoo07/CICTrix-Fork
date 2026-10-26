@@ -8,9 +8,12 @@
   top: 0;
   z-index: 40;
   background: var(--color-primary);
-  color: var(--color-white);
   box-shadow: var(--shadow-2);
 }
+/* Doubled class: abyan-tokens.css sets `.abyan-ds { color }` at one class and
+   loads after this file in the admin bundles, which turned the name, role and
+   avatar dark. */
+.ph.abyan-ds { color: var(--color-white); }
 
 @media print {
   .ph { display: none; }
@@ -110,7 +113,7 @@
 .ph .ph-avatar-btn:focus-visible { outline: 2px solid var(--color-white); outline-offset: 2px; }
 .ph-user-meta { display: flex; flex-direction: column; min-width: 0; max-width: 16rem; }
 .ph-user-name { font: 600 14px/18px var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ph-user-role { font: 400 12px/16px var(--font-sans); color: var(--on-blue-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph .ph-user-role { font: 400 12px/16px var(--font-sans); color: var(--on-blue-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ph-divider { width: 1px; height: 28px; background: rgba(255, 255, 255, .25); flex: none; }
 
 /* Header Logout (§9.1): glass rectangle, label and icon always white. */

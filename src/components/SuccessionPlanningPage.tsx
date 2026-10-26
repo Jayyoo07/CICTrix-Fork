@@ -70,6 +70,32 @@ type OcboRow = {
  * disagrees with the score it labels is worse than no header, and the figures
  * on the /succession explainer had already drifted that way once.
  */
+/**
+ * One line per criterion saying how it is scored, in the reader's words rather
+ * than the formula's.
+ *
+ * The panel used to show a figure for all five criteria but explain only two,
+ * so a 0.0 on Education read as a fault in the system rather than a rule doing
+ * its job. Each line is checked against the code it describes: a caption that
+ * disagrees with its own number is worse than none.
+ */
+const CRITERION_HOW: Record<string, string> = {
+  // succession.ts: ipcrScore / 5, scaled to the weight.
+  ipcr: 'The latest completed IPCR rating out of 5. No rating on file scores 0.',
+  // successionCriteria.ts experienceScore: years, position level, progression.
+  experience:
+    'Years of service, position level and career progression together. A part with no data is left out and the rest carry its weight, which is why some read "not assessed" below.',
+  // succession.ts scoreTraining, threshold mode.
+  training:
+    'Hours against the position’s requirement (60%), how recent the latest training is (25%), and how many required categories are covered (15%).',
+  // successionCriteria.ts educationScore.
+  education:
+    'Only a degree above the position’s minimum counts, and only if it is relevant: one level above scores 60% of the weight, two or more scores all of it.',
+  // successionCriteria.ts eligibilityScore.
+  eligibility:
+    'The points of every unexpired eligibility added up, divided by the points HR set for full marks. Expired or unconfigured ones count nothing.',
+};
+
 const CRITERIA_COLUMNS = [
   { key: 'ipcr', label: 'Performance', weight: RANKING_WEIGHTS.ipcr },
   { key: 'experience', label: 'Experience', weight: RANKING_WEIGHTS.experience },
@@ -530,12 +556,19 @@ const OcboTableView = (_props: { admin: string }) => {
                                                 progress toward a target. */}
                                             <div className="grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
                                               {r.criteria.map((c) => (
-                                                <div key={c.key} className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-0.5 last:border-0">
-                                                  <span className="text-[11px] text-slate-600">{c.label}</span>
-                                                  <span className="text-[11px] tabular-nums text-slate-700">
-                                                    <strong className="font-semibold">{c.value.toFixed(1)}</strong>
-                                                    <span className="text-slate-400"> / {c.max}</span>
-                                                  </span>
+                                                <div key={c.key} className="border-b border-slate-100 py-1 last:border-0">
+                                                  <div className="flex items-baseline justify-between gap-3">
+                                                    <span className="text-[11px] font-semibold text-slate-700">{c.label}</span>
+                                                    <span className="text-[11px] tabular-nums text-slate-700">
+                                                      <strong className="font-semibold">{c.value.toFixed(1)}</strong>
+                                                      <span className="text-slate-400"> / {c.max}</span>
+                                                    </span>
+                                                  </div>
+                                                  {CRITERION_HOW[c.key] && (
+                                                    <p className="!mb-0 mt-0.5 text-[10px] leading-snug text-slate-500">
+                                                      {CRITERION_HOW[c.key]}
+                                                    </p>
+                                                  )}
                                                 </div>
                                               ))}
                                             </div>

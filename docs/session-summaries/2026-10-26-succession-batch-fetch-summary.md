@@ -47,7 +47,14 @@ The branch was rebased onto `origin/feat/ipcr-character-limits-v2`, dropping its
 - Title-based downward-move check (`isDownwardTitleMove`) when the SRP grade cannot decide.
 - `SuccessionPlanningPage.test.tsx` now mocks `listAutoSuccessorsForPositions`; one new evaluator test covers the incumbent and other-office exclusions.
 
-The live request-count and parity numbers above were measured before the rebase and have not been re-measured against the new filters.
+The live check was re-run after the rebase against `origin/feat/ipcr-character-limits-v2`'s `listAutoSuccessors` as the baseline (same method as above, run from the dev server on the rebased branch):
+
+| | REST requests | Time | Output |
+| --- | --- | --- | --- |
+| Before (10 parallel single-position calls) | 135 | 3.49 s | baseline |
+| After (one batch call) | 15 | 1.18 s | 10/10 positions deep-equal |
+
+A sweep of all 5 departments with critical positions gave 33/33 positions deep-equal. Timings vary run to run.
 
 ## Known issues, not fixed
 

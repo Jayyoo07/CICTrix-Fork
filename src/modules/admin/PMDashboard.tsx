@@ -40,10 +40,6 @@ import { RailNav } from '../../components/RailNav';
 import { Sidebar } from '../../components/Sidebar';
 import { OfficeDirectorySection } from '../../components/OfficeDirectorySection';
 import {
-  computeSkillGapByDepartment,
-  getEmployeeCompetencies,
-} from '../../lib/api/competencies';
-import {
   getDocumentRequests,
   updateDocumentRequestStatus,
   type DocumentRequest,
@@ -399,8 +395,6 @@ export const PMDashboard = ({
     'Poor': 0,
   });
   const [, setDistributionEvaluated] = useState(0);
-  const [skillGaps, setSkillGaps] = useState<Array<{ dept: string; value: number }>>([]);
-  const [retirements, setRetirements] = useState<Array<{ name: string; role: string; date: string; monthsAway: number }>>([]);
   const [documentRequests, setDocumentRequests] = useState<DocumentRequest[]>([]);
   const [, setDocumentRequestsLoading] = useState(false);
   const [reviewingRequest, setReviewingRequest] = useState<DocumentRequest | null>(null);
@@ -833,56 +827,6 @@ export const PMDashboard = ({
     enabled: activeSection === 'dashboard',
   });
 
-  // Competency / skill-gap data + upcoming retirements (dashboard only).
-  useEffect(() => {
-    if (activeSection !== 'dashboard') return;
-    let cancelled = false;
-    (async () => {
-      const compResult = await getEmployeeCompetencies();
-      if (cancelled) return;
-      setSkillGaps(computeSkillGapByDepartment(compResult.data));
-    })();
-    return () => { cancelled = true; };
-  }, [activeSection]);
-
-  // Upcoming retirements: employees turning 65 within the next 12 months.
-  useEffect(() => {
-    if (activeSection !== 'dashboard') return;
-    let cancelled = false;
-    (async () => {
-      const result = await getAllEmployees({ status: 'Active' });
-      if (cancelled) return;
-      if (!result.success || !Array.isArray(result.data)) {
-        setRetirements([]);
-        return;
-      }
-      const today = new Date();
-      const horizon = new Date(today);
-      horizon.setMonth(horizon.getMonth() + 12);
-
-      const rows: Array<{ name: string; role: string; date: string; monthsAway: number }> = [];
-      for (const emp of result.data as Employee[]) {
-        const dob = (emp as any).date_of_birth as string | null | undefined;
-        if (!dob) continue;
-        const birth = new Date(dob);
-        if (Number.isNaN(birth.getTime())) continue;
-        const retirementDate = new Date(birth);
-        retirementDate.setFullYear(retirementDate.getFullYear() + 65);
-        if (retirementDate >= today && retirementDate <= horizon) {
-          const monthsAway = Math.max(0, Math.round((retirementDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.4)));
-          rows.push({
-            name: emp.full_name ?? 'Unnamed',
-            role: emp.current_position ?? 'â€”',
-            date: retirementDate.toLocaleString('default', { month: 'short', year: 'numeric' }),
-            monthsAway,
-          });
-        }
-      }
-      rows.sort((a, b) => a.monthsAway - b.monthsAway);
-      setRetirements(rows);
-    })();
-    return () => { cancelled = true; };
-  }, [activeSection]);
 
   const fetchCycles = async () => {
     setLoading(true);
@@ -1096,58 +1040,10 @@ export const PMDashboard = ({
                   </section>
 
 
-                {/* â”€â”€ Bottom Section (50/50) â”€â”€ */}
-                <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <header className="px-5 py-3.5 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-slate-500" />
-                        <h3 className="text-sm font-bold text-slate-800">Competency & Succession Watchlist</h3>
-                      </div>
-                    </header>
-                    <div className="p-5 space-y-6">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Skill Gap Alerts by Department</p>
-                        <div className="space-y-3">
-                          {skillGaps.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic">No skill gaps detected</p>
-                          ) : (
-                            skillGaps.map((d) => (
-                              <div key={d.dept} className="flex items-center gap-3 text-xs">
-                                <span className="w-20 text-slate-600 shrink-0">{d.dept}</span>
-                                <div className="flex-1 h-2.5 rounded-full bg-slate-100">
-                                  <div className="h-2.5 rounded-full bg-blue-500" style={{ width: `${d.value}%` }} />
-                                </div>
-                                <span className="w-8 text-right font-semibold text-slate-700">{d.value}%</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Upcoming Retirements (Next 12 Months)</p>
-                        <div className="divide-y divide-slate-100">
-                          {retirements.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic py-2.5">No upcoming retirements</p>
-                          ) : (
-                            retirements.map((r) => {
-                              const dateColor = r.monthsAway <= 6 ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700';
-                              return (
-                                <div key={r.name} className="flex items-center justify-between py-2.5 text-xs">
-                                  <div>
-                                    <p className="font-semibold text-slate-800">{r.name}</p>
-                                    <p className="text-slate-400">{r.role}</p>
-                                  </div>
-                                  <span className={`rounded-full px-3 py-0.5 text-[11px] font-semibold ${dateColor}`}>{r.date}</span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
+                {/* IPCR Submissions, full width: the Competency & Succession
+                    Watchlist that shared this row was removed
+                    (docs/plans/2026-10-26-pm-dashboard-cleanup.md). */}
+                <div className="mt-6">
                   <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <header className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -1186,10 +1082,10 @@ export const PMDashboard = ({
                         {ipcrSubmissionTab === 'pending' ? 'Action Required' : 'Completed'}
                       </span>
                     </header>
-                    <div className="overflow-x-auto relative min-h-[60px]">
+                    <div className="abyan-table-wrap relative min-h-[60px]">
                       
                       {ipcrSubmissionTab === 'pending' ? (
-                        <table className="w-full text-xs">
+                        <table className="abyan-table w-full">
                           <thead>
                             <tr className="bg-slate-50/80 text-left">
                               <th className="px-4 py-2.5 font-semibold text-slate-400 uppercase tracking-wider">Employee</th>
@@ -1246,7 +1142,7 @@ export const PMDashboard = ({
                           </tbody>
                         </table>
                       ) : (
-                        <table className="w-full text-xs">
+                        <table className="abyan-table w-full">
                           <thead>
                             <tr className="bg-slate-50/80 text-left">
                               <th className="px-4 py-2.5 font-semibold text-slate-400 uppercase tracking-wider">Employee</th>
@@ -1868,8 +1764,8 @@ export const PMDashboard = ({
               <SkeletonList show={cyclesLoad.showSkeleton} rows={4} label="Loading evaluation cycles…" />
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
-              <table className="w-full">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">Cycle Name</th>

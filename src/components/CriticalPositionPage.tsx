@@ -448,8 +448,8 @@ export const CriticalPositionPage = ({ officeId, officeName, currentUserName }: 
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border-color)] bg-white">
-        <table className="w-full min-w-[760px] text-sm">
+      <div className="abyan-table-wrap">
+        <table className="abyan-table w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-[var(--border-color)] bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
               <th className="px-4 py-3">Position Title</th>

@@ -417,8 +417,8 @@ export const NewlyHiredPage = () => {
             <section className="space-y-6 p-8">
               <div>
                 <h2 className="mb-4 text-2xl font-semibold text-slate-900">Departments</h2>
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <table className="w-full min-w-full">
+                <div className="abyan-table-wrap">
+                  <table className="abyan-table w-full min-w-full">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
                         <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>

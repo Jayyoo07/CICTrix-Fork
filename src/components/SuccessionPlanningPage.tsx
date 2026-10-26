@@ -5,7 +5,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 import {
   listDepartmentSummaries,
   listCriticalPositions,
-  listAutoSuccessors,
+  listAutoSuccessorsForPositions,
   type DepartmentSummary,
   type CriticalPosition,
   type AutoSuccessorsResult,
@@ -225,12 +225,15 @@ const OcboTableView = (_props: { admin: string }) => {
     const pr = await listCriticalPositions(deptId);
     const positions = pr.ok ? pr.data : [];
     setPosByDept((p) => ({ ...p, [deptId]: positions }));
-    await Promise.all(
-      positions.map(async (pos) => {
-        const cr = await listAutoSuccessors(pos.id);
-        if (cr.ok) setCandByPos((p) => ({ ...p, [pos.id]: cr.data }));
-      }),
-    );
+    const candidateResults = await listAutoSuccessorsForPositions(positions.map((pos) => pos.id));
+    setCandByPos((prev) => {
+      const next = { ...prev };
+      for (const pos of positions) {
+        const cr = candidateResults.get(pos.id);
+        if (cr?.ok) next[pos.id] = cr.data;
+      }
+      return next;
+    });
     setLoadingDept((p) => ({ ...p, [deptId]: false }));
   };
 
@@ -295,8 +298,8 @@ const OcboTableView = (_props: { admin: string }) => {
           position and its ranked candidates (mockup option B,
           docs/mockups/2026-10-07-succession-table.html). */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[21rem]">
+        <div className="abyan-table-wrap">
+        <table className="abyan-table w-full min-w-[21rem]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className={TH}>Department</th>
@@ -394,8 +397,8 @@ const OcboTableView = (_props: { admin: string }) => {
                             : ''}
                         </span>
                       </div>
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table className="w-full min-w-[900px] border-collapse text-xs">
+                      <div className="abyan-table-wrap">
+                        <table className="abyan-table w-full min-w-[900px]">
                           <thead>
                             <tr className="border-b border-slate-200 bg-white text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                               <th className="px-3 py-2.5 text-center">Rank</th>

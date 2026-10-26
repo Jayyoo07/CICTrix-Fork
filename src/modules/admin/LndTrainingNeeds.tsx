@@ -204,8 +204,8 @@ export const LndTrainingNeeds = () => {
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[21rem]">
+            <div className="abyan-table-wrap">
+            <table className="abyan-table w-full min-w-[21rem]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className={TH}>Competency</th>
@@ -356,8 +356,8 @@ export const LndTrainingNeeds = () => {
 
               {/* Six columns can't compress below ~44rem and stay readable, so the
                   table scrolls inside its own card rather than widening the page. */}
-              <div className="hidden overflow-x-auto lg:block">
-                <table className="w-full min-w-[44rem]">
+              <div className="abyan-table-wrap hidden lg:block">
+                <table className="abyan-table w-full min-w-[44rem]">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
                       <th className={TH}>Office</th>

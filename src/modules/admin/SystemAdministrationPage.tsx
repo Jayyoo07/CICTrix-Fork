@@ -286,9 +286,9 @@ const OfficeDirectory = () => {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                <tr>
                   <th style={th}>Office</th>
                   <th style={th}>Department Head</th>
                   <th style={{ ...th, textAlign: 'right' }}>Employees</th>
@@ -304,7 +304,7 @@ const OfficeDirectory = () => {
                   >
                     <td style={td}>
                       <div style={{ fontWeight: 600, color: '#363EE8' }}>{row.officeName || '—'}</div>
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                      <div style={{ fontSize: '14px', color: '#515F69', marginTop: '2px' }}>
                         {row.code}
                         {!row.isActive && ' · Inactive'}
                       </div>
@@ -313,7 +313,7 @@ const OfficeDirectory = () => {
                       {row.deptHead ? (
                         <PersonCell person={row.deptHead} />
                       ) : (
-                        <span style={{ color: '#b45309', fontSize: '13px' }}>Unassigned</span>
+                        <span style={{ color: '#b45309', fontSize: '14px' }}>Unassigned</span>
                       )}
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
@@ -326,14 +326,14 @@ const OfficeDirectory = () => {
                           color: '#1f2937',
                         }}
                       >
-                        <Users size={14} style={{ color: '#9ca3af' }} />
+                        <Users size={14} style={{ color: '#515F69' }} />
                         {row.employeeCount}
                       </span>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>
@@ -459,9 +459,9 @@ const AccessRoleManagement = () => {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <div className="abyan-table-wrap is-flush"><table className="abyan-table">
               <thead>
-                <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                <tr>
                   <th style={th}>Employee</th>
                   <th style={th}>Office</th>
                   <th style={th}>Role</th>
@@ -471,7 +471,7 @@ const AccessRoleManagement = () => {
               </thead>
               <tbody>
                 {assignments.map((a) => (
-                  <tr key={a.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <tr key={a.id}>
                     <td style={td}>
                       <span style={{ fontWeight: 600, color: '#1f2937' }}>{a.employee_name || '—'}</span>
                     </td>
@@ -491,7 +491,7 @@ const AccessRoleManagement = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </div>
@@ -1668,20 +1668,11 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 
 // ── Placeholder for not-yet-built subtabs ────────────────────────────────────
 
-const th: React.CSSProperties = {
-  padding: '12px 16px',
-  fontWeight: 600,
-  fontSize: '12px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  whiteSpace: 'nowrap',
-};
+// Header and cell styling come from the shared .abyan-table layer
+// (src/components/data-table); these stay for per-cell overrides.
+const th: React.CSSProperties = {};
 
-const td: React.CSSProperties = {
-  padding: '14px 16px',
-  color: '#374151',
-  verticalAlign: 'top',
-};
+const td: React.CSSProperties = {};
 
 const card: React.CSSProperties = {
   background: '#fff',

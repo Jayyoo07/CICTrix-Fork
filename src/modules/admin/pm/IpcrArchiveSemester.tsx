@@ -56,8 +56,8 @@ export const IpcrArchiveSemester = ({
       </button>
 
       {open && (
-        <div className="overflow-x-auto border-t border-slate-100">
-          <table className="w-full min-w-[900px] text-left text-sm">
+        <div className="abyan-table-wrap">
+          <table className="abyan-table w-full min-w-[900px] text-left">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2.5 font-semibold">Function</th>

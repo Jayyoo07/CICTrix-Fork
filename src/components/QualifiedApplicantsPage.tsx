@@ -36,6 +36,7 @@ import { Applicant, ApplicantStatus, JobPosting } from '../types/recruitment.typ
 import { RecruitmentNavigationGuide } from './RecruitmentNavigationGuide';
 import { Sidebar } from './Sidebar';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
+import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 
 type StoredAttachment = {
   applicant_id: string;
@@ -960,6 +961,17 @@ export const QualifiedApplicantsPage = () => {
 
   const canManageHiring = location.pathname.startsWith('/admin/rsp');
   const isCompletedHireMode = !isApplicantListView && qualifiedTab === 'completed';
+
+  // Top total score per position across every qualified applicant, before the
+  // search, tab and position filters, so filtering never moves it (Task 5).
+  const topScorerIdSet = useMemo(
+    () => topScorerIds(qualifiedBaseRows, {
+      idOf: (a) => a.id,
+      scoreOf: (a) => Math.round(a.qualificationScore || 0),
+      groupOf: (a) => String(jobMap.get(a.jobPostingId)?.title ?? a.jobPostingId ?? ''),
+    }),
+    [qualifiedBaseRows, jobMap],
+  );
 
   const selectedRowsForHiring = useMemo(
     () => qualifiedRows.filter((row) => selectedHireApplicantIds.includes(row.id)),
@@ -1965,8 +1977,8 @@ export const QualifiedApplicantsPage = () => {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className={`min-w-full text-left ${isApplicantListView ? 'text-sm' : 'text-sm'}`}>
-              <thead className={isApplicantListView ? 'bg-slate-50 text-sm uppercase tracking-wide text-slate-700' : 'bg-slate-100 text-xs uppercase tracking-wide text-slate-500'}>
+            <table className="abyan-table">
+              <thead>
                 <tr>
                   {isApplicantListView ? (
                     <>
@@ -2001,11 +2013,9 @@ export const QualifiedApplicantsPage = () => {
                   const totalScore = Math.round(applicant.qualificationScore || 0);
                   const adjectival = getAdjectivalRating(totalScore);
                   const qualifiedStatus = getQualifiedStatus(applicant);
+                  const isTop = !isApplicantListView && topScorerIdSet.has(applicant.id);
                   return (
-                    <tr
-                      key={applicant.id}
-                      className={isApplicantListView ? 'border-t border-slate-200 hover:bg-slate-50' : 'border-t border-slate-100 hover:bg-slate-50'}
-                    >
+                    <tr key={applicant.id} className={topScorerRowClass(isTop)}>
                       {isApplicantListView ? (
                         <>
                           <td className="px-5 py-4 font-medium text-slate-900">
@@ -2050,14 +2060,16 @@ export const QualifiedApplicantsPage = () => {
                             >
                               {fullName}
                             </button>
+                            {isTop && <span className="ml-2"><TopScorerBadge /></span>}
                           </td>
                           <td className="px-5 py-4 text-slate-700">{job?.title ?? '--'}</td>
                           <td className="px-5 py-4 text-slate-700">{job?.department ?? '--'}</td>
-                          <td className="px-5 py-4 font-semibold text-emerald-600">{totalScore} / 100</td>
-                          <td className={`px-5 py-4 font-semibold ${adjectival === 'Excellent' ? 'text-emerald-600' : adjectival === 'Very Good' ? 'text-blue-600' : 'text-slate-700'}`}>
+                          <td className="px-5 py-4 font-semibold text-[var(--color-primary-900)]">{totalScore} / 100</td>
+                          {/* emerald-600 / amber-500 text failed AA on white; the 700 steps pass (§3.6). */}
+                          <td className={`px-5 py-4 font-semibold ${adjectival === 'Excellent' ? 'text-[var(--success-700)]' : adjectival === 'Very Good' ? 'text-[var(--info-700)]' : 'text-slate-700'}`}>
                             {adjectival}
                           </td>
-                          <td className={`px-5 py-4 font-semibold ${qualifiedStatus === 'Completed' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          <td className={`px-5 py-4 font-semibold ${qualifiedStatus === 'Completed' ? 'text-[var(--success-700)]' : 'text-[var(--warning-700)]'}`}>
                             {qualifiedStatus}
                           </td>
                           <td className="px-5 py-4 text-slate-700">{formatPHDate(applicant.applicationDate)}</td>
@@ -2066,10 +2078,13 @@ export const QualifiedApplicantsPage = () => {
                     </tr>
                   );
                 })}
-                {!tableLoad.initialLoading && !isApplicantListView && qualifiedRows.length === 0 && (
-                  <tr>
-                    <td colSpan={isCompletedHireMode ? 8 : 7} className="px-5 py-8 text-center text-base text-slate-500">No qualified applicants found.</td>
-                  </tr>
+                {!tableLoad.initialLoading && !isApplicantListView && (
+                  <TableStateRows
+                    view={qualifiedRows.length === 0 ? 'empty' : 'rows'}
+                    columns={isCompletedHireMode ? 8 : 7}
+                    emptyTitle="No qualified applicants found"
+                    emptyMessage={search || qualifiedPosition !== 'all' ? 'Clear the search or position filter to see everyone.' : 'Applicants appear here once they are scored and qualified.'}
+                  />
                 )}
               </tbody>
             </table>

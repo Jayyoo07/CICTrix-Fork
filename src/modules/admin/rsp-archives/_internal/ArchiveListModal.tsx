@@ -2,6 +2,7 @@ import { FileText, RotateCcw, Trash2 } from 'lucide-react';
 import { Modal } from '../../../../components/modal';
 import { formatDate, type ArchiveRecord, type GroupDef, type PositionRow } from './model';
 import { StatusBadge } from './StatusBadge';
+import { TopScorerBadge, topScorerIds, topScorerRowClass } from '../../../../components/data-table';
 
 interface ArchiveListModalProps {
   row: PositionRow;
@@ -23,8 +24,8 @@ const Name = ({ name, sub }: { name: string; sub?: string }) => (
 );
 
 const Table = ({ head, children }: { head: string[]; children: React.ReactNode }) => (
-  <div className="overflow-x-auto rounded-xl border border-[var(--neutral-200)]">
-    <table className="w-full min-w-[560px] border-collapse">
+  <div className="abyan-table-wrap">
+    <table className="abyan-table w-full min-w-[560px]">
       <thead>
         <tr className="bg-[var(--bg-page)]">
           {head.map((h, i) => <th key={`${h}-${i}`} scope="col" className={`${TH} ${h === 'Score' ? 'text-right' : ''}`}>{h || <span className="sr-only">Actions</span>}</th>)}
@@ -47,14 +48,19 @@ export const ArchiveListModal = ({ row, group, onClose, onRestore, onPurge, onOp
   const body = (() => {
     if (group.id === 'evaluations') {
       const people = first.people ?? [];
+      // The archived ranking is one position, so it is one comparison group (Task 5).
+      const topIds = topScorerIds(people.map((p, i) => ({ id: String(i), score: Number(p.score) })), {
+        idOf: (p) => p.id,
+        scoreOf: (p) => (Number.isFinite(p.score) ? p.score : null),
+      });
       return people.length === 0 ? (
         <p className="!mb-0 text-sm text-[var(--neutral-600)]">No applicants were ranked for this position.</p>
       ) : (
         <Table head={['Rank', 'Applicant', 'Status', 'Score']}>
           {people.map((p, i) => (
-            <tr key={`${p.name}-${i}`} className="border-t border-[var(--neutral-200)]">
+            <tr key={`${p.name}-${i}`} className={topScorerRowClass(topIds.has(String(i)))}>
               <td className={`${TD} w-16 tabular-nums`}>{i + 1}</td>
-              <td className={TD}><Name name={p.name} /></td>
+              <td className={TD}><Name name={p.name} />{topIds.has(String(i)) && <span className="mt-1 inline-block"><TopScorerBadge /></span>}</td>
               <td className={TD}>{p.status ? <StatusBadge type={p.status} /> : '—'}</td>
               <td className={`${TD} text-right tabular-nums`}>{p.score || '—'}</td>
             </tr>

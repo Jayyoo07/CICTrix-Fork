@@ -186,9 +186,9 @@ export const SupervisorAccessPage = () => {
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                <div className="abyan-table-wrap is-flush"><table className="abyan-table">
                   <thead>
-                    <tr style={{ background: '#f9fafb', textAlign: 'left', color: '#6b7280' }}>
+                    <tr>
                       <th style={th}>Full Name</th>
                       <th style={th}>Department</th>
                       <th style={th}>Position</th>
@@ -199,7 +199,7 @@ export const SupervisorAccessPage = () => {
                   </thead>
                   <tbody>
                     {supervisors.map((s) => (
-                      <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                      <tr key={s.id}>
                         <td style={td}>
                           <span style={{ fontWeight: 600, color: '#1f2937' }}>{s.full_name}</span>
                         </td>
@@ -224,7 +224,7 @@ export const SupervisorAccessPage = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             )}
           </div>
@@ -367,20 +367,11 @@ const StatusBadge = ({ supervisor }: { supervisor: Supervisor }) => {
   );
 };
 
-const th: React.CSSProperties = {
-  padding: '12px 16px',
-  fontWeight: 600,
-  fontSize: '12px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  whiteSpace: 'nowrap',
-};
+// Header and cell styling come from the shared .abyan-table layer
+// (src/components/data-table); these stay for per-cell overrides.
+const th: React.CSSProperties = {};
 
-const td: React.CSSProperties = {
-  padding: '14px 16px',
-  color: '#374151',
-  verticalAlign: 'top',
-};
+const td: React.CSSProperties = {};
 
 const resetButton: React.CSSProperties = {
   display: 'inline-flex',

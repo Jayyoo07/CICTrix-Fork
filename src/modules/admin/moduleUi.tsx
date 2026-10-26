@@ -40,19 +40,10 @@ export const ui = {
     color: '#1f2937',
     margin: '0 0 14px',
   } as CSSProperties,
-  th: {
-    padding: '12px 16px',
-    fontWeight: 600,
-    fontSize: '12px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-  } as CSSProperties,
-  td: {
-    padding: '14px 16px',
-    color: '#374151',
-    verticalAlign: 'top',
-  } as CSSProperties,
+  // Header and cell styling come from the shared .abyan-table layer
+  // (src/components/data-table); these stay for per-cell overrides.
+  th: {} as CSSProperties,
+  td: {} as CSSProperties,
   input: {
     width: '100%',
     padding: '9px 12px',

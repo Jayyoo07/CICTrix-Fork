@@ -471,8 +471,8 @@ export function JobPortalPage() {
           </div>
         ) : (
           /* TABLE VIEW */
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full border-collapse text-sm text-left">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full text-left">
               <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 font-semibold text-[#050D65]">Position Title</th>

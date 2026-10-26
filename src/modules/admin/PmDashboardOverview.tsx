@@ -368,8 +368,8 @@ export const PmDashboardOverview = ({ statuses, statusesLoading, onOpenSummary }
               </div>
             </div>
           </div>
-            <div className="pd-tbl">
-              <table>
+            <div className="pd-tbl abyan-table-wrap">
+              <table className="abyan-table is-compact">
                 <thead>
                   <tr>
                     <th scope="col">Department</th>
@@ -452,8 +452,8 @@ export const PmDashboardOverview = ({ statuses, statusesLoading, onOpenSummary }
                   </div>
 
                   <span className="pd-overline pd-overline-gap">By department · highest average first</span>
-                  <div className="pd-tbl">
-                    <table>
+                  <div className="pd-tbl abyan-table-wrap">
+                    <table className="abyan-table is-compact">
                       <thead>
                         <tr>
                           <th scope="col">Department</th>

@@ -242,8 +242,8 @@ export const PMMasterControlPanel: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-lg border border-slate-100">
-                    <table className="w-full text-left border-collapse text-sm">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full text-left">
                       <thead>
                         <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100 text-xs">
                           <th className="px-4 py-3">Office Name</th>
@@ -510,8 +510,8 @@ export const PMMasterControlPanel: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="w-full text-left border-collapse text-xs">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full text-left">
                       <thead>
                         <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                           <th className="px-4 py-2.5">Office</th>

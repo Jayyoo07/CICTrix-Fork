@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, CircleX, FileText, Loader2, Lock, Mail, RefreshCw, Search, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, CircleX, FileText, Loader2, Lock, Mail, RefreshCw, Search, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ActionFeedback, useFeedback } from '../../components/action-feedback';
@@ -17,14 +17,18 @@ import { APPLICANT_MESSAGES, normalizeStatus, regretLetter, signingForfeitWarnin
 import { formatDisplayDate } from '../../lib/scheduleSelection';
 import { fetchApplicantSlotLinks, fetchSlotsByJobPosting } from '../../lib/plantillaSlots';
 import { plantillaLabel } from '../../lib/plantillaRules';
+import {
+  fetchPendingResubmissionIds,
+  fetchTrackerApplications,
+  isClosedApplicationStatus,
+  latestNoticesByDocType,
+  parseNotice,
+  pendingResubmissionTypes as pendingResubmissionTypesOf,
+  pickDefaultApplicationId,
+  refetchTrackerApplications,
+  type TrackerLookup,
+} from '../../lib/applicantTracker';
 import type { ApplicationSlotStatus, PlantillaSlot } from '../../types/recruitment.types';
-
-/** The columns the tracker is allowed to look an application up by. */
-type TrackerLookupColumn = 'reference_no_normalized' | 'item_number' | 'email';
-
-/** Reference numbers get read off a printout and typed back in. */
-const normalizeReference = (value: string) =>
-  String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 interface ApplicationRecord {
   id: string;
@@ -65,6 +69,10 @@ interface ApplicationRecord {
   signing_deadline?: string | null;
   signing_instructions?: string | null;
   archived_at?: string | null;
+  // Migration 20261021200000: the plantilla applied for, and for a withdrawn
+  // application, the plantilla the person was hired on instead.
+  plantilla_label: string | null;
+  hired_elsewhere_plantilla_label: string | null;
 }
 
 interface AttachmentRow {
@@ -91,10 +99,12 @@ const clearDocReview = (key: string) => {
   } catch { /* ignore */ }
 };
 
-type BadgeTone = 'approved' | 'in-review' | 'rejected' | 'new';
+// 'received' is a fresh submission (Info, DESIGN_IDENTITY §10); 'new' stays
+// the orange tone for statuses that wait on the applicant.
+type BadgeTone = 'approved' | 'in-review' | 'rejected' | 'new' | 'received' | 'withdrawn';
 
 const STATUS_BADGE: Record<string, { label: string; tone: BadgeTone }> = {
-  'New Application': { label: 'New', tone: 'new' },
+  'New Application': { label: 'New', tone: 'received' },
   // Spec §7: Pending means the office is waiting on the applicant, not that
   // the application is new. Labelling it 'New' told someone who needed to
   // resubmit a document that there was nothing for them to do.
@@ -110,7 +120,8 @@ const STATUS_BADGE: Record<string, { label: string; tone: BadgeTone }> = {
   'Qualified': { label: 'Qualified', tone: 'in-review' },
   'Selected': { label: 'Selected', tone: 'approved' },
   'Not Selected': { label: 'Not Selected', tone: 'rejected' },
-  'Submitted': { label: 'New', tone: 'new' },
+  'Submitted': { label: 'New', tone: 'received' },
+  'Withdrawn - Hired Elsewhere': { label: 'Withdrawn', tone: 'withdrawn' },
   'Under Initial Screening': { label: 'Under Evaluation', tone: 'in-review' },
   'For Interview': { label: 'In Review', tone: 'in-review' },
   'Interview Scheduled': { label: 'In Review', tone: 'in-review' },
@@ -132,6 +143,8 @@ const BADGE_CLASS: Record<BadgeTone, string> = {
   'in-review': 'bg-blue-50 text-blue-700 border border-blue-200',
   rejected: 'bg-rose-50 text-rose-700 border border-rose-200',
   new: 'bg-amber-50 text-amber-700 border border-amber-200',
+  received: 'bg-[var(--info-100)] text-[var(--info-700)] border border-[var(--info-300)]',
+  withdrawn: 'bg-[var(--neutral-100)] text-[var(--neutral-800)] border border-[var(--neutral-200)]',
 };
 
 const NOTICE_CLASS: Record<BadgeTone, string> = {
@@ -139,6 +152,8 @@ const NOTICE_CLASS: Record<BadgeTone, string> = {
   'in-review': 'bg-blue-50 border-blue-200 text-blue-800',
   rejected: 'bg-rose-50 border-rose-200 text-rose-800',
   new: 'bg-amber-50 border-amber-200 text-amber-800',
+  received: 'bg-[var(--info-100)] border-[var(--info-300)] text-[var(--info-700)]',
+  withdrawn: 'bg-[var(--neutral-100)] border-[var(--neutral-200)] text-[var(--neutral-800)]',
 };
 
 const NOTICE_MESSAGE: Record<BadgeTone, string> = {
@@ -146,6 +161,8 @@ const NOTICE_MESSAGE: Record<BadgeTone, string> = {
   'in-review': 'Your application is currently being reviewed. We will notify you by email once a decision is reached.',
   rejected: 'We regret to inform you that your application was not selected for this position. Thank you for your interest.',
   new: 'Your application has been received. We will begin reviewing it shortly.',
+  received: 'Your application has been received. We will begin reviewing it shortly.',
+  withdrawn: APPLICANT_MESSAGES['Withdrawn - Hired Elsewhere'],
 };
 
 const getNoticeMessage = (status: string, tone: BadgeTone, reason?: string | null): string => {
@@ -294,6 +311,15 @@ const resolvePhase = (rawStatus: string, hasSchedule: boolean): ApplicantPhase =
         detail: APPLICANT_MESSAGES[status],
         tone: 'rejected', showSchedule: false, showCongrats: false,
       };
+
+    // Closed because the person was hired on another application. Now that
+    // every application is listed, this row is reachable from the tracker.
+    case 'Withdrawn - Hired Elsewhere':
+      return {
+        headline: 'Withdrawn — Hired Elsewhere',
+        detail: APPLICANT_MESSAGES[status],
+        tone: 'new', showSchedule: false, showCongrats: false,
+      };
   }
 };
 
@@ -319,8 +345,15 @@ const formatTime12h = (time: string | null | undefined): string => {
   }
 };
 
+/** Dates in a list row read `MMM DD, YYYY` (DESIGN_IDENTITY §9.5). */
+const formatRowDate = (iso: string | null) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
-const formatFileSize = (bytes: number) => {
+const formatFileSize =(bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -333,7 +366,14 @@ export const ApplicationStatusPage = () => {
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [record, setRecord] = useState<ApplicationRecord | null>(null);
+  // Every application the search found, newest first. One of them is open at
+  // a time; `record` is that one, so every section below reads it unchanged.
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const record = applications.find((a) => a.id === openId) ?? null;
+  // Applications with a resubmission notice still waiting on the applicant,
+  // for the per-row "Action required" flag.
+  const [actionIds, setActionIds] = useState<Set<string>>(new Set());
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [docReviews, setDocReviews] = useState<Record<string, DocReview>>({});
   const [searched, setSearched] = useState(false);
@@ -351,7 +391,13 @@ export const ApplicationStatusPage = () => {
   // the SAME query path that handleSearch already uses (which we know works).
   // Querying by UUID (.eq('id',...)) can silently fail on some Supabase RLS configs;
   // querying by item_number / email always works because handleSearch proved it.
-  const searchParamsRef = useRef<{ col: TrackerLookupColumn; val: string } | null>(null);
+  const searchParamsRef = useRef<TrackerLookup | null>(null);
+  // Read by async callbacks, so a response for a row the applicant has since
+  // closed never lands under the row they opened instead.
+  const openIdRef = useRef<string | null>(null);
+  openIdRef.current = openId;
+  const applicationIds = applications.map((a) => a.id);
+  const applicationIdsKey = applicationIds.join(',');
 
   const mapRow = (row: Record<string, unknown>): ApplicationRecord => ({
     id: String(row.id ?? ''),
@@ -383,6 +429,8 @@ export const ApplicationStatusPage = () => {
     missed_activity_type: row.missed_activity_type ? String(row.missed_activity_type) : null,
     missed_activity_date: row.missed_activity_date ? String(row.missed_activity_date) : null,
     missed_activity_time: row.missed_activity_time ? String(row.missed_activity_time) : null,
+    plantilla_label: row.plantilla_label ? String(row.plantilla_label) : null,
+    hired_elsewhere_plantilla_label: row.hired_elsewhere_plantilla_label ? String(row.hired_elsewhere_plantilla_label) : null,
   });
 
   const fetchAttachments = async (applicantId: string) => {
@@ -392,27 +440,26 @@ export const ApplicationStatusPage = () => {
         .select('id, file_name, file_path, document_type, created_at')
         .eq('applicant_id', applicantId)
         .order('created_at', { ascending: false });
+      if (applicantId !== openIdRef.current) return;
       if (!err && Array.isArray(data)) setAttachments(data as AttachmentRow[]);
     } catch { /* silently ignore */ }
   };
 
-  // Real audit trail (RLS only returns visible_to_applicant = true rows) —
-  // powers the extra "Application Disqualified" timeline entry below.
-  // Reuses the same query column/value as the original handleSearch so we are
-  // guaranteed to get fresh data even if UUID-based lookups are restricted by RLS.
-  const fetchRecord = async () => {
+  // Re-reads every application. Reuses the same query column/value as the
+  // search so we are guaranteed to get fresh data even if UUID-based lookups
+  // are restricted by RLS. The open row stays open unless it has gone.
+  const fetchApplications = async () => {
     if (!searchParamsRef.current) return;
-    const { col, val } = searchParamsRef.current;
     try {
-      const { data, error: err } = await (supabase as any)
-        .from('applicant_tracker_view')
-        .select('*')
-        .eq(col, val)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      if (!err && Array.isArray(data) && data.length > 0) {
-        setRecord(mapRow(data[0] as Record<string, unknown>));
-      }
+      const rows = await refetchTrackerApplications(searchParamsRef.current);
+      if (!rows || rows.length === 0) return;
+      const mapped = rows.map(mapRow);
+      const flagged = await fetchPendingResubmissionIds(mapped.map((a) => a.id));
+      setApplications(mapped);
+      setActionIds(flagged);
+      const current = openIdRef.current;
+      if (mapped.length === 1) setOpenId(mapped[0].id);
+      else if (current && !mapped.some((a) => a.id === current)) setOpenId(pickDefaultApplicationId(mapped, flagged));
     } catch { /* silently ignore */ }
   };
 
@@ -451,9 +498,10 @@ export const ApplicationStatusPage = () => {
 
   // Real-time: applicant_attachments — uses filtered subscription (works with REPLICA IDENTITY FULL).
   // Polling fallback below covers the case where the filter doesn't fire.
+  // Only the open row's documents are shown, so only it is subscribed.
   useEffect(() => {
-    if (!record?.id) return;
-    const rid = record.id;
+    if (!openId) return;
+    const rid = openId;
     const channel = (supabase as any)
       .channel(`tracker_attachments_${rid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'applicant_attachments', filter: `applicant_id=eq.${rid}` }, () => {
@@ -461,40 +509,40 @@ export const ApplicationStatusPage = () => {
       })
       .subscribe();
     return () => { void (supabase as any).removeChannel(channel); };
-  }, [record?.id]);
+  }, [openId]);
 
   // Real-time: applicants status — UNFILTERED so it works without REPLICA IDENTITY FULL.
   // Server-side filtered subscriptions are silently dropped when REPLICA IDENTITY is not FULL;
   // listening to the whole table and filtering client-side on payload.new.id is reliable.
+  // Any of the person's applications changing refreshes the whole list, so a
+  // collapsed row's badge stays as current as the open one's.
   useEffect(() => {
-    if (!record?.id) return;
-    const rid = record.id;
+    if (!applicationIdsKey) return;
+    const ids = new Set(applicationIdsKey.split(','));
     const channel = (supabase as any)
-      .channel(`tracker_applicants_${rid}`)
+      .channel(`tracker_applicants_${applicationIdsKey}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'applicants' }, (payload: any) => {
-        if ((payload.new as { id?: string })?.id === rid) {
-          void fetchRecord();
-          void fetchAttachments(rid);
-        }
+        const changedId = (payload.new as { id?: string })?.id;
+        if (!changedId || !ids.has(changedId)) return;
+        void fetchApplications();
+        if (changedId === openIdRef.current) void fetchAttachments(changedId);
       })
       .subscribe();
     return () => { void (supabase as any).removeChannel(channel); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.id]);
+  }, [applicationIdsKey]);
 
   // Polling fallback — 2 s so status changes (disqualify, validate docs, etc.) feel instant.
+  // Covers every application, plus the open row's documents.
   useEffect(() => {
-    if (!record?.id) return;
-    const rid = record.id;
-    // Immediate first poll so we never show stale data after search
-    void fetchRecord();
+    if (!applicationIdsKey) return;
     const interval = setInterval(() => {
-      void fetchAttachments(rid);
-      void fetchRecord();
+      if (openIdRef.current) void fetchAttachments(openIdRef.current);
+      void fetchApplications();
     }, 2000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.id]);
+  }, [applicationIdsKey]);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<Record<string, File>>({});
@@ -506,6 +554,19 @@ export const ApplicationStatusPage = () => {
   // immediately after re-upload, without waiting for the real-time refetch.
   const [submittedFileNames, setSubmittedFileNames] = useState<Record<string, string>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Opening another row starts it clean: nothing the applicant saw or picked
+  // under the previous application carries over to this one.
+  useEffect(() => {
+    setAttachments([]);
+    setSlotOutcomes([]);
+    setUploadSuccess(null);
+    setUploadErrors({});
+    setPendingFiles({});
+    setResolvedDocTypes(new Set());
+    setSubmittedFileNames({});
+    if (openId) void fetchAttachments(openId);
+  }, [openId]);
 
   const getReviewKey = (applicantId: string, filePath: string) => `${applicantId}::${filePath}`;
 
@@ -530,56 +591,32 @@ export const ApplicationStatusPage = () => {
     setError(null);
     setLoading(true);
     setSearched(false);
-    setRecord(null);
-    setAttachments([]);
+    searchParamsRef.current = null;
+    setApplications([]);
+    setOpenId(null);
+    setActionIds(new Set());
     setDocReviews({});
-    setUploadSuccess(null);
-    setResolvedDocTypes(new Set());
-    setSubmittedFileNames({});
 
     try {
-      const looksLikeEmail = trimmed.includes('@');
       // Reference numbers are matched on their normalised form, so
       // "abyan 123 456", "ABYAN-123-456" and "abyan123456" all find the same
-      // application. The DB holds that normalised form in a generated column.
-      const lookupColumn = looksLikeEmail ? 'email' : 'reference_no_normalized';
-      const lookupValue = looksLikeEmail ? trimmed.toLowerCase() : normalizeReference(trimmed);
+      // person, and an old alias finds them too.
+      const { rows, lookup } = await fetchTrackerApplications(trimmed);
 
-      const runLookup = async (col: string, val: string) =>
-        await (supabase as any)
-          .from('applicant_tracker_view')
-          .select('*')
-          .eq(col, val)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-      let activeColumn = lookupColumn;
-      let activeValue = lookupValue;
-      let { data, error: dbError } = await runLookup(activeColumn, activeValue);
-
-      // Before migration 20260923 there is no reference_no column, and the old
-      // tracking codes still live in item_number. Fall back so anyone holding
-      // a pre-split code can still find themselves.
-      if (!looksLikeEmail && (dbError || !(Array.isArray(data) && data.length > 0))) {
-        activeColumn = 'item_number';
-        activeValue = trimmed.toUpperCase();
-        ({ data, error: dbError } = await runLookup(activeColumn, activeValue));
-      }
-
-      if (dbError) throw new Error(dbError.message);
-      const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
-
-      if (!row) {
+      if (!lookup || rows.length === 0) {
         setSearched(true);
         return;
       }
 
-      const mapped = mapRow(row as Record<string, unknown>);
+      const mapped = rows.map(mapRow);
+      const flagged = await fetchPendingResubmissionIds(mapped.map((a) => a.id));
 
       // Store search params so polling can reuse the same query (not UUID lookup)
-      searchParamsRef.current = { col: activeColumn as TrackerLookupColumn, val: activeValue };
-      setRecord(mapped);
-      await fetchAttachments(mapped.id);
+      searchParamsRef.current = lookup;
+      setApplications(mapped);
+      setActionIds(flagged);
+      // Opening the row fetches its documents (the openId effect above).
+      setOpenId(pickDefaultApplicationId(mapped, flagged));
 
       // Load doc reviews from localStorage
       const allReviews = loadDocReviews();
@@ -656,7 +693,7 @@ export const ApplicationStatusPage = () => {
         .select('id, file_name, file_path, document_type, created_at')
         .eq('applicant_id', record.id)
         .order('created_at', { ascending: false });
-      if (Array.isArray(refreshed)) setAttachments(refreshed as AttachmentRow[]);
+      if (Array.isArray(refreshed) && record.id === openIdRef.current) setAttachments(refreshed as AttachmentRow[]);
 
       // Update overall applicant status to "Under Review" (Status Synchronization)
       try {
@@ -686,7 +723,9 @@ export const ApplicationStatusPage = () => {
         console.warn('Failed to update status in localStorage:', lsErr);
       }
 
-      setRecord((prev) => prev ? { ...prev, status: 'Under Review', updated_at: new Date().toISOString() } : null);
+      setApplications((prev) => prev.map((a) => (
+        a.id === record.id ? { ...a, status: 'Under Review', updated_at: new Date().toISOString() } : a
+      )));
 
       // Optimistically mark this doc type as resolved and store the new file
       // name so the card header updates immediately without waiting for the
@@ -714,7 +753,6 @@ export const ApplicationStatusPage = () => {
   // If the applicant status is at or beyond "Document Verified", all documents
   // are considered verified even if doc_validated rows haven't synced yet.
 
-
   const badge = record ? getBadge(record.status) : null;
   const hasSchedule = !!(record?.exam_date || record?.interview_date);
   const fullName = record ? `${record.first_name} ${record.last_name}`.trim() : '';
@@ -723,59 +761,11 @@ export const ApplicationStatusPage = () => {
   const programType =
     record?.application_type === 'promotion' ? 'Promotional Application' : 'Job Application';
 
-  // Map from RSP document slot label → document_type key used in attachments
-  const LABEL_TO_DOC_TYPE: Record<string, string> = {
-    'Application Letter': 'application_letter',
-    'Personal Data Sheet': 'pds_with_photo',
-    'Curriculum Vitae': 'curriculum_vitae',
-    'Proof of Eligibility Rating/License': 'eligibility_proof',
-    'Certificate of Relevant Training/Seminars': 'training_certificate',
-    'Transcript of Records': 'transcript_of_records',
-    'Certificate from Previous Employer': 'previous_employer_certificate',
-    'Drug Test Result': 'drug_test',
-    'Other Supporting Documents': 'other',
-  };
-
-  const parseNotice = (notice: AttachmentRow) => {
-    const parts = notice.file_name.split('::');
-    return {
-      document: parts[1] ?? notice.file_name,
-      reason: parts[2] ?? '',
-      notes: notice.file_path === '—' ? '' : notice.file_path,
-      date: notice.created_at,
-      docType: LABEL_TO_DOC_TYPE[parts[1] ?? ''] ?? '',
-    };
-  };
-
-  // All RSP resubmission notice rows
-  const allNotices = attachments.filter((a) => a.document_type === 'resubmission_request');
-
   // Keep only the latest notice per doc type, then check if a newer real upload
   // exists after it. If yes → the applicant already re-submitted → notice resolved.
-  // This works purely from timestamps so no Supabase UPDATE is needed.
-  const latestNoticeByDocType = new Map<string, AttachmentRow>();
-  allNotices.forEach((notice) => {
-    const { docType } = parseNotice(notice);
-    if (!docType) return;
-    const existing = latestNoticeByDocType.get(docType);
-    if (!existing || new Date(notice.created_at).getTime() > new Date(existing.created_at).getTime()) {
-      latestNoticeByDocType.set(docType, notice);
-    }
-  });
-
-  // A notice is "pending" only when there is no real upload created after it.
-  const pendingResubmissionTypes = new Set<string>();
-  latestNoticeByDocType.forEach((notice, docType) => {
-    const noticeTime = new Date(notice.created_at).getTime();
-    const hasNewerUpload = attachments.some(
-      (a) =>
-        a.document_type === docType &&
-        a.document_type !== 'resubmission_request' &&
-        a.document_type !== 'resubmission_resolved' &&
-        new Date(a.created_at ?? '').getTime() > noticeTime,
-    );
-    if (!hasNewerUpload) pendingResubmissionTypes.add(docType);
-  });
+  // The same rule drives the per-row "Action required" flag.
+  const latestNoticeByDocType = latestNoticesByDocType(attachments);
+  const pendingResubmissionTypes = pendingResubmissionTypesOf(attachments, latestNoticeByDocType);
 
   // Only the still-pending notices (for display in the amber notice section)
   const resubmissionNotices = [...latestNoticeByDocType.values()].filter((n) =>
@@ -813,11 +803,7 @@ export const ApplicationStatusPage = () => {
   // Spec (Qualification Assessment Restriction): when the applicant is
   // disqualified / failed assessment, disable resubmission, lock upload, and
   // show a closed-application banner.
-  const isApplicationClosed = (() => {
-    if (!record) return false;
-    const s = String(record.status ?? '').toLowerCase();
-    return s.includes('disqualif') || s.includes('not qualified') || s.includes('failed') || s.includes('rejected');
-  })();
+  const isApplicationClosed = record ? isClosedApplicationStatus(record.status) : false;
 
   const hasActionRequired = record && !isApplicationClosed && (
     resubmissionNotices.length > 0 ||
@@ -831,6 +817,610 @@ export const ApplicationStatusPage = () => {
   const disqualificationSummary = disqualificationInfo?.note
     ? `${disqualificationInfo.label}: ${disqualificationInfo.note}`
     : record?.disqualification_reason ?? '';
+
+  // The sections for the open application, exactly as the page has always
+  // shown them. With several applications they render under the open row.
+  const details = record && badge ? (
+    <>
+      {/* Disqualified / Closed banner */}
+      {isApplicationClosed && record.disqualified_at && (
+        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-start gap-3 border-l-4 border-rose-500 bg-rose-50 px-5 py-5">
+            <CircleX size={22} className="mt-0.5 flex-shrink-0 text-rose-600" />
+            <div className="flex-1 space-y-1">
+              <p className="text-base font-bold text-rose-800">Application Disqualified</p>
+              <p className="text-sm text-rose-700">
+                <span className="font-semibold">Date:</span> {formatDate(record.disqualified_at)}
+              </p>
+              <p className="text-sm text-rose-700">
+                <span className="font-semibold">Reason:</span> {getDisqualificationReasonLabel(record.disqualification_reason_category)}
+              </p>
+              {/* Spec §9 Option A. Shown from the reason and the recorded
+                  activity, not from the admin's note — the note can be
+                  kept internal, and this is the one thing the applicant
+                  must be told either way. */}
+              {record.disqualification_reason_category === FAILURE_TO_ATTEND && (
+                <p className="text-sm text-rose-700">
+                  {failureToAttendMessage(
+                    record.missed_activity_type
+                      ? {
+                          type: record.missed_activity_type as MissedActivityType,
+                          date: formatDate(record.missed_activity_date),
+                          time: formatTime12h(record.missed_activity_time) || null,
+                        }
+                      : null,
+                  )}
+                </p>
+              )}
+              {record.disqualification_message_visible && record.disqualification_message && (
+                <p className="text-sm text-rose-700">
+                  <span className="font-semibold">Note:</span> {record.disqualification_message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Closed for a reason other than a structured disqualification (legacy statuses) */}
+      {isApplicationClosed && !record.disqualified_at && (
+        <div className="mt-8 flex items-start gap-4 rounded-2xl border border-rose-300 bg-rose-50 px-5 py-5 shadow-sm">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-rose-100">
+            <CircleX size={22} className="text-rose-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold text-rose-800">
+              {record.status === 'Disqualified' || record.status === 'Not Qualified'
+                ? 'Application Disqualified'
+                : 'Application Closed'}
+            </p>
+            <p className="mt-1 text-sm text-rose-700">
+              {record.status === 'Disqualified' || record.status === 'Not Qualified'
+                ? 'We regret to inform you that your application did not advance further in the selection process. This application will no longer be considered for this position. For inquiries, please contact the Recruitment Office.'
+                : 'This application is no longer active. Document resubmission and re-upload have been disabled. For questions, please contact the Recruitment Office.'}
+            </p>
+            {disqualificationSummary && (
+              <div className="mt-3 rounded-xl border border-rose-200 bg-white/70 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Reason from RSP Admin</p>
+                <p className="mt-1 text-sm text-rose-800">{disqualificationSummary}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Required Banner */}
+      {hasActionRequired && (
+        <div className="mt-8 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-amber-600" />
+          <div>
+            <p className="font-bold text-amber-800">Action Required — Document Resubmission</p>
+            <p className="mt-0.5 text-sm text-amber-700">
+              One or more of your documents requires resubmission. Please review the details below and re-upload the corrected files.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Application Details */}
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Application Details</h3>
+            <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>
+              Reference No. {record.reference_no || '—'}
+            </p>
+          </div>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold ${BADGE_CLASS[badge.tone]}`}>
+            {badge.tone === 'approved' && <CheckCircle2 size={14} />}
+            {badge.tone === 'rejected' && <CircleX size={14} />}
+            {badge.label}
+          </span>
+        </div>
+
+        {/* Per-plantilla outcome. Only worth showing when this single
+            application covers more than one plantilla item — otherwise
+            the badge above already says everything. */}
+        {slotOutcomes.length > 1 && (
+          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>
+              Plantilla Items You Applied For
+            </p>
+            <ul className="mt-3 space-y-2">
+              {slotOutcomes.map(({ slot, status }) => {
+                const tone =
+                  status === 'hired' ? 'bg-emerald-100 text-emerald-700'
+                  : status === 'shortlisted' ? 'bg-blue-100 text-blue-700'
+                  : status === 'not_selected' ? 'bg-rose-100 text-rose-700'
+                  : 'bg-slate-200 text-slate-600';
+                // 'applied' has no verdict of its own yet, so it defers
+                // to the application's overall status.
+                const label =
+                  status === 'hired' ? 'Hired'
+                  : status === 'shortlisted' ? 'Shortlisted'
+                  : status === 'not_selected' ? 'Not selected'
+                  : badge.label;
+                return (
+                  <li key={slot.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm" style={{ color: '#040E6B' }}>
+                      <span className="font-semibold">{plantillaLabel(slot)}</span>
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone}`}>
+                      {label} for {plantillaLabel(slot)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-6 grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>Applicant Information</p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Name</p>
+                <p className="mt-0.5 text-base font-semibold" style={{ color: '#040E6B' }}>{fullName || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Email</p>
+                <p className="mt-0.5 text-base font-medium break-words" style={{ color: '#040E6B' }}>{record.email || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Phone</p>
+                <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{record.contact_number || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>Application Information</p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Program Type</p>
+                <p className="mt-0.5 text-base font-semibold" style={{ color: '#040E6B' }}>{programType}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Position</p>
+                <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>
+                  {record.position || '—'}
+                  {record.office && <span style={{ color: '#363EE8' }}> · {record.office}</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Submitted</p>
+                <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{formatDate(record.created_at)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Last Updated</p>
+                <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{formatDate(record.updated_at)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* RSP Resubmission Notices — real-time from Supabase (hidden once application is closed/disqualified) */}
+      {resubmissionNotices.length > 0 && !isApplicationClosed && (
+        <section className="mt-6 rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#C8D1FF' }}>
+          <div className="flex items-center gap-3 px-6 py-4" style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', fontFamily: 'Poppins, sans-serif' }}>
+            <AlertCircle size={20} className="text-white" />
+            <div>
+              <h3 className="font-bold text-white">Notices from RSP Admin</h3>
+              <p className="text-xs" style={{ color: '#C8D1FF' }}>Action may be required — review each notice below</p>
+            </div>
+          </div>
+          <div className="divide-y bg-white" style={{ borderColor: '#EEF0FD' }}>
+            {resubmissionNotices.map((notice) => {
+              const n = parseNotice(notice);
+              return (
+                <div key={notice.id} className="px-6 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} style={{ color: '#363EE8' }} />
+                      <p className="text-sm font-semibold" style={{ color: '#040E6B' }}>{n.document}</p>
+                    </div>
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border" style={{ borderColor: '#F59E0B', backgroundColor: '#FFFBEB', color: '#92400E' }}>
+                      <AlertCircle size={11} /> Action Required
+                    </span>
+                  </div>
+                  {n.reason && (
+                    <p className="mt-2 text-xs" style={{ color: '#040E6B' }}>
+                      <span className="font-semibold">Reason:</span> {n.reason}
+                    </p>
+                  )}
+                  {n.notes && (
+                    <p className="mt-1.5 rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: '#EEF0FD', color: '#363EE8' }}>
+                      <span className="font-semibold">RSP Note:</span> {n.notes}
+                    </p>
+                  )}
+                  {n.date && (
+                    <p className="mt-2 text-xs" style={{ color: '#6B7280' }}>Issued: {new Date(n.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Current Status — single card. Replaces the former multi-step timeline. */}
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Current Status</h3>
+        <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>Where your application stands right now</p>
+
+        {(() => {
+          const phase = resolvePhase(record.status, hasSchedule);
+          const toneStyles: Record<string, { wrap: string; title: string }> = {
+            'new': { wrap: 'border-slate-200 bg-slate-50', title: 'text-slate-700' },
+            'in-review': { wrap: 'border-blue-200 bg-blue-50', title: 'text-blue-800' },
+            'action': { wrap: 'border-amber-200 bg-amber-50', title: 'text-amber-800' },
+            'approved': { wrap: 'border-emerald-200 bg-emerald-50', title: 'text-emerald-800' },
+            'rejected': { wrap: 'border-rose-200 bg-rose-50', title: 'text-rose-800' },
+          };
+          const t = toneStyles[phase.tone] ?? toneStyles['new'];
+          const pendingDocs = resubmissionNotices.map((n) => parseNotice(n).document).filter(Boolean);
+
+          return (
+            <div className={`mt-5 rounded-xl border px-5 py-4 ${t.wrap}`}>
+              <p className={`text-lg font-bold ${t.title}`}>{phase.headline}</p>
+              <p className="mt-1 text-sm" style={{ color: '#040E6B' }}>{phase.detail}</p>
+              <p className="mt-2 text-xs" style={{ color: '#363EE8' }}>Last updated {formatDate(record.updated_at)}</p>
+
+              {phase.tone === 'action' && pendingDocs.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Documents needed</p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
+                    {pendingDocs.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {phase.showCongrats && (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-4 py-3">
+                  <p className="text-sm font-bold text-emerald-800">Congratulations!</p>
+                  <p className="mt-0.5 text-sm text-emerald-700">
+                    You have been selected for the position of <span className="font-semibold">{record.position}</span>.
+                    The RSP Office will contact you with further instructions regarding your appointment.
+                  </p>
+                </div>
+              )}
+
+              {normalizeStatus(record.status) === 'For Contract Signing' && (
+                <div className="abyan-ds mt-3 rounded-xl border border-[var(--success-300)] bg-white px-4 py-3">
+                  <p className="text-sm font-semibold text-[var(--success-700)]">Congratulations, {record.first_name}!</p>
+                  <p className="mt-1 text-sm text-[var(--neutral-800)]">
+                    You have been selected for the position of <span className="font-semibold">{record.position}</span>.
+                  </p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Report on or before</p>
+                  <p className="text-base font-semibold text-[var(--color-primary-900)]">{formatDisplayDate(record.signing_deadline)}</p>
+                  {record.signing_instructions && (
+                    <>
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Instructions</p>
+                      <p className="mt-0.5 whitespace-pre-line text-sm text-[var(--neutral-800)]">{record.signing_instructions}</p>
+                    </>
+                  )}
+                  <p className="mt-3 rounded-lg bg-[var(--warning-100)] px-3 py-2 text-sm text-[var(--warning-700)]">
+                    {signingForfeitWarning(formatDisplayDate(record.signing_deadline))}
+                  </p>
+                </div>
+              )}
+
+              {record.archived_at && normalizeStatus(record.status) === 'Not Selected' && (
+                <div className="abyan-ds mt-3 space-y-2 rounded-xl border border-[var(--neutral-200)] bg-white px-4 py-4 text-sm text-[var(--neutral-800)]">
+                  {regretLetter(`${record.first_name} ${record.last_name}`.trim(), record.position).map((line, i, all) => (
+                    // The last two lines are the signature block: no gap between them.
+                    <p key={i} className={i === all.length - 1 ? '!mt-0' : undefined}>{line}</p>
+                  ))}
+                </div>
+              )}
+
+              {phase.tone === 'rejected' && disqualificationSummary && (
+                <div className="mt-3 rounded-xl border border-rose-200 bg-white px-4 py-3">
+                  <p className="text-sm font-semibold text-rose-800">Reason</p>
+                  <p className="mt-1 text-sm text-rose-700">{disqualificationSummary}</p>
+                </div>
+              )}
+
+              {phase.showSchedule && hasSchedule && (
+                <div className="mt-4 rounded-xl border overflow-hidden" style={{ borderColor: '#C8D1FF' }}>
+                  <div className="px-3 py-2" style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)' }}>
+                    <p className="text-xs font-bold text-white tracking-wide uppercase">Your Schedule</p>
+                  </div>
+                  <div className="divide-y bg-white" style={{ borderColor: '#EEF0FD' }}>
+                    {(record.exam_date || record.exam_time) && (
+                      <div className="px-3 py-2 flex items-start gap-2">
+                        <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Written Exam</span>
+                        <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
+                          {[record.exam_date && formatDate(record.exam_date), record.exam_time && formatTime12h(record.exam_time)].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
+                    )}
+                    {(record.oral_exam_date || record.oral_exam_time) && (
+                      <div className="px-3 py-2 flex items-start gap-2">
+                        <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Oral Exam</span>
+                        <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
+                          {[record.oral_exam_date && formatDate(record.oral_exam_date), record.oral_exam_time && formatTime12h(record.oral_exam_time)].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
+                    )}
+                    {(record.interview_date || record.interview_time) && (
+                      <div className="px-3 py-2 flex items-start gap-2">
+                        <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Interview</span>
+                        <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
+                          {[record.interview_date && formatDate(record.interview_date), record.interview_time && formatTime12h(record.interview_time)].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
+                    )}
+                    {record.venue && (
+                      <div className="px-3 py-2 flex items-start gap-2">
+                        <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Venue</span>
+                        <span className="text-sm font-medium" style={{ color: '#040E6B' }}>{record.venue}</span>
+                      </div>
+                    )}
+                    {record.schedule_instructions && (
+                      <div className="px-3 py-2">
+                        <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#363EE8' }}>Instructions</p>
+                        <p className="text-sm" style={{ color: '#040E6B' }}>{record.schedule_instructions}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* Submitted Documents */}
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Submitted Documents</h3>
+            <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>Status of your submitted documents</p>
+          </div>
+          {isApplicationClosed && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 shrink-0">
+              <Lock size={11} /> Locked
+            </span>
+          )}
+        </div>
+
+        {/* Closed-application notice — upload & resubmission disabled */}
+        {isApplicationClosed && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <Lock size={16} className="mt-0.5 shrink-0 text-rose-500" />
+            <div>
+              <p className="text-sm font-semibold text-rose-700">Document Upload Disabled</p>
+              <p className="mt-0.5 text-xs text-rose-600">
+                Your application has been closed. Document re-upload and resubmission are no longer available for this application.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-3">
+          {deduplicatedAttachments.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm" style={{ backgroundColor: '#C8D1FF', color: '#040E6B' }}>
+              No documents on file for this application.
+            </div>
+          ) : (
+            deduplicatedAttachments.map((doc) => {
+              const reviewKey = getReviewKey(record.id, doc.file_path);
+              const review = docReviews[reviewKey];
+              const localStatus: DocReviewStatus = review?.status ?? 'pending';
+              // Applicant already re-uploaded this doc in the current session
+              const alreadyResolved = resolvedDocTypes.has(doc.document_type ?? '');
+              const hasResubmissionRequest =
+                !isApplicationClosed &&
+                !alreadyResolved &&
+                (pendingResubmissionTypes.has(doc.document_type ?? '') || localStatus === 'resubmission_requested');
+              const matchedNotice = resubmissionNotices.find((n) => parseNotice(n).docType === doc.document_type);
+              const parsedNotice = matchedNotice ? parseNotice(matchedNotice) : null;
+
+              const isUploading = uploadingKey === reviewKey;
+              const justUploaded = uploadSuccess === reviewKey;
+              const uploadError = uploadErrors[reviewKey];
+              const selectedFile = pendingFiles[reviewKey];
+
+              const clearPending = () =>
+                setPendingFiles((prev) => { const n = { ...prev }; delete n[reviewKey]; return n; });
+
+              return (
+                <div key={doc.id} className={`rounded-xl border bg-white overflow-hidden ${
+                  isApplicationClosed ? 'border-rose-100 bg-rose-50/30 opacity-75' :
+                  hasResubmissionRequest && !justUploaded ? 'border-amber-300' : 'border-slate-200'
+                }`}>
+                  {/* Document header row */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white" style={{ backgroundColor: '#363EE8' }}>
+                        <FileText size={18} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium" style={{ color: '#040E6B' }}>
+                          {doc.document_type || doc.file_name || 'Document'}
+                        </p>
+                        {doc.document_type && (
+                          <p className="truncate text-xs" style={{ color: '#363EE8' }}>
+                            {alreadyResolved && submittedFileNames[doc.document_type]
+                              ? submittedFileNames[doc.document_type]
+                              : doc.file_name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status badge — priority: Action Required > Verified > Resubmitted > Submitted */}
+                    {hasResubmissionRequest ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
+                        <AlertCircle size={12} /> Action Required
+                      </span>
+                    ) : validatedDocTypes.has(doc.document_type ?? '') ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 size={12} /> Validated
+                      </span>
+                    ) : resubmittedDocTypes.has(doc.document_type ?? '') || alreadyResolved ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
+                        <RefreshCw size={12} /> Resubmitted
+                      </span>
+                    ) : (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border" style={{ backgroundColor: '#EEF0FD', color: '#363EE8', borderColor: '#C8D1FF' }}>
+                        <CheckCircle2 size={12} /> Submitted
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Optional RSP Remarks for Approved/Other states */}
+                  {review?.remarks && localStatus === 'approved' && (
+                    <div className="px-4 pb-3 pt-0">
+                      <p className="text-xs text-emerald-700">
+                        <span className="font-semibold">RSP Note:</span> {review.remarks}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Resubmission action panel */}
+                  {hasResubmissionRequest && !justUploaded && (
+                    <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 space-y-2">
+                      {/* Reason / RSP note */}
+                      {(parsedNotice?.reason || review?.remarks) && (
+                        <p className="text-xs text-amber-800">
+                          <span className="font-semibold">Reason:</span> {parsedNotice?.reason || review?.remarks}
+                        </p>
+                      )}
+                      {parsedNotice?.notes && (
+                        <p className="text-xs text-amber-700">
+                          <span className="font-semibold">RSP Note:</span> {parsedNotice.notes}
+                        </p>
+                      )}
+
+                      {/* Hidden file input */}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        className="hidden"
+                        ref={(el) => { fileInputRefs.current[reviewKey] = el; }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setPendingFiles((prev) => ({ ...prev, [reviewKey]: file }));
+                          e.target.value = '';
+                        }}
+                      />
+
+                      {/* Step 1 — no file chosen yet */}
+                      {!selectedFile && !isUploading && (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefs.current[reviewKey]?.click()}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                          style={{ backgroundColor: '#363EE8' }}
+                        >
+                          <Upload size={12} />
+                          Choose File to Re-upload
+                        </button>
+                      )}
+
+                      {/* Step 2 — file chosen, waiting for confirmation */}
+                      {selectedFile && !isUploading && (
+                        <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 space-y-2">
+                          <button
+                            type="button"
+                            title="Click to preview the selected file"
+                            onClick={() => {
+                              const url = URL.createObjectURL(selectedFile);
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                              setTimeout(() => URL.revokeObjectURL(url), 10000);
+                            }}
+                            className="flex items-start gap-2 w-full text-left rounded-md px-1 py-0.5 transition hover:bg-amber-50 group"
+                          >
+                            <FileText size={14} className="mt-0.5 shrink-0 text-slate-400 group-hover:text-blue-600 transition" />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-blue-600 underline underline-offset-2 group-hover:text-blue-800">{selectedFile.name}</p>
+                              <p className="text-xs text-slate-500">{formatFileSize(selectedFile.size)} · {selectedFile.type || 'document'} · <span className="text-blue-500">Click to preview</span></p>
+                            </div>
+                          </button>
+                          <p className="text-xs text-slate-600">Please confirm this is the correct file before submitting.</p>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => { void handleReupload(doc, selectedFile); clearPending(); }}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                              style={{ backgroundColor: '#363EE8' }}
+                            >
+                              <CheckCircle2 size={12} /> Confirm &amp; Submit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { clearPending(); fileInputRefs.current[reviewKey]?.click(); }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                            >
+                              Change File
+                            </button>
+                            <button
+                              type="button"
+                              onClick={clearPending}
+                              className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 3 — uploading in progress */}
+                      {isUploading && (
+                        <div className="flex items-center gap-2 text-xs text-amber-800 font-medium">
+                          <RefreshCw size={12} className="animate-spin" />
+                          Uploading your document, please wait…
+                        </div>
+                      )}
+
+                      {uploadError && (
+                        <ActionFeedback
+                          className="mt-2"
+                          title="We couldn't upload this document."
+                          message={uploadError}
+                          nextStep="Choose the file again, then confirm the upload."
+                          focusOnMount={false}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {/* Important Notice */}
+      <section className={`mt-6 rounded-2xl border px-6 py-5 ${badge.tone === 'rejected' ? 'bg-rose-100 border-rose-400' : NOTICE_CLASS[badge.tone]}`}>
+        <div className="flex items-start gap-3">
+          {badge.tone === 'rejected'
+            ? <CircleX size={22} className="mt-0.5 flex-shrink-0 text-rose-600" />
+            : <Mail size={20} className="mt-0.5 flex-shrink-0" />}
+          <div>
+            <p className="font-bold text-base" style={{ color: badge.tone === 'rejected' ? '#9F1239' : '#040E6B' }}>
+              {badge.tone === 'rejected' ? 'Application Disqualified' : 'Important Notice'}
+            </p>
+            <p className="mt-1 text-sm" style={{ color: badge.tone === 'rejected' ? '#BE123C' : '#040E6B' }}>
+              {getNoticeMessage(record.status, badge.tone, record.disqualification_reason)}
+            </p>
+            {badge.tone === 'rejected' && !record.disqualified_at && disqualificationSummary && (
+              <div className="mt-3 rounded-xl border border-rose-300 bg-white/60 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Reason from RSP Admin</p>
+                <p className="mt-1 text-sm text-rose-800">{disqualificationSummary}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-white py-12 px-4" style={{ fontFamily: 'Poppins, sans-serif' }}>
@@ -882,7 +1472,7 @@ export const ApplicationStatusPage = () => {
         </section>
 
         {/* Empty state */}
-        {searched && !record && !error && (
+        {searched && applications.length === 0 && !error && (
           <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
             <FileText size={40} className="mx-auto mb-3" style={{ color: '#C8D1FF' }} />
             <p className="font-semibold" style={{ color: '#040E6B' }}>No application found</p>
@@ -893,606 +1483,97 @@ export const ApplicationStatusPage = () => {
         )}
 
         {/* Results */}
-        {record && badge && (
-          <>
-            {/* Disqualified / Closed banner */}
-            {isApplicationClosed && record.disqualified_at && (
-              <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-start gap-3 border-l-4 border-rose-500 bg-rose-50 px-5 py-5">
-                  <CircleX size={22} className="mt-0.5 flex-shrink-0 text-rose-600" />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-base font-bold text-rose-800">Application Disqualified</p>
-                    <p className="text-sm text-rose-700">
-                      <span className="font-semibold">Date:</span> {formatDate(record.disqualified_at)}
-                    </p>
-                    <p className="text-sm text-rose-700">
-                      <span className="font-semibold">Reason:</span> {getDisqualificationReasonLabel(record.disqualification_reason_category)}
-                    </p>
-                    {/* Spec §9 Option A. Shown from the reason and the recorded
-                        activity, not from the admin's note — the note can be
-                        kept internal, and this is the one thing the applicant
-                        must be told either way. */}
-                    {record.disqualification_reason_category === FAILURE_TO_ATTEND && (
-                      <p className="text-sm text-rose-700">
-                        {failureToAttendMessage(
-                          record.missed_activity_type
-                            ? {
-                                type: record.missed_activity_type as MissedActivityType,
-                                date: formatDate(record.missed_activity_date),
-                                time: formatTime12h(record.missed_activity_time) || null,
-                              }
-                            : null,
-                        )}
-                      </p>
-                    )}
-                    {record.disqualification_message_visible && record.disqualification_message && (
-                      <p className="text-sm text-rose-700">
-                        <span className="font-semibold">Note:</span> {record.disqualification_message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+        {applications.length === 1 && details}
+        {/* Several applications under one Reference No.: one row each, the
+            open row expands in place to the sections above. */}
+        {applications.length > 1 && (
+          <section className="abyan-tokens mt-8" aria-labelledby="tracker-applications-title">
+            <div className="abyan-ds">
+              <h2 id="tracker-applications-title" className="text-xl font-bold text-[var(--color-primary-900)]">
+                Your applications
+              </h2>
+              <p className="mt-1 text-sm text-[var(--neutral-600)]">
+                {`${applications[0].first_name} ${applications[0].last_name}`.trim()} · {applications.length} applications under
+                Reference No. {applications[0].reference_no || '—'}. Select one to see its status.
+              </p>
+            </div>
 
-            {/* Closed for a reason other than a structured disqualification (legacy statuses) */}
-            {isApplicationClosed && !record.disqualified_at && (
-              <div className="mt-8 flex items-start gap-4 rounded-2xl border border-rose-300 bg-rose-50 px-5 py-5 shadow-sm">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-rose-100">
-                  <CircleX size={22} className="text-rose-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-base font-bold text-rose-800">
-                    {record.status === 'Disqualified' || record.status === 'Not Qualified'
-                      ? 'Application Disqualified'
-                      : 'Application Closed'}
-                  </p>
-                  <p className="mt-1 text-sm text-rose-700">
-                    {record.status === 'Disqualified' || record.status === 'Not Qualified'
-                      ? 'We regret to inform you that your application did not advance further in the selection process. This application will no longer be considered for this position. For inquiries, please contact the Recruitment Office.'
-                      : 'This application is no longer active. Document resubmission and re-upload have been disabled. For questions, please contact the Recruitment Office.'}
-                  </p>
-                  {disqualificationSummary && (
-                    <div className="mt-3 rounded-xl border border-rose-200 bg-white/70 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Reason from RSP Admin</p>
-                      <p className="mt-1 text-sm text-rose-800">{disqualificationSummary}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Action Required Banner */}
-            {hasActionRequired && (
-              <div className="mt-8 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
-                <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-amber-600" />
-                <div>
-                  <p className="font-bold text-amber-800">Action Required — Document Resubmission</p>
-                  <p className="mt-0.5 text-sm text-amber-700">
-                    One or more of your documents requires resubmission. Please review the details below and re-upload the corrected files.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Application Details */}
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Application Details</h3>
-                  <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>
-                    Reference No. {record.reference_no || '—'}
-                  </p>
-                </div>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold ${BADGE_CLASS[badge.tone]}`}>
-                  {badge.tone === 'approved' && <CheckCircle2 size={14} />}
-                  {badge.tone === 'rejected' && <CircleX size={14} />}
-                  {badge.label}
-                </span>
-              </div>
-
-              {/* Per-plantilla outcome. Only worth showing when this single
-                  application covers more than one plantilla item — otherwise
-                  the badge above already says everything. */}
-              {slotOutcomes.length > 1 && (
-                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>
-                    Plantilla Items You Applied For
-                  </p>
-                  <ul className="mt-3 space-y-2">
-                    {slotOutcomes.map(({ slot, status }) => {
-                      const tone =
-                        status === 'hired' ? 'bg-emerald-100 text-emerald-700'
-                        : status === 'shortlisted' ? 'bg-blue-100 text-blue-700'
-                        : status === 'not_selected' ? 'bg-rose-100 text-rose-700'
-                        : 'bg-slate-200 text-slate-600';
-                      // 'applied' has no verdict of its own yet, so it defers
-                      // to the application's overall status.
-                      const label =
-                        status === 'hired' ? 'Hired'
-                        : status === 'shortlisted' ? 'Shortlisted'
-                        : status === 'not_selected' ? 'Not selected'
-                        : badge.label;
-                      return (
-                        <li key={slot.id} className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-sm" style={{ color: '#040E6B' }}>
-                            <span className="font-semibold">{plantillaLabel(slot)}</span>
-                          </span>
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone}`}>
-                            {label} for {plantillaLabel(slot)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-
-              <div className="mt-6 grid grid-cols-1 gap-8 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>Applicant Information</p>
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Name</p>
-                      <p className="mt-0.5 text-base font-semibold" style={{ color: '#040E6B' }}>{fullName || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Email</p>
-                      <p className="mt-0.5 text-base font-medium break-words" style={{ color: '#040E6B' }}>{record.email || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Phone</p>
-                      <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{record.contact_number || '—'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#363EE8' }}>Application Information</p>
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Program Type</p>
-                      <p className="mt-0.5 text-base font-semibold" style={{ color: '#040E6B' }}>{programType}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Position</p>
-                      <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>
-                        {record.position || '—'}
-                        {record.office && <span style={{ color: '#363EE8' }}> · {record.office}</span>}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Submitted</p>
-                      <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{formatDate(record.created_at)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: '#363EE8' }}>Last Updated</p>
-                      <p className="mt-0.5 text-base font-medium" style={{ color: '#040E6B' }}>{formatDate(record.updated_at)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* RSP Resubmission Notices — real-time from Supabase (hidden once application is closed/disqualified) */}
-            {resubmissionNotices.length > 0 && !isApplicationClosed && (
-              <section className="mt-6 rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#C8D1FF' }}>
-                <div className="flex items-center gap-3 px-6 py-4" style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', fontFamily: 'Poppins, sans-serif' }}>
-                  <AlertCircle size={20} className="text-white" />
-                  <div>
-                    <h3 className="font-bold text-white">Notices from RSP Admin</h3>
-                    <p className="text-xs" style={{ color: '#C8D1FF' }}>Action may be required — review each notice below</p>
-                  </div>
-                </div>
-                <div className="divide-y bg-white" style={{ borderColor: '#EEF0FD' }}>
-                  {resubmissionNotices.map((notice) => {
-                    const n = parseNotice(notice);
-                    return (
-                      <div key={notice.id} className="px-6 py-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <FileText size={16} style={{ color: '#363EE8' }} />
-                            <p className="text-sm font-semibold" style={{ color: '#040E6B' }}>{n.document}</p>
-                          </div>
-                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border" style={{ borderColor: '#F59E0B', backgroundColor: '#FFFBEB', color: '#92400E' }}>
-                            <AlertCircle size={11} /> Action Required
-                          </span>
-                        </div>
-                        {n.reason && (
-                          <p className="mt-2 text-xs" style={{ color: '#040E6B' }}>
-                            <span className="font-semibold">Reason:</span> {n.reason}
-                          </p>
-                        )}
-                        {n.notes && (
-                          <p className="mt-1.5 rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: '#EEF0FD', color: '#363EE8' }}>
-                            <span className="font-semibold">RSP Note:</span> {n.notes}
-                          </p>
-                        )}
-                        {n.date && (
-                          <p className="mt-2 text-xs" style={{ color: '#6B7280' }}>Issued: {new Date(n.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* Current Status — single card. Replaces the former multi-step timeline. */}
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Current Status</h3>
-              <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>Where your application stands right now</p>
-
-              {(() => {
-                const phase = resolvePhase(record.status, hasSchedule);
-                const toneStyles: Record<string, { wrap: string; title: string }> = {
-                  'new': { wrap: 'border-slate-200 bg-slate-50', title: 'text-slate-700' },
-                  'in-review': { wrap: 'border-blue-200 bg-blue-50', title: 'text-blue-800' },
-                  'action': { wrap: 'border-amber-200 bg-amber-50', title: 'text-amber-800' },
-                  'approved': { wrap: 'border-emerald-200 bg-emerald-50', title: 'text-emerald-800' },
-                  'rejected': { wrap: 'border-rose-200 bg-rose-50', title: 'text-rose-800' },
-                };
-                const t = toneStyles[phase.tone] ?? toneStyles['new'];
-                const pendingDocs = resubmissionNotices.map((n) => parseNotice(n).document).filter(Boolean);
+            <ul className="mt-4 space-y-3">
+              {applications.map((app) => {
+                const isOpen = app.id === openId;
+                const rowBadge = getBadge(app.status);
+                const closed = isClosedApplicationStatus(app.status);
+                const withdrawn = normalizeStatus(app.status) === 'Withdrawn - Hired Elsewhere';
+                const needsAction = actionIds.has(app.id) && !closed && !withdrawn;
+                const panelId = `tracker-application-${app.id}`;
+                const meta = [app.office, app.plantilla_label, `Submitted ${formatRowDate(app.created_at)}`]
+                  .filter(Boolean)
+                  .join(' · ');
 
                 return (
-                  <div className={`mt-5 rounded-xl border px-5 py-4 ${t.wrap}`}>
-                    <p className={`text-lg font-bold ${t.title}`}>{phase.headline}</p>
-                    <p className="mt-1 text-sm" style={{ color: '#040E6B' }}>{phase.detail}</p>
-                    <p className="mt-2 text-xs" style={{ color: '#363EE8' }}>Last updated {formatDate(record.updated_at)}</p>
-
-                    {phase.tone === 'action' && pendingDocs.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Documents needed</p>
-                        <ul className="mt-1 list-disc pl-5 text-sm text-amber-800">
-                          {pendingDocs.map((d) => (
-                            <li key={d}>{d}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {phase.showCongrats && (
-                      <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-4 py-3">
-                        <p className="text-sm font-bold text-emerald-800">Congratulations!</p>
-                        <p className="mt-0.5 text-sm text-emerald-700">
-                          You have been selected for the position of <span className="font-semibold">{record.position}</span>.
-                          The RSP Office will contact you with further instructions regarding your appointment.
-                        </p>
-                      </div>
-                    )}
-
-                    {normalizeStatus(record.status) === 'For Contract Signing' && (
-                      <div className="abyan-ds mt-3 rounded-xl border border-[var(--success-300)] bg-white px-4 py-3">
-                        <p className="text-sm font-semibold text-[var(--success-700)]">Congratulations, {record.first_name}!</p>
-                        <p className="mt-1 text-sm text-[var(--neutral-800)]">
-                          You have been selected for the position of <span className="font-semibold">{record.position}</span>.
-                        </p>
-                        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Report on or before</p>
-                        <p className="text-base font-semibold text-[var(--color-primary-900)]">{formatDisplayDate(record.signing_deadline)}</p>
-                        {record.signing_instructions && (
-                          <>
-                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.4px] text-[var(--neutral-600)]">Instructions</p>
-                            <p className="mt-0.5 whitespace-pre-line text-sm text-[var(--neutral-800)]">{record.signing_instructions}</p>
-                          </>
-                        )}
-                        <p className="mt-3 rounded-lg bg-[var(--warning-100)] px-3 py-2 text-sm text-[var(--warning-700)]">
-                          {signingForfeitWarning(formatDisplayDate(record.signing_deadline))}
-                        </p>
-                      </div>
-                    )}
-
-                    {record.archived_at && normalizeStatus(record.status) === 'Not Selected' && (
-                      <div className="abyan-ds mt-3 space-y-2 rounded-xl border border-[var(--neutral-200)] bg-white px-4 py-4 text-sm text-[var(--neutral-800)]">
-                        {regretLetter(`${record.first_name} ${record.last_name}`.trim(), record.position).map((line, i, all) => (
-                          // The last two lines are the signature block: no gap between them.
-                          <p key={i} className={i === all.length - 1 ? '!mt-0' : undefined}>{line}</p>
-                        ))}
-                      </div>
-                    )}
-
-                    {phase.tone === 'rejected' && disqualificationSummary && (
-                      <div className="mt-3 rounded-xl border border-rose-200 bg-white px-4 py-3">
-                        <p className="text-sm font-semibold text-rose-800">Reason</p>
-                        <p className="mt-1 text-sm text-rose-700">{disqualificationSummary}</p>
-                      </div>
-                    )}
-
-                    {phase.showSchedule && hasSchedule && (
-                      <div className="mt-4 rounded-xl border overflow-hidden" style={{ borderColor: '#C8D1FF' }}>
-                        <div className="px-3 py-2" style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)' }}>
-                          <p className="text-xs font-bold text-white tracking-wide uppercase">Your Schedule</p>
-                        </div>
-                        <div className="divide-y bg-white" style={{ borderColor: '#EEF0FD' }}>
-                          {(record.exam_date || record.exam_time) && (
-                            <div className="px-3 py-2 flex items-start gap-2">
-                              <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Written Exam</span>
-                              <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
-                                {[record.exam_date && formatDate(record.exam_date), record.exam_time && formatTime12h(record.exam_time)].filter(Boolean).join(' · ')}
-                              </span>
-                            </div>
+                  <li
+                    key={app.id}
+                    className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-colors ${
+                      isOpen ? 'border-[var(--color-primary-200)]' : 'border-[var(--neutral-200)]'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      onClick={() => setOpenId(isOpen ? null : app.id)}
+                      className={`abyan-ds flex w-full items-start gap-3 px-5 py-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)] sm:items-center ${
+                        isOpen ? 'bg-[var(--color-primary-50)]' : 'hover:bg-[var(--neutral-100)]'
+                      }`}
+                    >
+                      <ChevronRight
+                        size={20}
+                        aria-hidden="true"
+                        className={`mt-0.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none sm:mt-0 ${
+                          isOpen ? 'rotate-90 text-[var(--color-primary)]' : 'text-[var(--neutral-400)]'
+                        }`}
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block font-semibold ${withdrawn ? 'text-[var(--neutral-600)]' : 'text-[var(--color-primary-900)]'}`}
+                          >
+                            {app.position || '—'}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-[var(--neutral-600)]">
+                            {withdrawn && app.hired_elsewhere_plantilla_label
+                              ? `Withdrawn: hired on ${app.hired_elsewhere_plantilla_label}`
+                              : meta}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 flex-wrap items-center gap-3">
+                          {needsAction && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--warning-700)]">
+                              <AlertCircle size={14} aria-hidden="true" /> Action required
+                            </span>
                           )}
-                          {(record.oral_exam_date || record.oral_exam_time) && (
-                            <div className="px-3 py-2 flex items-start gap-2">
-                              <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Oral Exam</span>
-                              <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
-                                {[record.oral_exam_date && formatDate(record.oral_exam_date), record.oral_exam_time && formatTime12h(record.oral_exam_time)].filter(Boolean).join(' · ')}
-                              </span>
-                            </div>
-                          )}
-                          {(record.interview_date || record.interview_time) && (
-                            <div className="px-3 py-2 flex items-start gap-2">
-                              <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Interview</span>
-                              <span className="text-sm font-medium" style={{ color: '#040E6B' }}>
-                                {[record.interview_date && formatDate(record.interview_date), record.interview_time && formatTime12h(record.interview_time)].filter(Boolean).join(' · ')}
-                              </span>
-                            </div>
-                          )}
-                          {record.venue && (
-                            <div className="px-3 py-2 flex items-start gap-2">
-                              <span className="mt-0.5 text-xs font-bold uppercase tracking-wide w-28 shrink-0" style={{ color: '#363EE8' }}>Venue</span>
-                              <span className="text-sm font-medium" style={{ color: '#040E6B' }}>{record.venue}</span>
-                            </div>
-                          )}
-                          {record.schedule_instructions && (
-                            <div className="px-3 py-2">
-                              <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#363EE8' }}>Instructions</p>
-                              <p className="text-sm" style={{ color: '#040E6B' }}>{record.schedule_instructions}</p>
-                            </div>
-                          )}
-                        </div>
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${BADGE_CLASS[rowBadge.tone]}`}>
+                            {rowBadge.tone === 'approved' && <CheckCircle2 size={12} aria-hidden="true" />}
+                            {rowBadge.tone === 'rejected' && <CircleX size={12} aria-hidden="true" />}
+                            {rowBadge.label}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+
+                    {isOpen && (
+                      <div
+                        id={panelId}
+                        className="border-t border-[var(--neutral-200)] bg-[var(--bg-page)] px-3 pb-5 pt-5 sm:px-5 [&>*:first-child]:!mt-0"
+                      >
+                        {details}
                       </div>
                     )}
-                  </div>
+                  </li>
                 );
-              })()}
-            </section>
-
-            {/* Submitted Documents */}
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-bold" style={{ color: '#040E6B' }}>Submitted Documents</h3>
-                  <p className="mt-1 text-sm" style={{ color: '#363EE8' }}>Status of your submitted documents</p>
-                </div>
-                {isApplicationClosed && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 shrink-0">
-                    <Lock size={11} /> Locked
-                  </span>
-                )}
-              </div>
-
-              {/* Closed-application notice — upload & resubmission disabled */}
-              {isApplicationClosed && (
-                <div className="mt-4 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-                  <Lock size={16} className="mt-0.5 shrink-0 text-rose-500" />
-                  <div>
-                    <p className="text-sm font-semibold text-rose-700">Document Upload Disabled</p>
-                    <p className="mt-0.5 text-xs text-rose-600">
-                      Your application has been closed. Document re-upload and resubmission are no longer available for this application.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-5 space-y-3">
-                {deduplicatedAttachments.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm" style={{ backgroundColor: '#C8D1FF', color: '#040E6B' }}>
-                    No documents on file for this application.
-                  </div>
-                ) : (
-                  deduplicatedAttachments.map((doc) => {
-                    const reviewKey = getReviewKey(record.id, doc.file_path);
-                    const review = docReviews[reviewKey];
-                    const localStatus: DocReviewStatus = review?.status ?? 'pending';
-                    // Applicant already re-uploaded this doc in the current session
-                    const alreadyResolved = resolvedDocTypes.has(doc.document_type ?? '');
-                    const hasResubmissionRequest =
-                      !isApplicationClosed &&
-                      !alreadyResolved &&
-                      (pendingResubmissionTypes.has(doc.document_type ?? '') || localStatus === 'resubmission_requested');
-                    const matchedNotice = resubmissionNotices.find((n) => parseNotice(n).docType === doc.document_type);
-                    const parsedNotice = matchedNotice ? parseNotice(matchedNotice) : null;
-
-                    const isUploading = uploadingKey === reviewKey;
-                    const justUploaded = uploadSuccess === reviewKey;
-                    const uploadError = uploadErrors[reviewKey];
-                    const selectedFile = pendingFiles[reviewKey];
-
-                    const clearPending = () =>
-                      setPendingFiles((prev) => { const n = { ...prev }; delete n[reviewKey]; return n; });
-
-                    return (
-                      <div key={doc.id} className={`rounded-xl border bg-white overflow-hidden ${
-                        isApplicationClosed ? 'border-rose-100 bg-rose-50/30 opacity-75' :
-                        hasResubmissionRequest && !justUploaded ? 'border-amber-300' : 'border-slate-200'
-                      }`}>
-                        {/* Document header row */}
-                        <div className="flex items-center justify-between px-4 py-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white" style={{ backgroundColor: '#363EE8' }}>
-                              <FileText size={18} />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium" style={{ color: '#040E6B' }}>
-                                {doc.document_type || doc.file_name || 'Document'}
-                              </p>
-                              {doc.document_type && (
-                                <p className="truncate text-xs" style={{ color: '#363EE8' }}>
-                                  {alreadyResolved && submittedFileNames[doc.document_type]
-                                    ? submittedFileNames[doc.document_type]
-                                    : doc.file_name}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Status badge — priority: Action Required > Verified > Resubmitted > Submitted */}
-                          {hasResubmissionRequest ? (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
-                              <AlertCircle size={12} /> Action Required
-                            </span>
-                          ) : validatedDocTypes.has(doc.document_type ?? '') ? (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 size={12} /> Validated
-                            </span>
-                          ) : resubmittedDocTypes.has(doc.document_type ?? '') || alreadyResolved ? (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
-                              <RefreshCw size={12} /> Resubmitted
-                            </span>
-                          ) : (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border" style={{ backgroundColor: '#EEF0FD', color: '#363EE8', borderColor: '#C8D1FF' }}>
-                              <CheckCircle2 size={12} /> Submitted
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Optional RSP Remarks for Approved/Other states */}
-                        {review?.remarks && localStatus === 'approved' && (
-                          <div className="px-4 pb-3 pt-0">
-                            <p className="text-xs text-emerald-700">
-                              <span className="font-semibold">RSP Note:</span> {review.remarks}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Resubmission action panel */}
-                        {hasResubmissionRequest && !justUploaded && (
-                          <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 space-y-2">
-                            {/* Reason / RSP note */}
-                            {(parsedNotice?.reason || review?.remarks) && (
-                              <p className="text-xs text-amber-800">
-                                <span className="font-semibold">Reason:</span> {parsedNotice?.reason || review?.remarks}
-                              </p>
-                            )}
-                            {parsedNotice?.notes && (
-                              <p className="text-xs text-amber-700">
-                                <span className="font-semibold">RSP Note:</span> {parsedNotice.notes}
-                              </p>
-                            )}
-
-                            {/* Hidden file input */}
-                            <input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                              className="hidden"
-                              ref={(el) => { fileInputRefs.current[reviewKey] = el; }}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) setPendingFiles((prev) => ({ ...prev, [reviewKey]: file }));
-                                e.target.value = '';
-                              }}
-                            />
-
-                            {/* Step 1 — no file chosen yet */}
-                            {!selectedFile && !isUploading && (
-                              <button
-                                type="button"
-                                onClick={() => fileInputRefs.current[reviewKey]?.click()}
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
-                                style={{ backgroundColor: '#363EE8' }}
-                              >
-                                <Upload size={12} />
-                                Choose File to Re-upload
-                              </button>
-                            )}
-
-                            {/* Step 2 — file chosen, waiting for confirmation */}
-                            {selectedFile && !isUploading && (
-                              <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 space-y-2">
-                                <button
-                                  type="button"
-                                  title="Click to preview the selected file"
-                                  onClick={() => {
-                                    const url = URL.createObjectURL(selectedFile);
-                                    window.open(url, '_blank', 'noopener,noreferrer');
-                                    setTimeout(() => URL.revokeObjectURL(url), 10000);
-                                  }}
-                                  className="flex items-start gap-2 w-full text-left rounded-md px-1 py-0.5 transition hover:bg-amber-50 group"
-                                >
-                                  <FileText size={14} className="mt-0.5 shrink-0 text-slate-400 group-hover:text-blue-600 transition" />
-                                  <div className="min-w-0">
-                                    <p className="truncate text-xs font-semibold text-blue-600 underline underline-offset-2 group-hover:text-blue-800">{selectedFile.name}</p>
-                                    <p className="text-xs text-slate-500">{formatFileSize(selectedFile.size)} · {selectedFile.type || 'document'} · <span className="text-blue-500">Click to preview</span></p>
-                                  </div>
-                                </button>
-                                <p className="text-xs text-slate-600">Please confirm this is the correct file before submitting.</p>
-                                <div className="flex items-center gap-2 pt-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => { void handleReupload(doc, selectedFile); clearPending(); }}
-                                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
-                                    style={{ backgroundColor: '#363EE8' }}
-                                  >
-                                    <CheckCircle2 size={12} /> Confirm &amp; Submit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => { clearPending(); fileInputRefs.current[reviewKey]?.click(); }}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                                  >
-                                    Change File
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={clearPending}
-                                    className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Step 3 — uploading in progress */}
-                            {isUploading && (
-                              <div className="flex items-center gap-2 text-xs text-amber-800 font-medium">
-                                <RefreshCw size={12} className="animate-spin" />
-                                Uploading your document, please wait…
-                              </div>
-                            )}
-
-                            {uploadError && (
-                              <ActionFeedback
-                                className="mt-2"
-                                title="We couldn't upload this document."
-                                message={uploadError}
-                                nextStep="Choose the file again, then confirm the upload."
-                                focusOnMount={false}
-                              />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
-            {/* Important Notice */}
-            <section className={`mt-6 rounded-2xl border px-6 py-5 ${badge.tone === 'rejected' ? 'bg-rose-100 border-rose-400' : NOTICE_CLASS[badge.tone]}`}>
-              <div className="flex items-start gap-3">
-                {badge.tone === 'rejected'
-                  ? <CircleX size={22} className="mt-0.5 flex-shrink-0 text-rose-600" />
-                  : <Mail size={20} className="mt-0.5 flex-shrink-0" />}
-                <div>
-                  <p className="font-bold text-base" style={{ color: badge.tone === 'rejected' ? '#9F1239' : '#040E6B' }}>
-                    {badge.tone === 'rejected' ? 'Application Disqualified' : 'Important Notice'}
-                  </p>
-                  <p className="mt-1 text-sm" style={{ color: badge.tone === 'rejected' ? '#BE123C' : '#040E6B' }}>
-                    {getNoticeMessage(record.status, badge.tone, record.disqualification_reason)}
-                  </p>
-                  {badge.tone === 'rejected' && !record.disqualified_at && disqualificationSummary && (
-                    <div className="mt-3 rounded-xl border border-rose-300 bg-white/60 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Reason from RSP Admin</p>
-                      <p className="mt-1 text-sm text-rose-800">{disqualificationSummary}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          </>
+              })}
+            </ul>
+          </section>
         )}
 
         {/* Footer */}

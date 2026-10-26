@@ -1,0 +1,160 @@
+/* Shared table design (DESIGN_IDENTITY §9.5), modelled on the Succession
+   Planning department table. Every table in the app carries `.abyan-table`;
+   its scroll container carries `.abyan-table-wrap`.
+
+   Values fall back to their §3 hex so a table renders correctly outside an
+   `.abyan-ds` / `.rsp-ds` scope. Colours apply in the light theme only, like
+   rsp-design.css, so the legacy dark theme keeps rendering as before. */
+
+/* ── Container: white card, 1px border, 12px radius, scrolls sideways on
+   narrow screens instead of squeezing columns (§8.3). ── */
+.abyan-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--neutral-200, #E2E8F0);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-surface, #FFFFFF);
+  -webkit-overflow-scrolling: touch;
+}
+/* A wrap nested in another card (e.g. a ranking inside an expanded row). */
+.abyan-table-wrap.is-flush { border: 0; border-radius: 0; }
+
+.abyan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans, 'Poppins', system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* ── Header: caps label row (§4.1 HEADLINE CAPS) ── */
+.abyan-table thead tr { background: transparent; border: 0; }
+.abyan-table th {
+  padding: 12px 20px;
+  vertical-align: middle;
+  font: 600 12px/16px var(--font-sans, 'Poppins', system-ui, sans-serif);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--neutral-200, #E2E8F0);
+}
+.abyan-table th.is-num, .abyan-table td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.abyan-table th.is-center, .abyan-table td.is-center { text-align: center; }
+.abyan-table th.is-action, .abyan-table td.is-action { text-align: right; white-space: nowrap; }
+/* Sort buttons inside headers keep the header's look. */
+.abyan-table th button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: transparent; }
+
+/* Defaults a cell's own utilities may override (alignment, colour, weight,
+   size): zero specificity via :where(). */
+:where(.abyan-table) th { text-align: left; }
+:where(.abyan-table) td { font-size: 14px; line-height: 20px; font-weight: 500; }
+
+/* ── Body ── */
+.abyan-table td {
+  padding: 16px 20px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--neutral-200, #E2E8F0);
+}
+.abyan-table tbody tr:last-child td { border-bottom: 0; }
+.abyan-table tbody tr { border: 0; transition: background-color 150ms ease-out; }
+
+/* Compact variant for dense nested tables (e.g. candidates inside a panel). */
+.abyan-table.is-compact th { padding: 10px 12px; }
+.abyan-table.is-compact td { padding: 12px; }
+
+/* Primary and secondary cell text. `display` stays overridable so a cell can
+   lay the name out as a flex row with its badge. */
+:where(.abyan-table .abyan-cell-primary, .abyan-table .abyan-cell-secondary) { display: block; }
+.abyan-table .abyan-cell-primary { font-weight: 600; }
+.abyan-table .abyan-cell-secondary { margin-top: 2px; font-weight: 500; }
+/* Legacy cells use <p> for stacked lines; global paragraph margins made rows uneven. */
+:where(.abyan-table td) p { margin: 0; }
+
+/* ── Colours, light theme ── */
+/* Doubled class: beats rsp-design.css's (0,4,0) remap of legacy header greys. */
+:root:not([data-theme='dark']) .abyan-table.abyan-table thead th {
+  background: var(--bg-page, #F1F5F9);
+  color: var(--neutral-600, #515F69);
+}
+:where(:root:not([data-theme='dark']) .abyan-table) td { color: var(--neutral-800, #28343D); }
+:root:not([data-theme='dark']) .abyan-table tbody tr:hover { background-color: var(--bg-row-hover, #F8FAFF); }
+:root:not([data-theme='dark']) .abyan-table .abyan-cell-primary { color: var(--color-primary-900, #040E6B); }
+:root:not([data-theme='dark']) .abyan-table .abyan-cell-secondary { color: var(--neutral-600, #515F69); }
+:root:not([data-theme='dark']) .abyan-table tbody tr.is-selected { background-color: var(--color-primary-50, #EEF0FF); }
+
+/* ── Readability (Task 6 Step A): table text never below AA or 14px ──
+   Legacy cells use light greys (slate-300/400, gray-400), hard-coded #94a3b8,
+   and 9–12px sizes. Inside a table they lift to the muted token and 14px.
+   The doubled class beats rsp-design.css, which remaps slate-400 to #94A3B8
+   at (0,4,0). Badges and pills keep their own size and colours. */
+:root:not([data-theme='dark']) .abyan-table.abyan-table td :is(
+  .text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400, .text-neutral-400, .text-zinc-400
+):not(.badge, .rounded-full) {
+  color: var(--neutral-600, #515F69);
+}
+:root:not([data-theme='dark']) .abyan-table.abyan-table td :is(.text-slate-500, .text-gray-500):not(.badge, .rounded-full) {
+  color: var(--neutral-600, #515F69);
+}
+:root:not([data-theme='dark']) .abyan-table.abyan-table td:is(.text-slate-300, .text-slate-400, .text-slate-500, .text-gray-400, .text-gray-500) {
+  color: var(--neutral-600, #515F69);
+}
+.abyan-table.abyan-table td :is(
+  .text-xs, .text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\], .text-\[13px\], .text-\[0\.72rem\]
+):not(.badge, .rounded-full, .badge-dot) {
+  font-size: 14px;
+  line-height: 20px;
+}
+.abyan-table.abyan-table td:is(.text-xs, .text-\[10px\], .text-\[11px\], .text-\[12px\], .text-\[13px\]) { font-size: 14px; line-height: 20px; }
+.abyan-table.abyan-table td :is(.font-light, .font-thin, .font-extralight) { font-weight: 500; }
+
+/* ── Loading / error / empty bodies (TableStateRows) ── */
+.abyan-table tr.abyan-table-state td { padding: 40px 20px; border-bottom: 0; text-align: center; }
+.abyan-table tr.abyan-table-state:hover { background: transparent; }
+.abyan-table-empty, .abyan-table-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 34rem;
+  margin: 0 auto;
+}
+.abyan-table-empty p, .abyan-table-error p { margin: 0; font: 500 14px/20px var(--font-sans, 'Poppins', system-ui, sans-serif); }
+.abyan-table .abyan-table-state-title { font-weight: 600; font-size: 16px; line-height: 24px; }
+.abyan-table-error .btn { margin-top: 8px; }
+:root:not([data-theme='dark']) .abyan-table-empty { color: var(--neutral-600, #515F69); }
+:root:not([data-theme='dark']) .abyan-table-empty svg { color: var(--neutral-400, #94A3B8); }
+:root:not([data-theme='dark']) .abyan-table-empty .abyan-table-state-title { color: var(--color-primary-900, #040E6B); }
+:root:not([data-theme='dark']) .abyan-table-error { color: var(--neutral-800, #28343D); }
+:root:not([data-theme='dark']) .abyan-table-error svg { color: var(--error-500, #E05252); }
+:root:not([data-theme='dark']) .abyan-table-error .abyan-table-state-title { color: var(--error-700, #B42323); }
+
+/* ── Top scorer highlight (Task 5): tint + 3px left accent + badge ── */
+.abyan-table tr.is-top-scorer > td:first-child { box-shadow: inset 3px 0 0 var(--color-primary, #363EE8); }
+:root:not([data-theme='dark']) .abyan-table tr.is-top-scorer,
+:root:not([data-theme='dark']) .abyan-table tr.is-top-scorer:hover { background-color: var(--color-primary-50, #EEF0FF); }
+.abyan-top-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-primary, #363EE8);
+  color: var(--color-white, #FFFFFF);
+  font: 600 12px/16px var(--font-sans, 'Poppins', system-ui, sans-serif);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.abyan-top-badge svg { color: currentColor; }
+
+/* Print keeps the tint, accent and badge (Task 5 #7). */
+@media print {
+  .abyan-table-wrap { overflow: visible; border-color: #CBD5E1; }
+  .abyan-table tr.is-top-scorer,
+  .abyan-table tr.is-top-scorer > td,
+  .abyan-top-badge,
+  .abyan-table th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

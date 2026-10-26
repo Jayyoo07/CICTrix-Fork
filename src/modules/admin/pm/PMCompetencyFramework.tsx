@@ -307,8 +307,8 @@ const PositionRequirementsPanel = ({
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left">
                   <th className="w-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
@@ -650,8 +650,8 @@ const CompetencyMapPanel = ({
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left">
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 w-[200px]">Position</th>
@@ -674,7 +674,7 @@ const CompetencyMapPanel = ({
                           <div
                             key={row.requirementId}
                             className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-slate-100 bg-slate-50/50 px-2.5 py-1.5"
-                            style={{ fontSize: '12px' }}
+                            style={{ fontSize: '14px' }}
                           >
                             <span className="font-semibold text-slate-800 mr-1">{row.competencyName}</span>
                             <span

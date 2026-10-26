@@ -408,8 +408,8 @@ export const ApplicationsListPage = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full min-w-full">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full min-w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <SortHeader label="Applicant Name" sortKey="name" sort={applicantSort} onSort={sortApplicants} />
@@ -519,8 +519,8 @@ export const ApplicationsListPage = () => {
                 </button>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <table className="w-full min-w-full">
+              <div className="abyan-table-wrap">
+                <table className="abyan-table w-full min-w-full">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
                       <th className="w-10 px-5 py-3 text-left">

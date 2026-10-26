@@ -154,7 +154,7 @@ describe('RspDashboardOverview', () => {
     ]);
     // A count the engine could not compute shows "—" and sorts last.
     expect(rows).toEqual([['City Engineer', '0'], ['City Treasurer', '1'], ['HRMO Head', '2'], ['City Assessor', '—']]);
-    const headers = [...document.querySelectorAll('.rd-table')].pop()!.querySelectorAll('th');
+    const headers = [...document.querySelectorAll('.abyan-table')].pop()!.querySelectorAll('th');
     expect([...headers].map((th) => th.textContent)).toEqual(['Key position', 'Incumbent leaves', 'Successors', 'Open']);
     expect(document.querySelector('.rd-sec:last-child .rd-stat')).toBeNull();
     expect(screen.queryByRole('button', { name: /View all/ })).toBeNull();

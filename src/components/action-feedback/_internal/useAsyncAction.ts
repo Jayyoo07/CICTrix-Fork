@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { describeActionFailure, type ActionFailure, type ErrorContext } from '../../../lib/friendlyErrors';
 import { useFeedback } from './FeedbackProvider';
+import { goToLogin } from './loginPath';
 import type { FeedbackAction } from './types';
 
 export interface AsyncActionSuccess {
@@ -66,9 +67,11 @@ export const useAsyncAction = <T = unknown>() => {
         if (options.failureChannel === 'toast') {
           feedback.error(described.title, `${described.message} ${described.nextStep}`, {
             action:
-              options.canRetry === false
-                ? undefined
-                : { label: 'Try again', onClick: () => void run(options) },
+              described.context === 'session'
+                ? { label: 'Sign in again', onClick: goToLogin }
+                : options.canRetry === false
+                  ? undefined
+                  : { label: 'Try again', onClick: () => void run(options) },
           });
         }
       };

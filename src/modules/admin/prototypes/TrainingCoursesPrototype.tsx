@@ -514,8 +514,8 @@ export const TrainingCoursesPrototype = () => {
             {filtered.length === 0 ? (
               <p className="py-16 text-center text-sm text-gray-400">No courses match these filters.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+              <div className="abyan-table-wrap">
+                <table className="abyan-table w-full text-left">
                   <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
                       <th className="px-4 py-3 font-semibold">Course</th>

@@ -1,0 +1,209 @@
+/* Portal top bar (DESIGN_IDENTITY §8.2). The root carries `.abyan-ds`, so every
+   value below is a token from abyan-tokens.css and text inherits its colour.
+   globals.css styles `button:hover` (specificity 0,1,1), so each button here
+   states its own :hover with two classes to win. */
+
+.ph {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--color-primary);
+  color: var(--color-white);
+  box-shadow: var(--shadow-2);
+}
+
+@media print {
+  .ph { display: none; }
+}
+
+.ph-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+/* ── Lockup: [Mark] ABYAN  Human Resource Information System, one line ── */
+.ph .ph-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 8px 4px 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-white);
+}
+.ph .ph-brand:hover { background: transparent; }
+.ph .ph-brand:focus-visible { outline: 2px solid var(--color-white); outline-offset: 2px; }
+.ph-brand img { height: 40px; width: auto; flex: none; object-fit: contain; mix-blend-mode: screen; }
+.ph-brand-name { font: 700 22px/28px var(--font-sans); letter-spacing: .2px; flex: none; }
+.ph-brand-sub {
+  font: 400 16px/20px var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Right side ── */
+.ph-right { display: flex; align-items: center; gap: 12px; flex: none; }
+
+.ph-mock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-500);
+  font: 500 12px/16px var(--font-sans);
+}
+
+.ph .ph-icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-white);
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+.ph .ph-icon-btn:hover { background: var(--on-blue-active); }
+.ph .ph-icon-btn:focus-visible { outline: 2px solid var(--color-white); outline-offset: 2px; }
+
+.ph-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--error-500);
+  color: var(--color-white);
+  font: 700 10px/16px var(--font-sans);
+  text-align: center;
+}
+
+.ph-user { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ph-avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--on-blue-active);
+}
+.ph .ph-avatar-btn { border: 0; padding: 0; cursor: pointer; transition: background var(--duration-fast); }
+.ph .ph-avatar-btn:hover { background: rgba(255, 255, 255, .30); }
+.ph .ph-avatar-btn:focus-visible { outline: 2px solid var(--color-white); outline-offset: 2px; }
+.ph-user-meta { display: flex; flex-direction: column; min-width: 0; max-width: 16rem; }
+.ph-user-name { font: 600 14px/18px var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-user-role { font: 400 12px/16px var(--font-sans); color: var(--on-blue-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-divider { width: 1px; height: 28px; background: rgba(255, 255, 255, .25); flex: none; }
+
+/* Header Logout (§9.1): glass rectangle, label and icon always white. */
+.ph .ph-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .12);
+  color: var(--color-white);
+  font: 600 14px/18px var(--font-sans);
+  cursor: pointer;
+  transition: background var(--duration-fast), box-shadow var(--duration-fast);
+}
+.ph .ph-logout:hover { background: rgba(255, 255, 255, .20); }
+.ph .ph-logout:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--on-blue-border); }
+
+/* ── Popovers (notifications, account switch): elevation 2, radius 12px ── */
+.ph-pop-anchor { position: relative; }
+.ph-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 50;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  color: var(--neutral-800);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  text-align: left;
+}
+.ph-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--neutral-200);
+  font: 600 14px/20px var(--font-sans);
+  color: var(--color-primary-900);
+}
+.ph-pop-new {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-50);
+  color: var(--color-primary-700);
+  font: 600 12px/16px var(--font-sans);
+}
+.ph-pop-empty { padding: 24px 16px; text-align: center; font: 500 14px/18px var(--font-sans); color: var(--neutral-600); }
+.ph-pop-list { list-style: none; margin: 0; padding: 0; }
+.ph-pop-item { display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--neutral-200); }
+.ph-pop-item:first-child { border-top: 0; }
+.ph-pop-item.is-unread { background: var(--color-primary-50); }
+.ph-pop-item svg { flex: none; margin-top: 2px; color: var(--color-primary); }
+.ph-pop-item.is-alert svg { color: var(--error-500); }
+.ph-pop-title { margin: 0; font: 600 14px/18px var(--font-sans); color: var(--color-primary-900); }
+.ph-pop-msg { margin: 2px 0 0; font: 500 13px/18px var(--font-sans); color: var(--neutral-800); overflow-wrap: anywhere; }
+.ph-pop-time { margin: 4px 0 0; font: 500 12px/16px var(--font-sans); color: var(--neutral-600); }
+
+.ph-switch { width: 260px; padding: 16px; }
+.ph-switch p { margin: 0 0 12px; font: 600 14px/20px var(--font-sans); color: var(--color-primary-900); }
+.ph-switch-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Optional module navigation row (e.g. the Employee portal tabs) ── */
+.ph-nav { padding: 0 24px 12px; }
+
+/* ── Responsive (§8.2, §8.3) ── */
+@media (max-width: 1023px) {
+  .ph-brand-sub { display: none; }
+}
+
+@media (max-width: 639px) {
+  .ph-bar { min-height: 56px; padding: 0 16px; gap: 8px; }
+  .ph-brand img { height: 32px; }
+  .ph-brand-name { font-size: 18px; line-height: 24px; }
+  .ph-right { gap: 4px; }
+  .ph-user-meta, .ph-divider, .ph-mock-label { display: none; }
+  .ph-logout-label { display: none; }
+  .ph .ph-logout { padding: 0; }
+  .ph-nav { padding: 0 16px 12px; }
+  /* Anchored to a 44px icon, a 320px panel runs off the left edge, so on
+     phones it spans the viewport under the 56px bar instead. */
+  .ph-pop { position: fixed; top: 64px; left: 16px; right: 16px; width: auto; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph *, .ph *::before, .ph *::after { transition-duration: 0ms !important; }
+}

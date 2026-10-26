@@ -1,6 +1,5 @@
 import {
   Archive,
-  Bell,
   Calendar,
   CheckCircle2,
   Clock,
@@ -8,7 +7,6 @@ import {
   EyeOff,
   Loader2,
   Lock,
-  LogOut,
   User,
   X,
   Trash2,
@@ -19,14 +17,13 @@ import {
   Target
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ConfirmLogoutDialog } from '../../components/ConfirmLogoutDialog';
+import { PortalHeader } from '../../components/portal-header';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { MyTrainingsSection } from './MyTrainingsSection';
 import { MyArchiveSection } from './MyArchiveSection';
 import { IdpFormSection } from './IdpFormSection';
 import { PersonalDataSheetSection } from './PersonalDataSheetSection';
 import { getActiveOfficeRole } from '../../lib/api/officeRoles';
-import abyanLogo from '../../assets/abyan-logo.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   fetchPortalEmployeeById,
@@ -186,9 +183,6 @@ const getWizardStartStep = (p: Employee): 1 | 2 | 3 => {
 export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUsername, onLogout }) => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Employee>(currentUser);
-  const [showSwitchModal, setShowSwitchModal] = useState(false);
-  // The employee portal logged out on the first click, with no way back.
-  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [hasOfficeRole, setHasOfficeRole] = useState(false);
   const location = useLocation();
 
@@ -1174,6 +1168,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       setBellNotifications(list);
     }
   };
+  const closeBell = useCallback(() => setShowBellDropdown(false), []);
 
   useRealtimeRefresh({
     channel: 'employee-page-ipcr',
@@ -1239,191 +1234,42 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
 
   return (
     <div className="brand-text min-h-screen" style={{ background: '#F0F2FD', fontFamily: "'Poppins', sans-serif" }}>
-      {/* ── Branded top nav ── */}
-      <header style={{ background: 'linear-gradient(135deg, #363EE8 0%, #040E6B 100%)', boxShadow: '0 2px 16px rgba(54,62,232,0.18)' }}>
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <img
-              src={abyanLogo}
-              alt="Abyan HRIS"
-              style={{ height: 40, width: 'auto', objectFit: 'contain', mixBlendMode: 'screen' }}
-            />
-            <div>
-              <h1 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>Employee Self-Service Portal</h1>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: '#C8D1FF' }}>Human Resources Information System</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Realtime Notification Bell */}
-            {currentUser.supabaseId && (
-              <div className="relative">
-                <button 
-                  className="rounded-full p-2 hover:bg-white/10 text-white relative transition" 
-                  type="button"
-                  onClick={handleToggleBell}
-                >
-                  <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute right-1.5 top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-extrabold text-white">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {showBellDropdown && (
-                  <div 
-                    className="absolute right-0 mt-2 w-80 rounded-xl bg-white text-slate-800 shadow-xl border border-slate-100 py-2 z-50 animate-fade-in"
-                    style={{ maxHeight: '350px', overflowY: 'auto' }}
-                  >
-                    <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                      <span className="font-bold text-xs text-slate-700">Notifications</span>
-                      {unreadCount > 0 && (
-                        <span className="text-[10px] bg-indigo-50 text-indigo-650 px-2 py-0.5 rounded-full font-bold">
-                          {unreadCount} new
-                        </span>
-                      )}
-                    </div>
-                    {bellNotifications.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-xs text-slate-400">
-                        No notifications yet
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-slate-50">
-                        {bellNotifications.map((n) => (
-                          <div 
-                            key={n.id} 
-                            className={`px-4 py-3 flex gap-3 hover:bg-slate-50 transition ${!n.is_read ? 'bg-indigo-50/20' : ''}`}
-                          >
-                            <Bell className={`h-4 w-4 mt-0.5 shrink-0 ${n.type?.includes('returned') ? 'text-rose-500' : 'text-indigo-600'}`} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700">
-                                {n.title}
-                              </p>
-                              {n.message && (
-                                <p className="text-[11px] text-slate-600 mt-0.5 break-words line-clamp-3">
-                                  {n.message}
-                                </p>
-                              )}
-                              <p className="text-[9px] text-slate-400 mt-1">
-                                {new Date(n.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <div className="hidden text-right sm:block">
-                <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#ffffff' }}>Welcome, {currentUser.fullName}</p>
-                <p style={{ margin: 0, fontSize: '0.72rem', color: '#C8D1FF' }}>Employee ID: {currentUser.employeeId}</p>
-              </div>
-              {(hasOfficeRole || loginUsername === 'employee01') && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSwitchModal(!showSwitchModal)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '34px',
-                      width: '34px',
-                      borderRadius: '50%',
-                      border: '1.5px solid rgba(255,255,255,0.4)',
-                      background: 'rgba(255,255,255,0.15)',
-                      color: '#ffffff',
-                      cursor: 'pointer',
-                      padding: 0
-                    }}
-                    title="Switch Account"
-                  >
-                    <User className="h-4.5 w-4.5 text-white" />
-                  </button>
-                  {showSwitchModal && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        right: 0,
-                        top: '40px',
-                        zIndex: 100,
-                        width: '240px',
-                        background: '#ffffff',
-                        border: '1.5px solid #C8D1FF',
-                        borderRadius: '12px',
-                        boxShadow: '0 4px 20px rgba(54,62,232,0.15)',
-                        padding: '16px',
-                        textAlign: 'left'
-                      }}
-                    >
-                      <p style={{ margin: '0 0 12px 0', fontSize: '0.8rem', fontWeight: 650, color: '#040E6B', lineHeight: 1.4 }}>
-                        Would you like to switch to your Office Account dashboard?
-                      </p>
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={() => {
-                            setShowSwitchModal(false);
-                            navigate('/office/dashboard');
-                          }}
-                          style={{
-                            background: '#363EE8',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '4px 10px',
-                            fontSize: '0.75rem',
-                            fontWeight: 650,
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 6px rgba(54,62,232,0.3)'
-                          }}
-                        >
-                          Yes, Switch
-                        </button>
-                        <button
-                          onClick={() => setShowSwitchModal(false)}
-                          style={{
-                            background: '#F0F2FD',
-                            color: '#040E6B',
-                            border: '1px solid #C8D1FF',
-                            borderRadius: '6px',
-                            padding: '4px 10px',
-                            fontSize: '0.75rem',
-                            fontWeight: 650,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setLogoutConfirmOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', padding: '0.4rem 0.85rem', fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', cursor: 'pointer', transition: 'background 0.15s' }}
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Tab bar inside header */}
-        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-          <div className="flex flex-wrap gap-1.5 pb-3">
+      {/* ── Top bar: the shared portal bar (§8.2), with the portal tabs as its
+          navigation row ── */}
+      <PortalHeader
+        homeHref="/employee/dashboard"
+        userName={currentUser.fullName}
+        roleLabel={`Employee ID: ${currentUser.employeeId}`}
+        sessionLabel="Employee Portal"
+        notifications={currentUser.supabaseId ? {
+          items: bellNotifications.map((n) => ({
+            id: String(n.id),
+            title: n.title,
+            message: n.message,
+            createdAt: n.created_at,
+            unread: !n.is_read,
+            tone: n.type?.includes('returned') ? 'alert' : 'default',
+          })),
+          unreadCount,
+          open: showBellDropdown,
+          onToggle: () => void handleToggleBell(),
+          onClose: closeBell,
+        } : undefined}
+        accountSwitch={(hasOfficeRole || loginUsername === 'employee01')
+          ? { prompt: 'Would you like to switch to your Office Account dashboard?', onConfirm: () => navigate('/office/dashboard') }
+          : undefined}
+        onLogout={onLogout}
+        nav={(
+          <div className="flex flex-wrap gap-1.5">
             {tabs.map((tab) => {
               const isActive = tab.id === activeTab;
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => handleTabSelect(tab)}
+                  aria-current={isActive ? 'page' : undefined}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                     borderRadius: 8, padding: '0.45rem 0.9rem',
@@ -1445,8 +1291,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               );
             })}
           </div>
-        </div>
-      </header>
+        )}
+      />
 
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
         {activeTab === 'trainings' && (
@@ -1957,7 +1803,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                           {fn.label}
                         </label>
                         <div className={`overflow-x-auto rounded-lg border ${readOnly ? 'opacity-60' : ''}`} style={{ borderColor: '#C8D1FF' }}>
-                          <table className="w-full min-w-[640px] border-collapse text-sm">
+                          <table className="abyan-table w-full min-w-[640px]">
                             <thead>
                               <tr className="bg-slate-50 text-left">
                                 <th className="w-2/5 border-b px-3 py-2 text-xs font-bold text-slate-600" style={{ borderColor: '#C8D1FF' }}>MFO</th>
@@ -2720,13 +2566,6 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         );
       })()}
 
-      {/* The same confirmation every other portal uses (§9.10). */}
-      <ConfirmLogoutDialog
-        open={logoutConfirmOpen}
-        sessionLabel="Employee Portal"
-        onCancel={() => setLogoutConfirmOpen(false)}
-        onConfirm={() => { setLogoutConfirmOpen(false); onLogout(); }}
-      />
     </div>
   );
 };

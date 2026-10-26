@@ -17,6 +17,12 @@ export type ErrorContext =
   | 'unauthorized'
   | 'network'
   | 'not-found'
+  /** 401 or an expired token: the user must sign in again. */
+  | 'session'
+  /** 409 or a unique-key clash: someone else changed it, or it already exists. */
+  | 'conflict'
+  /** The request ran out of time; it may still have completed. */
+  | 'timeout'
   | 'generic';
 
 const SPEC_MESSAGES: Record<ErrorContext, string> = {
@@ -26,6 +32,9 @@ const SPEC_MESSAGES: Record<ErrorContext, string> = {
   unauthorized: 'You do not have permission to access this page.',
   network: 'Network connection lost. Please check your internet and retry.',
   'not-found': 'We could not find what you were looking for.',
+  session: 'Your session has expired. Please sign in again.',
+  conflict: 'This record was changed by someone else or already exists. Refresh and try again.',
+  timeout: 'The server took too long to respond. Please try again.',
   generic: 'Something went wrong. Please try again — if the problem persists, contact your administrator.',
 };
 
@@ -33,10 +42,28 @@ const SPEC_MESSAGES: Record<ErrorContext, string> = {
 const inferContext = (error: unknown): ErrorContext => {
   const message = String((error as { message?: unknown })?.message ?? error ?? '').toLowerCase();
   const status = Number((error as { status?: unknown })?.status ?? 0);
+  const code = String((error as { code?: unknown })?.code ?? '');
+  const name = String((error as { name?: unknown })?.name ?? '');
 
-  if (status === 401 || status === 403 || message.includes('unauthor') || message.includes('forbidden')) {
+  // The browser knows it is offline before any request is made.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'network';
+  if (name === 'AbortError' || name === 'TimeoutError' || status === 408 || status === 504 ||
+      message.includes('timed out') || message.includes('timeout')) {
+    return 'timeout';
+  }
+  // PGRST301/PGRST303: the JWT expired or is invalid, i.e. the session ended.
+  if (status === 401 || code === 'PGRST301' || code === 'PGRST303' || message.includes('jwt expired')) {
+    return 'session';
+  }
+  // 42501: insufficient privilege, which is how row-level security refuses a write.
+  if (status === 403 || code === '42501' || message.includes('unauthor') || message.includes('forbidden') ||
+      message.includes('permission denied') || message.includes('row-level security')) {
     return 'unauthorized';
   }
+  if (status === 409 || code === '23505' || message.includes('duplicate key')) return 'conflict';
+  // 23502 not-null, 23514 check, 22P02 bad input, 23503 missing reference.
+  if (status === 400 && !code.startsWith('42') && !code.startsWith('PGRST')) return 'validation';
+  if (code === '23502' || code === '23514' || code === '22P02' || code === '23503') return 'validation';
   if (status === 404 || message.includes('not found')) return 'not-found';
   if (status >= 500 || message.includes('internal server') || message.includes('service unavailable')) {
     return 'server';
@@ -45,14 +72,12 @@ const inferContext = (error: unknown): ErrorContext => {
   // relation. These are server-side faults the user can do nothing about, so
   // they must read as a server error rather than the vaguer generic message.
   // Matched on the raw text because Supabase surfaces them with status 200/400
-  // and a `code` (42P01, 42703, 42501, PGRST…) rather than a 5xx.
-  const code = String((error as { code?: unknown })?.code ?? '');
+  // and a `code` (42P01, 42703, PGRST…) rather than a 5xx.
   if (
     code.startsWith('42') ||
     code.startsWith('PGRST') ||
     message.includes('does not exist') ||
     message.includes('could not find the table') ||
-    message.includes('permission denied') ||
     message.includes('relation') ||
     message.includes('schema cache')
   ) {
@@ -117,6 +142,9 @@ const FAILURE_MESSAGES: Record<ErrorContext, string> = {
   unauthorized: "You don't have permission for this, so nothing was saved.",
   network: "The request didn't reach the server, so we couldn't confirm whether it completed.",
   'not-found': 'The record could not be found, so nothing was changed.',
+  session: 'Your session has expired, so nothing was saved.',
+  conflict: 'Someone else changed this record, or it already exists, so nothing was saved.',
+  timeout: "The server took too long to answer, so we couldn't confirm whether it completed.",
   generic: "The action didn't complete, and nothing was saved.",
 };
 
@@ -127,6 +155,9 @@ const NEXT_STEPS: Record<ErrorContext, string> = {
   unauthorized: 'Sign in again. If you still see this, ask your administrator for access.',
   network: 'Check your connection, then check the record before trying again.',
   'not-found': 'Refresh the page to load the latest records, then try again.',
+  session: 'Sign in again, then repeat the action.',
+  conflict: 'Refresh the page to see the latest version, then try again.',
+  timeout: 'Check the record before trying again. If it keeps happening, contact your administrator.',
   generic: 'Try again. If it keeps happening, contact your administrator.',
 };
 
@@ -138,6 +169,9 @@ const LOAD_MESSAGES: Record<ErrorContext, string> = {
   unauthorized: "You don't have permission to view this data.",
   network: "The request didn't reach the server, so no data was loaded.",
   'not-found': 'This record could not be found.',
+  session: 'Your session has expired, so no data was loaded.',
+  conflict: 'The data changed while it was loading.',
+  timeout: 'The server took too long to answer, so no data was loaded.',
   generic: "This data couldn't be loaded.",
 };
 
@@ -148,6 +182,9 @@ const LOAD_NEXT_STEPS: Record<ErrorContext, string> = {
   unauthorized: 'Sign in again. If you still see this, ask your administrator for access.',
   network: 'Check your connection, then try again.',
   'not-found': 'Go back and choose another record, or refresh the page.',
+  session: 'Sign in again, then reopen this page.',
+  conflict: 'Refresh the page.',
+  timeout: 'Try again in a moment. If it keeps happening, contact your administrator.',
   generic: 'Try again. If it keeps happening, contact your administrator.',
 };
 
@@ -182,4 +219,28 @@ export const describeActionFailure = (
     nextStep: (mode === 'load' ? LOAD_NEXT_STEPS : NEXT_STEPS)[context],
     context,
   };
+};
+
+const humanizeColumn = (column: string) => column.replace(/_/g, ' ');
+
+/**
+ * Field-level messages for a rejected write (400 / Postgres 23502, 23505), keyed
+ * by column name, so a form can show the message under the right input. Returns
+ * an empty object when the error names no field. Raw text is never returned.
+ */
+export const fieldErrorsFrom = (error: unknown): Record<string, string> => {
+  const code = String((error as { code?: unknown })?.code ?? '');
+  const text = `${String((error as { message?: unknown })?.message ?? '')} ${String((error as { details?: unknown })?.details ?? '')}`;
+
+  if (code === '23502') {
+    const column = /column "([^"]+)"/.exec(text)?.[1];
+    if (column) return { [column]: `Enter the ${humanizeColumn(column)}. It is required.` };
+  }
+  if (code === '23505') {
+    const column = /Key \(([^)]+)\)=/.exec(text)?.[1];
+    if (column && !column.includes(',')) {
+      return { [column]: `This ${humanizeColumn(column)} is already in use. Enter a different one.` };
+    }
+  }
+  return {};
 };

@@ -122,8 +122,8 @@ const EligibilityPanel = ({
           )}
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Competency Standard</th>
@@ -266,11 +266,11 @@ const ApplicationDetail = ({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="abyan-table-wrap">
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
           Documents
         </div>
-        <table className="w-full text-sm">
+        <table className="abyan-table w-full">
           <tbody className="divide-y divide-slate-100">
             {/* Auto-linked from the closed IPCR — never uploaded, so no toggle. */}
             <tr className="bg-slate-50/40">
@@ -600,8 +600,8 @@ export function PMPromotionalApplications() {
           />
         ) : (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     {['Applicant', 'Current Position', 'Applying For', 'Date Applied', 'Documents', 'Status', 'Action'].map(

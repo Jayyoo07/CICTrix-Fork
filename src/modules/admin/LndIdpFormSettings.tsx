@@ -210,7 +210,7 @@ export const LndIdpFormSettings = () => {
         {officeRows.length === 0 ? (
           <p className="text-sm text-slate-400">No submissions yet for this cycle.</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="abyan-table w-full">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase text-slate-500">
                 <th className="pb-2">Office</th>

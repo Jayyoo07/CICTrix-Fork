@@ -486,7 +486,7 @@ export async function getLatestOverallScores(
   }
 
   const settingIds = [...latestByEmployee.values()].map((s) => s.id);
-  const [{ data: mfoRows }, titles] = await Promise.all([
+  const [{ data: mfoRows }, titles, { data: empDepts }] = await Promise.all([
     supabase
       .from('mfos')
       .select(
@@ -494,6 +494,10 @@ export async function getLatestOverallScores(
       )
       .in('target_setting_id', settingIds),
     cycleTitles([...latestByEmployee.values()].map((s) => s.cycle_id)),
+    supabase
+      .from('employees')
+      .select('id, department_id')
+      .in('id', [...latestByEmployee.keys()]),
   ]);
 
   const mfosBySetting = new Map<string, any[]>();
@@ -507,10 +511,6 @@ export async function getLatestOverallScores(
   // Core/Strategic/Support split, so two employees with identical ratings in
   // differently-configured offices score differently — which is the point of
   // the configuration.
-  const { data: empDepts } = await supabase
-    .from('employees')
-    .select('id, department_id')
-    .in('id', [...latestByEmployee.keys()]);
   const deptByEmployee = new Map<string, string | null>(
     ((empDepts ?? []) as any[]).map((e) => [String(e.id), e.department_id ?? null]),
   );
@@ -598,16 +598,12 @@ export interface SuccessionOverview {
   positions: SuccessionOverviewPosition[];
 }
 
-/** listAutoSuccessors calls in flight at once; each one is several queries. */
-const OVERVIEW_ENGINE_CONCURRENCY = 4;
-
 /**
  * Every critical position with its successor count, for the RSP dashboard.
  *
  * The count comes from the same ranking engine as the Succession Planning
- * page, so the two always agree. That engine runs once per position, so this
- * costs several queries per position; the calls are capped at
- * OVERVIEW_ENGINE_CONCURRENCY to keep the burst bounded.
+ * page, so the two always agree. Load its shared inputs once for all positions
+ * instead of repeating those reads for each position.
  */
 export async function getSuccessionDashboardOverview(): Promise<Result<SuccessionOverview>> {
   try {
@@ -624,17 +620,11 @@ export async function getSuccessionDashboardOverview(): Promise<Result<Successio
     const deptName = new Map(((depts ?? []) as any[]).map((d) => [String(d.id), String(d.name ?? '').trim()]));
     const positionDept = new Map(rows.map((r) => [String(r.id), deptName.get(String(r.department_id)) || 'Unassigned']));
 
+    const results = await listAutoSuccessorsForPositions(rows.map((r) => String(r.id)));
     const successorsByPosition = new Map<string, number | null>();
-    let next = 0;
-    const worker = async () => {
-      while (next < rows.length) {
-        const id = String(rows[next].id);
-        next += 1;
-        const res = await listAutoSuccessors(id);
-        successorsByPosition.set(id, res.ok ? res.data.qualified.length : null);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(OVERVIEW_ENGINE_CONCURRENCY, rows.length) }, worker));
+    for (const [id, res] of results) {
+      successorsByPosition.set(id, res.ok ? res.data.qualified.length : null);
+    }
 
     const incumbentIds = rows.map((r) => r.incumbent_employee_id).filter(Boolean);
     const nameById = new Map<string, string>();
@@ -1497,42 +1487,53 @@ async function loadEligibilityScoring(employeeIds: string[]): Promise<{
   let types: EligibilityTypePoints[] = [];
   let cap = 100;
 
-  if (employeeIds.length > 0) {
-    try {
-      const { data } = await supabase
-        .from('employee_eligibility')
-        .select('employee_id, eligibility_type, validity_date')
-        .in('employee_id', employeeIds);
-      for (const row of (data ?? []) as any[]) {
-        const key = String(row.employee_id ?? '');
-        if (!key) continue;
-        const list = byEmployee.get(key) ?? [];
-        list.push({
-          type: String(row.eligibility_type ?? '').trim(),
-          validUntil: row.validity_date ? String(row.validity_date).slice(0, 10) : null,
-        });
-        byEmployee.set(key, list);
+  // Both reads are independent; one failing must not discard the other.
+  const [eligibilityRows, typeRows] = await Promise.all([
+    employeeIds.length
+      ? (async () => {
+          try {
+            const { data } = await supabase
+              .from('employee_eligibility')
+              .select('employee_id, eligibility_type, validity_date')
+              .in('employee_id', employeeIds);
+            return (data ?? []) as any[];
+          } catch {
+            // Table unreadable: fall back to the legacy column per employee.
+            return [] as any[];
+          }
+        })()
+      : Promise.resolve([] as any[]),
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('eligibility_types')
+          .select('name, points, is_active, points_for_full_marks');
+        return (data ?? []) as any[];
+      } catch {
+        // Unconfigured: records report as unconfigured and score zero.
+        return [] as any[];
       }
-    } catch {
-      /* table unreadable — fall back to the legacy column per employee */
-    }
+    })(),
+  ]);
+
+  for (const row of eligibilityRows) {
+    const key = String(row.employee_id ?? '');
+    if (!key) continue;
+    const list = byEmployee.get(key) ?? [];
+    list.push({
+      type: String(row.eligibility_type ?? '').trim(),
+      validUntil: row.validity_date ? String(row.validity_date).slice(0, 10) : null,
+    });
+    byEmployee.set(key, list);
   }
 
-  try {
-    const { data } = await supabase
-      .from('eligibility_types')
-      .select('name, points, is_active, points_for_full_marks');
-    const rows = (data ?? []) as any[];
-    types = rows.map((r) => ({
-      name: String(r.name ?? ''),
-      points: Number(r.points ?? 0),
-      isActive: r.is_active !== false,
-    }));
-    const firstCap = rows.find((r) => Number(r.points_for_full_marks) > 0);
-    if (firstCap) cap = Number(firstCap.points_for_full_marks);
-  } catch {
-    /* unconfigured — every record reports as unconfigured and scores zero */
-  }
+  types = typeRows.map((r) => ({
+    name: String(r.name ?? ''),
+    points: Number(r.points ?? 0),
+    isActive: r.is_active !== false,
+  }));
+  const firstCap = typeRows.find((r) => Number(r.points_for_full_marks) > 0);
+  if (firstCap) cap = Number(firstCap.points_for_full_marks);
 
   return { eligibilityByEmployee: byEmployee, eligibilityTypes: types, pointsForFullMarks: cap };
 }
@@ -1788,490 +1789,695 @@ export async function saveCandidateRemark(input: {
   return error ? { ok: false, error: error.message } : { ok: true, data: null };
 }
 
-export async function listAutoSuccessors(
-  criticalPositionId: string,
-): Promise<Result<AutoSuccessorsResult>> {
-  try {
-    // ── Fetch the critical position + all gate/scoring configuration ───────────
-    const { data: posRow, error: posErr } = await supabase
-      .from('critical_positions')
-      .select('id, title, department_id, incumbent_employee_id, required_education, required_eligibility, min_ipcr_rating, min_years_experience, required_training_hours, required_training_categories, succession_weights')
-      .eq('id', criticalPositionId)
-      .maybeSingle();
-    if (posErr) return { ok: false, error: posErr.message };
-    if (!posRow) return { ok: false, error: 'Critical position not found.' };
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto-successor evaluation
+//
+// The page expands a department and needs candidates for every critical
+// position in it. Almost everything the evaluator reads is shared across those
+// positions — SRP ranks, the active employee pool, eligibility records, IPCR
+// scores, training history, and scoring configuration — so it is loaded once
+// here and passed to a pure per-position evaluator.
+// ─────────────────────────────────────────────────────────────────────────────
 
-    const positionTitle = String(posRow.title ?? '');
-    const incumbentEmployeeId: string | null = posRow.incumbent_employee_id
-      ? String(posRow.incumbent_employee_id)
-      : null;
-    // employees.department is the office name as free text, so the position's
-    // office is resolved to its name for the pool filter below.
-    let positionDepartment: string | null = null;
-    if (posRow.department_id) {
-      const { data: deptRow } = await supabase
-        .from('departments')
-        .select('name')
-        .eq('id', posRow.department_id)
-        .maybeSingle();
-      positionDepartment = deptRow?.name ?? null;
-    }
-    const requiredEducation: string | null = posRow.required_education ?? null;
-    const requiredEligibility: string | null = posRow.required_eligibility ?? null;
-    const requiredYearsExperience: number | null =
-      posRow.min_years_experience != null ? Number(posRow.min_years_experience) : null;
-    const requiredTrainingHours: number | null = posRow.required_training_hours != null ? Number(posRow.required_training_hours) : null;
-    const requiredTrainingCategories: string[] = Array.isArray(posRow.required_training_categories) ? posRow.required_training_categories : [];
-    // normalizeWeights migrates a row configured under the previous shape,
-    // which carried an eligibility weight that no longer exists.
-    const W: SuccessionWeights = normalizeWeights(posRow.succession_weights);
+type SrpRank = { salaryGrade: number | null; levelOrder: number | null };
 
-    // ── SRP ranks (spec section C) ────────────────────────────────────────
-    // Resolve every position's rank once. Employees are matched by
-    // position_id where it is set, and by lower(name) otherwise —
-    // employees.position is free text and position_id is largely unpopulated,
-    // so the title match is what actually fires today. A miss yields an
-    // unranked candidate, which compareRank reports as 'unknown' and which
-    // therefore never excludes anyone: an SRP gap must not read as a judgement
-    // about a person.
-    const rankById = new Map<string, { salaryGrade: number | null; levelOrder: number | null }>();
-    const rankByName = new Map<string, { salaryGrade: number | null; levelOrder: number | null }>();
-    {
-      const { data: srpRows } = await supabase
-        .from('positions')
-        .select('id, name, salary_grade, level_order');
-      for (const r of (srpRows ?? []) as any[]) {
-        const rank = {
-          salaryGrade: r.salary_grade != null ? Number(r.salary_grade) : null,
-          levelOrder: r.level_order != null ? Number(r.level_order) : null,
-        };
-        rankById.set(String(r.id), rank);
-        const key = String(r.name ?? '').trim().toLowerCase();
-        // First match wins: the same title can exist under several departments,
-        // and their grades agree far more often than not.
-        if (key && !rankByName.has(key)) rankByName.set(key, rank);
-      }
-    }
-    const NO_RANK = { salaryGrade: null, levelOrder: null };
-    const rankForEmployee = (emp: any) =>
-      (emp?.position_id ? rankById.get(String(emp.position_id)) : undefined) ??
-      rankByName.get(String(emp?.position ?? '').trim().toLowerCase()) ??
-      NO_RANK;
-    const targetRank = rankByName.get(positionTitle.trim().toLowerCase()) ?? NO_RANK;
-    let downwardSkipped = 0;
+interface TrainingAggregate {
+  count: number;
+  hours: number;
+  latest: string | null;
+  latestTitle: string | null;
+  fit: number;
+  categories: string[];
+  titles: string[];
+}
 
-    // ── Load all Regular/Permanent, Active employees ───────────────────────
-    const { data: empRows, error: empErr } = await supabase
+/** Everything a department's critical positions share. */
+export interface AutoSuccessorContext {
+  rankById: Map<string, SrpRank>;
+  rankByName: Map<string, SrpRank>;
+  /** Active Regular/Permanent employees — the pool every position is matched against. */
+  employees: any[];
+  /** The active pool plus manually-added candidates from outside it. */
+  employeeById: Map<string, any>;
+  eligibilityByEmployee: Map<string, EligibilityRecord[]>;
+  eligibilityTypes: EligibilityTypePoints[];
+  pointsForFullMarks: number;
+  scores: Map<string, EmployeeScore>;
+  /** Employee id → every training row on file. */
+  trainingByEmployee: Map<string, any[]>;
+  /** Employee id → (competency id → the training title that satisfies it). */
+  taggedByEmployee: Map<string, Map<string, string>>;
+  competencyRequirementsByPosition: Map<string, { id: string; name: string }[]>;
+  manualCandidatesByPosition: Map<string, any[]>;
+}
+
+const NO_RANK: SrpRank = { salaryGrade: null, levelOrder: null };
+
+const emptyTrainingAgg = (): TrainingAggregate => ({
+  count: 0,
+  hours: 0,
+  latest: null,
+  latestTitle: null,
+  fit: 0,
+  categories: [],
+  titles: [],
+});
+
+/** Gap analysis / required actions / timeline from a gate-passer's missing competencies. */
+const buildQualifiedGaps = (readiness: ReadinessScore) => {
+  const missing = readiness.competencyBreakdown.filter((c) => !c.met);
+  return {
+    gapAnalysis: missing.map((c) => `Lacking training in ${c.name}`),
+    requiredActions: missing.map((c) => `Attend training relevant to ${c.name}`),
+    timeline: missing.length ? `${missing.length * DEFAULT_MONTHS_PER_MISSING_COMPETENCY} months` : null,
+  };
+};
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Load every input the batch's critical positions share.
+ *
+ * Only two reads are genuinely per-position: the critical-position row and its
+ * manual candidate rows. Everything an employee carries is fetched once for
+ * the whole pool. Manual candidates outside the active pool are appended so
+ * their scores and training history still resolve.
+ */
+async function loadAutoSuccessorContext(
+  positionIds: string[],
+): Promise<AutoSuccessorContext> {
+  // ── Everything that only needs the position ids starts together ────────
+  // SRP ranks (spec section C). Resolve every position's rank once.
+  // Employees are matched by position_id where it is set, and by
+  // lower(name) otherwise — employees.position is free text and position_id
+  // is largely unpopulated, so the title match is what actually fires today.
+  // A miss yields an unranked candidate, which compareRank reports as
+  // 'unknown' and which therefore never excludes anyone: an SRP gap must not
+  // read as a judgement about a person.
+  const rankById = new Map<string, SrpRank>();
+  const rankByName = new Map<string, SrpRank>();
+
+  const [srpRes, empRes, manualRes, compRes] = await Promise.all([
+    supabase
+      .from('positions')
+      .select('id, name, salary_grade, level_order'),
+    supabase
       .from('employees')
       .select('id, first_name, middle_name, last_name, position, department, employment_status, status, highest_educational_attainment, eligibility, date_hired, position_id')
       .eq('status', 'Active')
-      .in('employment_status', ['Regular', 'Permanent']);
-    if (empErr) return { ok: false, error: empErr.message };
+      .in('employment_status', ['Regular', 'Permanent']),
+    supabase
+      .from('succession_candidates')
+      .select('*')
+      .in('critical_position_id', positionIds),
+    supabase
+      .from('critical_position_competency_requirements')
+      .select('critical_position_id, competency_id, competencies ( name )')
+      .in('critical_position_id', positionIds),
+  ]);
 
-    // Eligibility records and the configured points (spec §B–D). An employee
-    // may hold several; the single employees.eligibility column cannot express
-    // that and is used only as a fallback below.
-    const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } =
-      await loadEligibilityScoring((empRows ?? []).map((e: any) => String(e.id)));
+  if (empRes.error) throw new Error(empRes.error.message);
 
-    const fullName = (e: any) =>
-      [e.first_name, e.middle_name, e.last_name].filter(Boolean).join(' ').trim() || '(unknown)';
-    const posTokens = positionTitle.toLowerCase().split(/[^a-z]+/).filter((t) => t.length > 3);
-    const isRelevantTraining = (title: string): boolean => {
-      const t = String(title ?? '').toLowerCase();
-      return !!sharedFieldKeyword(title, positionTitle) || posTokens.some((tok) => t.includes(tok));
+  for (const r of (srpRes.data ?? []) as any[]) {
+    const rank: SrpRank = {
+      salaryGrade: r.salary_grade != null ? Number(r.salary_grade) : null,
+      levelOrder: r.level_order != null ? Number(r.level_order) : null,
     };
+    rankById.set(String(r.id), rank);
+    const key = String(r.name ?? '').trim().toLowerCase();
+    // First match wins: the same title can exist under several departments,
+    // and their grades agree far more often than not.
+    if (key && !rankByName.has(key)) rankByName.set(key, rank);
+  }
 
-    // Gate 1+2: Status + position-field keyword match (pre-filter)
-    const positioned = ((empRows ?? []) as any[])
-      .filter((e) => String(e.employment_status ?? '').toLowerCase() !== 'probationary')
-      // Not succession: the incumbent, a same-title peer, or another office.
-      .filter(
-        (e) =>
-          poolExclusionReason({
-            employeeId: String(e.id),
-            employeeDepartment: e.department ?? null,
-            employeePosition: e.position ?? null,
-            positionTitle,
-            positionDepartment,
-            incumbentEmployeeId,
-          }) === null,
-      )
-      .map((e) => ({ e, keyword: sharedFieldKeyword(String(e.position ?? ''), positionTitle) }))
-      .filter(({ keyword }) => !!keyword);
+  const empRows = (empRes.data ?? []) as any[];
+  const employeeById = new Map<string, any>();
+  for (const e of empRows) employeeById.set(String(e.id), e);
 
-    const positionedIds = positioned.map(({ e }) => String(e.id));
+  // ── Manual candidates for every position in the batch ─────────────────
+  const manualCandidatesByPosition = new Map<string, any[]>();
+  for (const mc of (manualRes.data ?? []) as any[]) {
+    const key = String(mc.critical_position_id);
+    const list = manualCandidatesByPosition.get(key) ?? [];
+    list.push(mc);
+    manualCandidatesByPosition.set(key, list);
+  }
 
-    // ── Bulk-fetch IPCR scores + training history for the positioned pool ────
-    const [scores, { data: trainingRows }] = await Promise.all([
-      getLatestOverallScores(positionedIds),
-      positionedIds.length
-        ? supabase
-            .from('employee_training')
-            .select('id, employee_id, training_title, training_type, number_of_hours, from_date')
-            .in('employee_id', positionedIds)
-        : Promise.resolve({ data: [] as any[] }),
-    ]);
+  // A manually-added candidate can sit outside the active pool (resigned,
+  // on leave, or otherwise not in the Regular/Permanent query). Fetch just
+  // those rows so they can still be scored.
+  const manualEmployeeIds = [...new Set(
+    [...manualCandidatesByPosition.values()]
+      .flat()
+      .map((row) => String(row.employee_id ?? ''))
+      .filter(Boolean),
+  )];
+  const missingManualIds = manualEmployeeIds.filter((id) => !employeeById.has(id));
+  if (missingManualIds.length) {
+    const { data: manualEmployees } = await supabase
+      .from('employees')
+      .select('id, first_name, middle_name, last_name, position, department, highest_educational_attainment, eligibility, date_hired')
+      .in('id', missingManualIds);
+    for (const e of (manualEmployees ?? []) as any[]) employeeById.set(String(e.id), e);
+  }
 
-    type Agg = { count: number; hours: number; latest: string | null; latestTitle: string | null; fit: number; categories: string[]; titles: string[] };
-    const emptyAgg = (): Agg => ({ count: 0, hours: 0, latest: null, latestTitle: null, fit: 0, categories: [], titles: [] });
-    const addTraining = (agg: Agg, t: any) => {
-      agg.count += 1;
-      agg.hours += Number(t.number_of_hours ?? 0);
-      if (t.training_title) agg.titles.push(String(t.training_title));
-      if (t.from_date && (!agg.latest || t.from_date > agg.latest)) {
-        agg.latest = t.from_date;
-        agg.latestTitle = t.training_title ?? null;
-      }
-      const cat = String(t.training_type ?? '').trim();
-      if (cat && !agg.categories.includes(cat)) agg.categories.push(cat);
-      if (cat === 'Leadership' || isRelevantTraining(t.training_title)) agg.fit += 1;
-    };
-    const trainAgg = new Map<string, Agg>();
-    for (const t of (trainingRows ?? []) as any[]) {
-      const id = String(t.employee_id);
-      const cur = trainAgg.get(id) ?? emptyAgg();
-      addTraining(cur, t);
-      trainAgg.set(id, cur);
-    }
+  const allEmployeeIds = [...employeeById.keys()];
 
-    // Stage-2 required competencies for this position (drives competency match %).
-    const compReqRes = await listCompetencyRequirements(criticalPositionId);
-    const requiredCompetencies = compReqRes.ok
-      ? compReqRes.data.map((c) => ({ id: c.competencyId, name: c.competencyName }))
-      : [];
+  // ── Everything that needs the employee ids starts together ────────────
+  // Eligibility records and the configured points (spec §B–D). An employee
+  // may hold several; the single employees.eligibility column cannot express
+  // that and is used only as a fallback in the evaluator.
+  //
+  // IPCR scores: the per-position version narrowed this to the keyword-
+  // matched pool for one position. Widening it to every active employee
+  // returns the same score for each employee and removes the repeated
+  // target_settings / mfos / performance_cycles reads.
+  //
+  // Training history is the third independent read.
+  const [eligibilityScoring, scores, trainingRes] = await Promise.all([
+    loadEligibilityScoring(allEmployeeIds),
+    getLatestOverallScores(allEmployeeIds),
+    allEmployeeIds.length
+      ? supabase
+          .from('employee_training')
+          .select('id, employee_id, training_title, training_type, number_of_hours, from_date')
+          .in('employee_id', allEmployeeIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } = eligibilityScoring;
 
-    // Real competency tags from employee_training_competencies (migration 20260828),
-    // replacing the title/keyword heuristic. Map each employee → (competency_id →
-    // a satisfying training title), for the whole positioned pool in one query.
-    const trainingById = new Map<string, { empId: string; title: string }>();
-    for (const t of (trainingRows ?? []) as any[]) {
-      trainingById.set(String(t.id), { empId: String(t.employee_id), title: String(t.training_title ?? '') });
-    }
-    const taggedByEmp = new Map<string, Map<string, string>>();
-    const allTrainingIds = [...trainingById.keys()];
-    if (allTrainingIds.length) {
+  const trainingRows = (trainingRes.data ?? []) as any[];
+  const trainingByEmployee = new Map<string, any[]>();
+  for (const t of trainingRows) {
+    const id = String(t.employee_id);
+    const list = trainingByEmployee.get(id) ?? [];
+    list.push(t);
+    trainingByEmployee.set(id, list);
+  }
+
+  // ── Real competency tags from employee_training_competencies ──────────
+  // (migration 20260828), replacing the title/keyword heuristic. Map each
+  // employee → (competency_id → a satisfying training title), for the whole
+  // pool. Chunked because the training-id list is the largest `.in()` here;
+  // the chunks run together.
+  const trainingTitleById = new Map<string, { empId: string; title: string }>();
+  for (const t of trainingRows) {
+    trainingTitleById.set(String(t.id), {
+      empId: String(t.employee_id),
+      title: String(t.training_title ?? ''),
+    });
+  }
+  const taggedByEmployee = new Map<string, Map<string, string>>();
+  const tagChunks = await Promise.all(
+    chunk([...trainingTitleById.keys()], 150).map(async (part) => {
       const { data: tagRows } = await supabase
         .from('employee_training_competencies')
         .select('employee_training_id, competency_id')
-        .in('employee_training_id', allTrainingIds);
-      for (const g of (tagRows ?? []) as any[]) {
-        const tr = trainingById.get(String(g.employee_training_id));
-        if (!tr) continue;
-        if (!taggedByEmp.has(tr.empId)) taggedByEmp.set(tr.empId, new Map());
-        const m = taggedByEmp.get(tr.empId)!;
-        if (!m.has(String(g.competency_id))) m.set(String(g.competency_id), tr.title);
+        .in('employee_training_id', part);
+      return (tagRows ?? []) as any[];
+    }),
+  );
+  for (const g of tagChunks.flat()) {
+    const tr = trainingTitleById.get(String(g.employee_training_id));
+    if (!tr) continue;
+    if (!taggedByEmployee.has(tr.empId)) taggedByEmployee.set(tr.empId, new Map());
+    const m = taggedByEmployee.get(tr.empId)!;
+    if (!m.has(String(g.competency_id))) m.set(String(g.competency_id), tr.title);
+  }
+
+  // ── Stage-2 required competencies for every position ──────────────────
+  const competencyRequirementsByPosition = new Map<string, { id: string; name: string }[]>();
+  for (const r of (compRes.data ?? []) as any[]) {
+    const key = String(r.critical_position_id);
+    const list = competencyRequirementsByPosition.get(key) ?? [];
+    list.push({ id: String(r.competency_id), name: r.competencies?.name ?? 'Unknown' });
+    competencyRequirementsByPosition.set(key, list);
+  }
+
+  return {
+    rankById,
+    rankByName,
+    employees: empRows,
+    employeeById,
+    eligibilityByEmployee,
+    eligibilityTypes,
+    pointsForFullMarks,
+    scores,
+    trainingByEmployee,
+    taggedByEmployee,
+    competencyRequirementsByPosition,
+    manualCandidatesByPosition,
+  };
+}
+
+/**
+ * Score and rank one critical position against the shared context.
+ *
+ * This is the body of the old `listAutoSuccessors`, with every fetch replaced
+ * by a lookup in `ctx`. It has no I/O so the batch can evaluate each position
+ * without another round trip.
+ */
+export function evaluateAutoSuccessors(
+  posRow: any,
+  ctx: AutoSuccessorContext,
+  /** employees.department is the office name as free text, so the caller resolves the position's office to its name. */
+  positionDepartment: string | null = null,
+): AutoSuccessorsResult {
+  const positionTitle = String(posRow.title ?? '');
+  const incumbentEmployeeId: string | null = posRow.incumbent_employee_id
+    ? String(posRow.incumbent_employee_id)
+    : null;
+  const requiredEducation: string | null = posRow.required_education ?? null;
+  const requiredEligibility: string | null = posRow.required_eligibility ?? null;
+  const requiredYearsExperience: number | null =
+    posRow.min_years_experience != null ? Number(posRow.min_years_experience) : null;
+  const requiredTrainingHours: number | null =
+    posRow.required_training_hours != null ? Number(posRow.required_training_hours) : null;
+  const requiredTrainingCategories: string[] = Array.isArray(posRow.required_training_categories)
+    ? posRow.required_training_categories
+    : [];
+  // normalizeWeights migrates a row configured under the previous shape,
+  // which carried an eligibility weight that no longer exists.
+  const W: SuccessionWeights = normalizeWeights(posRow.succession_weights);
+
+  const rankForEmployee = (emp: any): SrpRank =>
+    (emp?.position_id ? ctx.rankById.get(String(emp.position_id)) : undefined) ??
+    ctx.rankByName.get(String(emp?.position ?? '').trim().toLowerCase()) ??
+    NO_RANK;
+  const targetRank = ctx.rankByName.get(positionTitle.trim().toLowerCase()) ?? NO_RANK;
+  let downwardSkipped = 0;
+
+  const fullName = (e: any) =>
+    [e.first_name, e.middle_name, e.last_name].filter(Boolean).join(' ').trim() || '(unknown)';
+  const posTokens = positionTitle.toLowerCase().split(/[^a-z]+/).filter((t) => t.length > 3);
+  const isRelevantTraining = (title: string): boolean => {
+    const t = String(title ?? '').toLowerCase();
+    return !!sharedFieldKeyword(title, positionTitle) || posTokens.some((tok) => t.includes(tok));
+  };
+  const addTraining = (agg: TrainingAggregate, t: any) => {
+    agg.count += 1;
+    agg.hours += Number(t.number_of_hours ?? 0);
+    if (t.training_title) agg.titles.push(String(t.training_title));
+    if (t.from_date && (!agg.latest || t.from_date > agg.latest)) {
+      agg.latest = t.from_date;
+      agg.latestTitle = t.training_title ?? null;
+    }
+    const cat = String(t.training_type ?? '').trim();
+    if (cat && !agg.categories.includes(cat)) agg.categories.push(cat);
+    if (cat === 'Leadership' || isRelevantTraining(t.training_title)) agg.fit += 1;
+  };
+
+  // Gate 1+2: Status + position-field keyword match (pre-filter)
+  const positioned = ctx.employees
+    .filter((e) => String(e.employment_status ?? '').toLowerCase() !== 'probationary')
+    // Not succession: the incumbent, a same-title peer, or another office.
+    .filter(
+      (e) =>
+        poolExclusionReason({
+          employeeId: String(e.id),
+          employeeDepartment: e.department ?? null,
+          employeePosition: e.position ?? null,
+          positionTitle,
+          positionDepartment,
+          incumbentEmployeeId,
+        }) === null,
+    )
+    .map((e) => ({ e, keyword: sharedFieldKeyword(String(e.position ?? ''), positionTitle) }))
+    .filter(({ keyword }) => !!keyword);
+
+  const positionedIds = positioned.map(({ e }) => String(e.id));
+
+  // Aggregate each positioned employee's training rows once, then apply the
+  // position-specific relevance/fit rule while walking them.
+  const trainAgg = new Map<string, TrainingAggregate>();
+  for (const id of positionedIds) {
+    const agg = emptyTrainingAgg();
+    for (const t of ctx.trainingByEmployee.get(id) ?? []) addTraining(agg, t);
+    trainAgg.set(id, agg);
+  }
+
+  // Stage-2 required competencies for this position (drives competency match %).
+  const requiredCompetencies = ctx.competencyRequirementsByPosition.get(String(posRow.id)) ?? [];
+
+  const emptyTagMap = new Map<string, string>();
+
+  // ── Stage 1: Evaluate all gates; split into passers and failures ─────────
+  const qualifiedMap = new Map<string, AutoSuccessor>();
+  const notQualified: GateFailure[] = [];
+
+  for (const { e, keyword } of positioned) {
+    const empId = String(e.id);
+    const score = ctx.scores.get(empId);
+    const agg = trainAgg.get(empId) ?? emptyTrainingAgg();
+    // Section C: never recommend somebody currently in a higher-ranked
+    // position for a lower-ranked target. Applied to auto-discovered
+    // candidates only — a manually added candidate is HR's deliberate choice,
+    // not a recommendation, so the rule has no business overriding it.
+    const candidateRank = rankForEmployee(e);
+    // The SRP grade decides when both sides have one; titles only fill in
+    // when it cannot (see compareTitleRank).
+    const downward =
+      compareRank(candidateRank, targetRank) === 'unknown'
+        ? isDownwardTitleMove(e.position, positionTitle)
+        : isDownwardMove(candidateRank, targetRank);
+    if (downward) {
+      downwardSkipped += 1;
+      continue;
+    }
+
+    const failedGates: string[] = [];
+
+    // Gate 3: Education — course/field match (not a generic attainment ladder).
+    if (requiredEducation) {
+      const empEdu = e.highest_educational_attainment ?? null;
+      if (!empEdu) {
+        failedGates.push(`No education record on file — requires ${requiredEducation}`);
+      } else if (!educationFieldMatches(empEdu, requiredEducation)) {
+        failedGates.push(`Course mismatch — position requires ${requiredEducation}, candidate holds ${empEdu}`);
       }
     }
-    const emptyTagMap = new Map<string, string>();
 
-    // Gap analysis / required actions / timeline from a gate-passer's missing competencies.
-    const buildQualifiedGaps = (readiness: ReadinessScore) => {
-      const missing = readiness.competencyBreakdown.filter((c) => !c.met);
-      return {
-        gapAnalysis: missing.map((c) => `Lacking training in ${c.name}`),
-        requiredActions: missing.map((c) => `Attend training relevant to ${c.name}`),
-        timeline: missing.length ? `${missing.length * DEFAULT_MONTHS_PER_MISSING_COMPETENCY} months` : null,
-      };
-    };
-
-    // ── Stage 1: Evaluate all gates; split into passers and failures ─────────
-    const qualifiedMap = new Map<string, AutoSuccessor>();
-    const notQualified: GateFailure[] = [];
-
-    for (const { e, keyword } of positioned) {
-      const empId = String(e.id);
-      const score = scores.get(empId);
-      const agg = trainAgg.get(empId) ?? emptyAgg();
-      // Section C: never recommend somebody currently in a higher-ranked
-      // position for a lower-ranked target. Applied to auto-discovered
-      // candidates only — a manually added candidate is HR's deliberate choice,
-      // not a recommendation, so the rule has no business overriding it.
-      const candidateRank = rankForEmployee(e);
-      // The SRP grade decides when both sides have one; titles only fill in
-      // when it cannot (see compareTitleRank).
-      const downward =
-        compareRank(candidateRank, targetRank) === 'unknown'
-          ? isDownwardTitleMove(e.position, positionTitle)
-          : isDownwardMove(candidateRank, targetRank);
-      if (downward) {
-        downwardSkipped += 1;
-        continue;
+    // Gate 4: Eligibility Match (strict Professional vs Sub-Professional).
+    // Checked across every record the employee holds — somebody whose
+    // required eligibility was their second entry used to fail this gate,
+    // because only the single employees.eligibility column was read.
+    const empEligRecords = eligibilityRecordsFor(String(e.id), ctx.eligibilityByEmployee, e.eligibility ?? null);
+    if (requiredEligibility) {
+      const reqLevel = requiredEligibilityLevel(requiredEligibility);
+      if (reqLevel > 0 && !meetsRequiredEligibility(empEligRecords, requiredEligibility)) {
+        const held = empEligRecords.map((r) => r.type).filter(Boolean);
+        const empEligLabel = held.length ? `Eligibility: ${held.join(', ')}` : 'No eligibility on file';
+        const reqLabel = reqLevel === 2 ? 'Professional' : 'Sub-Professional';
+        failedGates.push(`${empEligLabel} — requires ${reqLabel}`);
       }
+    }
 
-      const failedGates: string[] = [];
+    // Gate 5: Minimum relevant experience.
+    //
+    // Replaces the former IPCR gate. Performance is a RANKING criterion, not
+    // a qualification: the spec lists Education, Eligibility, Experience and
+    // Relevant Training as the four minimums, so an employee who meets those
+    // belongs in the pool even before they have been rated. They are ranked
+    // with zero on performance rather than excluded outright.
+    //
+    // critical_positions.min_ipcr_rating is consequently no longer consulted
+    // here. The column is left in place rather than dropped, so positions that
+    // set it keep the value if performance is ever reinstated as a gate.
+    const tenureYearsForGate = yearsFromHireDate(e.date_hired ?? null);
+    if (requiredYearsExperience != null && requiredYearsExperience > 0
+        && tenureYearsForGate < requiredYearsExperience) {
+      failedGates.push(
+        `Experience: ${tenureYearsForGate.toFixed(1)}/${requiredYearsExperience} required years`,
+      );
+    }
 
-      // Gate 3: Education — course/field match (not a generic attainment ladder).
-      if (requiredEducation) {
-        const empEdu = e.highest_educational_attainment ?? null;
-        if (!empEdu) {
-          failedGates.push(`No education record on file — requires ${requiredEducation}`);
-        } else if (!educationFieldMatches(empEdu, requiredEducation)) {
-          failedGates.push(`Course mismatch — position requires ${requiredEducation}, candidate holds ${empEdu}`);
-        }
-      }
-
-      // Gate 4: Eligibility Match (strict Professional vs Sub-Professional).
-      // Checked across every record the employee holds — somebody whose
-      // required eligibility was their second entry used to fail this gate,
-      // because only the single employees.eligibility column was read.
-      const empEligRecords = eligibilityRecordsFor(String(e.id), eligibilityByEmployee, e.eligibility ?? null);
-      if (requiredEligibility) {
-        const reqLevel = requiredEligibilityLevel(requiredEligibility);
-        if (reqLevel > 0 && !meetsRequiredEligibility(empEligRecords, requiredEligibility)) {
-          const held = empEligRecords.map((r) => r.type).filter(Boolean);
-          const empEligLabel = held.length ? `Eligibility: ${held.join(', ')}` : 'No eligibility on file';
-          const reqLabel = reqLevel === 2 ? 'Professional' : 'Sub-Professional';
-          failedGates.push(`${empEligLabel} — requires ${reqLabel}`);
-        }
-      }
-
-      // Gate 5: Minimum relevant experience.
-      //
-      // Replaces the former IPCR gate. Performance is a RANKING criterion, not
-      // a qualification: the spec lists Education, Eligibility, Experience and
-      // Relevant Training as the four minimums, so an employee who meets those
-      // belongs in the pool even before they have been rated. They are ranked
-      // with zero on performance rather than excluded outright.
-      //
-      // critical_positions.min_ipcr_rating is consequently no longer consulted
-      // here. The column is left in place rather than dropped, so positions that
-      // set it keep the value if performance is ever reinstated as a gate.
-      const tenureYearsForGate = yearsFromHireDate(e.date_hired ?? null);
-      if (requiredYearsExperience != null && requiredYearsExperience > 0
-          && tenureYearsForGate < requiredYearsExperience) {
+    // Gate 6: Minimum Training (hours floor + category requirements)
+    if (requiredTrainingHours != null && agg.hours < requiredTrainingHours) {
+      failedGates.push(`Training: ${agg.hours.toFixed(0)}/${requiredTrainingHours.toFixed(0)} required hours`);
+    }
+    if (requiredTrainingCategories.length > 0) {
+      const empCatNorm = agg.categories.map((c) => c.trim().toLowerCase());
+      const missingCats = requiredTrainingCategories.filter(
+        (rc) => !empCatNorm.some((ec) => ec.includes(rc.toLowerCase()) || rc.toLowerCase().includes(ec)),
+      );
+      if (missingCats.length > 0) {
         failedGates.push(
-          `Experience: ${tenureYearsForGate.toFixed(1)}/${requiredYearsExperience} required years`,
+          `Training: missing required categor${missingCats.length === 1 ? 'y' : 'ies'}: ${missingCats.join(', ')}`,
         );
       }
+    }
 
-      // Gate 6: Minimum Training (hours floor + category requirements)
-      if (requiredTrainingHours != null && agg.hours < requiredTrainingHours) {
-        failedGates.push(`Training: ${agg.hours.toFixed(0)}/${requiredTrainingHours.toFixed(0)} required hours`);
-      }
-      if (requiredTrainingCategories.length > 0) {
-        const empCatNorm = agg.categories.map((c) => c.trim().toLowerCase());
-        const missingCats = requiredTrainingCategories.filter(
-          (rc) => !empCatNorm.some((ec) => ec.includes(rc.toLowerCase()) || rc.toLowerCase().includes(ec)),
-        );
-        if (missingCats.length > 0) {
-          failedGates.push(
-            `Training: missing required categor${missingCats.length === 1 ? 'y' : 'ies'}: ${missingCats.join(', ')}`,
-          );
-        }
-      }
-
-      if (failedGates.length > 0) {
-        // Per-gate pass/fail for the table, derived from the (authored) messages.
-        const gates = {
-          education: !failedGates.some((g) => g.startsWith('Course mismatch') || g.startsWith('No education record')),
-          eligibility: !failedGates.some((g) => g.includes('requires Professional') || g.includes('requires Sub-Professional') || g.startsWith('No eligibility')),
-          experience: !failedGates.some((g) => g.startsWith('Experience:')),
-          training: !failedGates.some((g) => g.startsWith('Training:')),
-        };
-        const nqTagged = taggedByEmp.get(empId) ?? emptyTagMap;
-        const nqMet = requiredCompetencies.filter((rc) => nqTagged.has(rc.id)).length;
-        const nqPct = requiredCompetencies.length ? Math.round((nqMet / requiredCompetencies.length) * 100) : null;
-        notQualified.push({
-          employeeId: empId,
-          employeeName: fullName(e),
-          currentPosition: String(e.position ?? '') || null,
-          department: e.department ?? null,
-          failedGates,
-          gates,
-          competencyMatchPct: nqPct,
-          gapAnalysis: failedGates,
-          requiredActions: [...new Set(failedGates.map(actionForGate))],
-          // Nothing blocks on performance any more, so a gate failure is never
-          // "pending evaluation" — an unrated employee who clears the four
-          // minimums is ranked, not held back. Kept false rather than removed
-          // so the field's meaning does not silently change for callers.
-          pendingEvaluation: false,
-          candidateId: null,
-        });
-        continue;
-      }
-
-      // ── Stage 2: Score gate-passers ─────────────────────────────────────
-      const readiness = computeReadinessScore({
-        ipcrScore: score?.overallScore ?? null,
-        adjectival: score?.adjectival ?? null,
-        ratedPeriod: score?.period ?? null,
-        matchedKeyword: keyword,
-        empEducation: e.highest_educational_attainment ?? null,
-        requiredEducation,
-        empEligibility: e.eligibility ?? null,
-        eligibilityRecords: empEligRecords,
-        eligibilityTypes,
-        pointsForFullMarks,
-        requiredEligibility,
-        relevantTrainings: agg.count,
-        relevantTrainingHours: agg.hours,
-        mostRecentTrainingDate: agg.latest,
-        mostRecentTrainingTitle: agg.latestTitle,
-        categoryFitTrainings: agg.fit,
-        empTrainingCategories: agg.categories,
-        requiredTrainingHours,
-        requiredTrainingCategories,
-        requiredCompetencies,
-        taggedCompetencies: taggedByEmp.get(empId) ?? emptyTagMap,
-        tenureYears: yearsFromHireDate(e.date_hired ?? null),
-        requiredYearsExperience,
-        // Relevance of a higher degree is inferred from the same field keyword
-        // that matched the candidate to the position. null (no keyword match)
-        // means relevance is not established, so the degree earns nothing
-        // rather than being credited on an assumption.
-        educationRelevant: keyword ? true : null,
-        // Seniority now comes from the SRP; null when either side is unranked,
-        // which drops the component rather than scoring the candidate junior on
-        // missing data. Career progression still has no source — work history
-        // is empty — so it stays null and ReadinessScore.progressionAssessed
-        // reports the judgement as partial.
-        positionLevelRatio: positionLevelRatio(rankForEmployee(e), targetRank),
-        progressionSteps: null,
-        W,
-      });
-      qualifiedMap.set(empId, {
+    if (failedGates.length > 0) {
+      // Per-gate pass/fail for the table, derived from the (authored) messages.
+      const gates = {
+        education: !failedGates.some((g) => g.startsWith('Course mismatch') || g.startsWith('No education record')),
+        eligibility: !failedGates.some((g) => g.includes('requires Professional') || g.includes('requires Sub-Professional') || g.startsWith('No eligibility')),
+        experience: !failedGates.some((g) => g.startsWith('Experience:')),
+        training: !failedGates.some((g) => g.startsWith('Training:')),
+      };
+      const nqTagged = ctx.taggedByEmployee.get(empId) ?? emptyTagMap;
+      const nqMet = requiredCompetencies.filter((rc) => nqTagged.has(rc.id)).length;
+      const nqPct = requiredCompetencies.length ? Math.round((nqMet / requiredCompetencies.length) * 100) : null;
+      notQualified.push({
         employeeId: empId,
         employeeName: fullName(e),
         currentPosition: String(e.position ?? '') || null,
         department: e.department ?? null,
-        readiness,
-        isManuallyAdded: false,
-        manualNote: null,
+        failedGates,
+        gates,
+        competencyMatchPct: nqPct,
+        gapAnalysis: failedGates,
+        requiredActions: [...new Set(failedGates.map(actionForGate))],
+        // Nothing blocks on performance any more, so a gate failure is never
+        // "pending evaluation" — an unrated employee who clears the four
+        // minimums is ranked, not held back. Kept false rather than removed
+        // so the field's meaning does not silently change for callers.
+        pendingEvaluation: false,
         candidateId: null,
-        gatesBypassed: false,
-        ...buildQualifiedGaps(readiness),
       });
+      continue;
     }
 
-    // ── Merge manually-added candidates (bypass Stage 1 gates) ────────────
-    const { data: manualRows } = await supabase
-      .from('succession_candidates')
-      .select('*')
-      .eq('critical_position_id', criticalPositionId);
-
-    const failureByEmpId = new Map(notQualified.map((f) => [f.employeeId, f]));
-
-    for (const mc of (manualRows ?? []) as any[]) {
-      const mcId = String(mc.employee_id);
-
-      if (qualifiedMap.has(mcId)) {
-        const existing = qualifiedMap.get(mcId)!;
-        existing.candidateId = String(mc.id);
-        existing.manualNote = mc.note ?? null;
-        continue;
-      }
-
-      if (failureByEmpId.has(mcId)) {
-        failureByEmpId.get(mcId)!.candidateId = String(mc.id);
-        continue;
-      }
-
-      // Employee is outside the position-matched pool — fetch + score, bypassing gates
-      const { data: mcEmp } = await supabase
-        .from('employees')
-        .select('id, first_name, middle_name, last_name, position, department, highest_educational_attainment, eligibility, date_hired')
-        .eq('id', mcId)
-        .maybeSingle();
-      const mcScore = scores.get(mcId) ?? (await getLatestOverallScores([mcId])).get(mcId);
-      const mcEligibility = await loadEligibilityScoring([mcId]);
-      const mcEligibilityRecords = eligibilityRecordsFor(
-        mcId,
-        mcEligibility.eligibilityByEmployee,
-        mcEmp?.eligibility ?? null,
-      );
-      const { data: mcTrain } = await supabase
-        .from('employee_training')
-        .select('id, training_title, training_type, number_of_hours, from_date')
-        .eq('employee_id', mcId);
-      const mcAgg = emptyAgg();
-      const mcTitleById = new Map<string, string>();
-      for (const t of (mcTrain ?? []) as any[]) {
-        addTraining(mcAgg, t);
-        mcTitleById.set(String(t.id), String(t.training_title ?? ''));
-      }
-      const mcTagged = new Map<string, string>();
-      const mcTrIds = [...mcTitleById.keys()];
-      if (mcTrIds.length) {
-        const { data: mcTagRows } = await supabase
-          .from('employee_training_competencies')
-          .select('employee_training_id, competency_id')
-          .in('employee_training_id', mcTrIds);
-        for (const g of (mcTagRows ?? []) as any[]) {
-          if (!mcTagged.has(String(g.competency_id))) {
-            mcTagged.set(String(g.competency_id), mcTitleById.get(String(g.employee_training_id)) ?? '');
-          }
-        }
-      }
-
-      const readiness = computeReadinessScore({
-        ipcrScore: mcScore?.overallScore ?? null,
-        adjectival: mcScore?.adjectival ?? null,
-        ratedPeriod: mcScore?.period ?? null,
-        matchedKeyword: sharedFieldKeyword(String(mcEmp?.position ?? ''), positionTitle),
-        empEducation: mcEmp?.highest_educational_attainment ?? null,
-        requiredEducation,
-        empEligibility: mcEmp?.eligibility ?? null,
-        // Loaded on its own: this candidate was added by hand from outside the
-        // position-matched pool, so they are not in the batch fetched above.
-        // Without this they would score from the single legacy column while
-        // everyone else scored from their full record set.
-        eligibilityRecords: mcEligibilityRecords,
-        eligibilityTypes,
-        pointsForFullMarks,
-        requiredEligibility,
-        relevantTrainings: mcAgg.count,
-        relevantTrainingHours: mcAgg.hours,
-        mostRecentTrainingDate: mcAgg.latest,
-        mostRecentTrainingTitle: mcAgg.latestTitle,
-        categoryFitTrainings: mcAgg.fit,
-        empTrainingCategories: mcAgg.categories,
-        requiredTrainingHours,
-        requiredTrainingCategories,
-        requiredCompetencies,
-        taggedCompetencies: mcTagged,
-        tenureYears: yearsFromHireDate(mcEmp?.date_hired ?? null),
-        requiredYearsExperience,
-        educationRelevant: sharedFieldKeyword(String(mcEmp?.position ?? ''), positionTitle) ? true : null,
-        positionLevelRatio: positionLevelRatio(rankForEmployee(mcEmp), targetRank),
-        progressionSteps: null,
-        W,
-      });
-      qualifiedMap.set(mcId, {
-        employeeId: mcId,
-        employeeName: mcEmp ? fullName(mcEmp) : '(unknown)',
-        currentPosition: String(mcEmp?.position ?? '') || null,
-        department: mcEmp?.department ?? null,
-        readiness,
-        isManuallyAdded: true,
-        manualNote: mc.note ?? null,
-        candidateId: String(mc.id),
-        gatesBypassed: true,
-        ...buildQualifiedGaps(readiness),
-      });
-    }
-
-    const qualifiedList = [...qualifiedMap.values()].sort((a, b) => {
-      // Ranked by the weighted score of the five criteria in specification B —
-      // that is what "Ranked Succession Pool" means in the section E flow.
-      //
-      // This previously ordered by competency match % with the weighted score
-      // only as a tiebreaker, which put a candidate with more covered
-      // competencies above one who scored higher on performance, experience,
-      // training, education and tenure combined. Competency match is Stage-2
-      // readiness, not one of the ranking criteria, so it drops to a tiebreak.
-      if (b.readiness.total !== a.readiness.total) return b.readiness.total - a.readiness.total;
-      // Documented tiebreak: the higher Performance score wins. Surfaced in the
-      // table footnote so the order is explainable rather than arbitrary.
-      if (b.readiness.ipcr !== a.readiness.ipcr) return b.readiness.ipcr - a.readiness.ipcr;
-      return a.employeeName.localeCompare(b.employeeName);
+    // ── Stage 2: Score gate-passers ─────────────────────────────────────
+    const readiness = computeReadinessScore({
+      ipcrScore: score?.overallScore ?? null,
+      adjectival: score?.adjectival ?? null,
+      ratedPeriod: score?.period ?? null,
+      matchedKeyword: keyword,
+      empEducation: e.highest_educational_attainment ?? null,
+      requiredEducation,
+      empEligibility: e.eligibility ?? null,
+      eligibilityRecords: empEligRecords,
+      eligibilityTypes: ctx.eligibilityTypes,
+      pointsForFullMarks: ctx.pointsForFullMarks,
+      requiredEligibility,
+      relevantTrainings: agg.count,
+      relevantTrainingHours: agg.hours,
+      mostRecentTrainingDate: agg.latest,
+      mostRecentTrainingTitle: agg.latestTitle,
+      categoryFitTrainings: agg.fit,
+      empTrainingCategories: agg.categories,
+      requiredTrainingHours,
+      requiredTrainingCategories,
+      requiredCompetencies,
+      taggedCompetencies: ctx.taggedByEmployee.get(empId) ?? emptyTagMap,
+      tenureYears: yearsFromHireDate(e.date_hired ?? null),
+      requiredYearsExperience,
+      // Relevance of a higher degree is inferred from the same field keyword
+      // that matched the candidate to the position. null (no keyword match)
+      // means relevance is not established, so the degree earns nothing
+      // rather than being credited on an assumption.
+      educationRelevant: keyword ? true : null,
+      // Seniority now comes from the SRP; null when either side is unranked,
+      // which drops the component rather than scoring the candidate junior on
+      // missing data. Career progression still has no source — work history
+      // is empty — so it stays null and ReadinessScore.progressionAssessed
+      // reports the judgement as partial.
+      positionLevelRatio: positionLevelRatio(rankForEmployee(e), targetRank),
+      progressionSteps: null,
+      W,
     });
-
-    notQualified.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-
-    return { ok: true, data: { qualified: qualifiedList, notQualified, downwardMovesExcluded: downwardSkipped } };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Failed to load auto-successors.' };
+    qualifiedMap.set(empId, {
+      employeeId: empId,
+      employeeName: fullName(e),
+      currentPosition: String(e.position ?? '') || null,
+      department: e.department ?? null,
+      readiness,
+      isManuallyAdded: false,
+      manualNote: null,
+      candidateId: null,
+      gatesBypassed: false,
+      ...buildQualifiedGaps(readiness),
+    });
   }
+
+  // ── Merge manually-added candidates (bypass Stage 1 gates) ────────────
+  const manualRows = ctx.manualCandidatesByPosition.get(String(posRow.id)) ?? [];
+  const failureByEmpId = new Map(notQualified.map((f) => [f.employeeId, f]));
+
+  for (const mc of manualRows) {
+    const mcId = String(mc.employee_id);
+
+    if (qualifiedMap.has(mcId)) {
+      const existing = qualifiedMap.get(mcId)!;
+      existing.candidateId = String(mc.id);
+      existing.manualNote = mc.note ?? null;
+      continue;
+    }
+
+    if (failureByEmpId.has(mcId)) {
+      failureByEmpId.get(mcId)!.candidateId = String(mc.id);
+      continue;
+    }
+
+    // Employee is outside the position-matched pool — score them anyway,
+    // bypassing the gates.
+    const mcEmp = ctx.employeeById.get(mcId);
+    const mcScore = ctx.scores.get(mcId);
+    const mcEligibilityRecords = eligibilityRecordsFor(
+      mcId,
+      ctx.eligibilityByEmployee,
+      mcEmp?.eligibility ?? null,
+    );
+    const mcAgg = emptyTrainingAgg();
+    for (const t of ctx.trainingByEmployee.get(mcId) ?? []) addTraining(mcAgg, t);
+    const mcTagged = ctx.taggedByEmployee.get(mcId) ?? new Map<string, string>();
+
+    const readiness = computeReadinessScore({
+      ipcrScore: mcScore?.overallScore ?? null,
+      adjectival: mcScore?.adjectival ?? null,
+      ratedPeriod: mcScore?.period ?? null,
+      matchedKeyword: sharedFieldKeyword(String(mcEmp?.position ?? ''), positionTitle),
+      empEducation: mcEmp?.highest_educational_attainment ?? null,
+      requiredEducation,
+      empEligibility: mcEmp?.eligibility ?? null,
+      eligibilityRecords: mcEligibilityRecords,
+      eligibilityTypes: ctx.eligibilityTypes,
+      pointsForFullMarks: ctx.pointsForFullMarks,
+      requiredEligibility,
+      relevantTrainings: mcAgg.count,
+      relevantTrainingHours: mcAgg.hours,
+      mostRecentTrainingDate: mcAgg.latest,
+      mostRecentTrainingTitle: mcAgg.latestTitle,
+      categoryFitTrainings: mcAgg.fit,
+      empTrainingCategories: mcAgg.categories,
+      requiredTrainingHours,
+      requiredTrainingCategories,
+      requiredCompetencies,
+      taggedCompetencies: mcTagged,
+      tenureYears: yearsFromHireDate(mcEmp?.date_hired ?? null),
+      requiredYearsExperience,
+      educationRelevant: sharedFieldKeyword(String(mcEmp?.position ?? ''), positionTitle) ? true : null,
+      // The per-position manual fetch did not read position_id, so the old
+      // evaluator always resolved manual candidates by title. Keep that.
+      positionLevelRatio: positionLevelRatio(
+        ctx.rankByName.get(String(mcEmp?.position ?? '').trim().toLowerCase()) ?? NO_RANK,
+        targetRank,
+      ),
+      progressionSteps: null,
+      W,
+    });
+    qualifiedMap.set(mcId, {
+      employeeId: mcId,
+      employeeName: mcEmp ? fullName(mcEmp) : '(unknown)',
+      currentPosition: String(mcEmp?.position ?? '') || null,
+      department: mcEmp?.department ?? null,
+      readiness,
+      isManuallyAdded: true,
+      manualNote: mc.note ?? null,
+      candidateId: String(mc.id),
+      gatesBypassed: true,
+      ...buildQualifiedGaps(readiness),
+    });
+  }
+
+  const qualifiedList = [...qualifiedMap.values()].sort((a, b) => {
+    // Ranked by the weighted score of the five criteria in specification B —
+    // that is what "Ranked Succession Pool" means in the section E flow.
+    //
+    // This previously ordered by competency match % with the weighted score
+    // only as a tiebreaker, which put a candidate with more covered
+    // competencies above one who scored higher on performance, experience,
+    // training, education and tenure combined. Competency match is Stage-2
+    // readiness, not one of the ranking criteria, so it drops to a tiebreak.
+    if (b.readiness.total !== a.readiness.total) return b.readiness.total - a.readiness.total;
+    // Documented tiebreak: the higher Performance score wins. Surfaced in the
+    // table footnote so the order is explainable rather than arbitrary.
+    if (b.readiness.ipcr !== a.readiness.ipcr) return b.readiness.ipcr - a.readiness.ipcr;
+    return a.employeeName.localeCompare(b.employeeName);
+  });
+
+  notQualified.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
+  return { qualified: qualifiedList, notQualified, downwardMovesExcluded: downwardSkipped };
+}
+
+/**
+ * Ranked candidates for several critical positions, sharing every read that
+ * does not depend on the position.
+ *
+ * The page expands a department and calls this once. `listAutoSuccessors`
+ * remains a one-position wrapper over the same path, so the single and batch
+ * results cannot drift.
+ */
+export async function listAutoSuccessorsForPositions(
+  criticalPositionIds: string[],
+): Promise<Map<string, Result<AutoSuccessorsResult>>> {
+  const ids = [...new Set(criticalPositionIds)].filter(Boolean);
+  const results = new Map<string, Result<AutoSuccessorsResult>>();
+  if (!ids.length) return results;
+
+  try {
+    const { data: posRows, error: posErr } = await supabase
+      .from('critical_positions')
+      .select('id, title, department_id, incumbent_employee_id, required_education, required_eligibility, min_ipcr_rating, min_years_experience, required_training_hours, required_training_categories, succession_weights')
+      .in('id', ids);
+
+    if (posErr) {
+      for (const id of ids) results.set(id, { ok: false, error: posErr.message });
+      return results;
+    }
+
+    const rowById = new Map<string, any>(
+      ((posRows ?? []) as any[]).map((row) => [String(row.id), row]),
+    );
+    const foundIds = ids.filter((id) => rowById.has(id));
+    if (!foundIds.length) {
+      for (const id of ids) results.set(id, { ok: false, error: 'Critical position not found.' });
+      return results;
+    }
+
+    // The positions' offices, resolved to names once for the whole batch.
+    const departmentIds = [
+      ...new Set(
+        foundIds.map((id) => rowById.get(id)?.department_id).filter(Boolean).map(String),
+      ),
+    ];
+    const [ctx, deptRes] = await Promise.all([
+      loadAutoSuccessorContext(foundIds),
+      departmentIds.length
+        ? supabase.from('departments').select('id, name').in('id', departmentIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const departmentNameById = new Map<string, string>(
+      ((deptRes.data ?? []) as any[]).map((d) => [String(d.id), String(d.name ?? '')]),
+    );
+
+    for (const id of ids) {
+      const row = rowById.get(id);
+      if (!row) {
+        results.set(id, { ok: false, error: 'Critical position not found.' });
+        continue;
+      }
+      try {
+        const positionDepartment = row.department_id
+          ? departmentNameById.get(String(row.department_id)) ?? null
+          : null;
+        results.set(id, { ok: true, data: evaluateAutoSuccessors(row, ctx, positionDepartment) });
+      } catch (err) {
+        results.set(id, {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Failed to load auto-successors.',
+        });
+      }
+    }
+
+    return results;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to load auto-successors.';
+    for (const id of ids) results.set(id, { ok: false, error: message });
+    return results;
+  }
+}
+
+/** Ranked candidates for one critical position. */
+export async function listAutoSuccessors(
+  criticalPositionId: string,
+): Promise<Result<AutoSuccessorsResult>> {
+  const results = await listAutoSuccessorsForPositions([criticalPositionId]);
+  return results.get(criticalPositionId) ?? { ok: false, error: 'Critical position not found.' };
 }

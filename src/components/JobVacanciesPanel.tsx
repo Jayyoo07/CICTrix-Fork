@@ -109,10 +109,10 @@ export const JobVacanciesPanel = ({
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="abyan-table-wrap">
         {/* Fixed layout with set widths; Title and Office share what is left. Below
             the min width the table scrolls and Actions stays pinned on the right. */}
-        <table className="w-full min-w-[1200px] table-fixed">
+        <table className="abyan-table w-full min-w-[1200px] table-fixed">
           <colgroup>
             <col />
             <col className="w-[96px]" />

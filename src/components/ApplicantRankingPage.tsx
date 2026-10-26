@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { supabase } from '../lib/supabase';
 import { getApplicants, saveApplicants } from '../lib/recruitmentData';
 import { LoadingStatus, Skeleton, useDelayedLoading } from './table-loading';
+import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 
 interface Applicant {
   id: string;
@@ -30,15 +31,15 @@ interface PositionGroup {
 /** Placeholder department cards while the ranking data loads. */
 const DEPARTMENT_PLACEHOLDERS = 6;
 
+/** Applicant fields come from the public form, so they are escaped before going into the print window's HTML. */
+const escapeHtml = (value: unknown) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
 const fmtScore = (s: number | null) =>
   s !== null ? s.toFixed(2) : '—';
 
-const medalStyle = (rank: number) => {
-  if (rank === 1) return { bg: 'bg-yellow-400',  text: 'text-yellow-900' };
-  if (rank === 2) return { bg: 'bg-slate-300',   text: 'text-slate-800'  };
-  if (rank === 3) return { bg: 'bg-amber-500',   text: 'text-amber-900'  };
-  return             { bg: 'bg-slate-100',   text: 'text-slate-600'  };
-};
+/** Rank chip; the top scorer is marked by the row highlight, not the chip colour. */
+const RANK_CHIP = 'inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-primary-50)] text-xs font-bold text-[var(--color-primary-700)]';
 
 export const ApplicantRankingPage = () => {
   const [applicants, setApplicants]   = useState<Applicant[]>([]);
@@ -120,6 +121,13 @@ export const ApplicantRankingPage = () => {
     .sort((a, b) => a.position.localeCompare(b.position));
 
   const activeGroup = groups.find(g => g.position === activePosition) ?? null;
+
+  // Highest total score per position, across every applicant for it (Task 5).
+  const topIds = topScorerIds(applicants, {
+    idOf: (a) => a.id,
+    scoreOf: (a) => a.total_score,
+    groupOf: (a) => a.position || 'Unassigned',
+  });
 
   // Group positions by their office/department so the landing view is a
   // folder of departments and clicking one reveals the positions inside.
@@ -247,7 +255,7 @@ export const ApplicantRankingPage = () => {
 
     const groupsForPrint = printGroup ? [printGroup] : groups;
     const dateStr = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const deptLabel = activeDepartment ? `${activeDepartment} &mdash; ` : '';
+    const deptLabel = activeDepartment ? `${escapeHtml(activeDepartment)} &mdash; ` : '';
 
     win.document.head.innerHTML = `
       <title>Applicant Ranking Report</title>
@@ -259,6 +267,9 @@ export const ApplicantRankingPage = () => {
         table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
         th { background: #ddd; font-size: 9pt; font-weight: 700; text-align: left; padding: 6px 8px; border: 1px solid #000; }
         td { font-size: 9pt; padding: 5px 8px; border: 1px solid #000; }
+        tr.top td { background: #EEF0FF; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        tr.top td:first-child { box-shadow: inset 3px 0 0 #363EE8; }
+        .top-badge { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid #363EE8; border-radius: 999px; font-size: 7.5pt; font-weight: 700; color: #191FA8; }
         .center { text-align: center; }
         .footer { margin-top: 24px; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 8px; }
         @media print { body { padding: 16px; } }
@@ -268,18 +279,18 @@ export const ApplicantRankingPage = () => {
       <h2>APPLICANT RANKING REPORT</h2>
       <p class="sub">${deptLabel}Office of the City Human Resource Management Officer, Iloilo City Government<br/>Printed: ${dateStr}</p>
       ${groupsForPrint.map(g => `
-        <div class="pos-header">${g.position} &mdash; ${g.office} (${g.members.length} applicant${g.members.length !== 1 ? 's' : ''})</div>
+        <div class="pos-header">${escapeHtml(g.position)} &mdash; ${escapeHtml(g.office)} (${g.members.length} applicant${g.members.length !== 1 ? 's' : ''})</div>
         <table>
           <thead><tr><th>Rank</th><th>Applicant Name</th><th>Office</th><th>Type</th><th>Total Score</th><th>Status</th></tr></thead>
           <tbody>
             ${g.members.map((a, i) => `
-              <tr>
+              <tr${topIds.has(a.id) ? ' class="top"' : ''}>
                 <td class="center" style="font-weight:700">${i + 1}</td>
-                <td><strong>${a.full_name}</strong><br/><span style="font-size:8pt;color:#555">${a.email}</span></td>
-                <td>${a.office || '&mdash;'}</td>
+                <td><strong>${escapeHtml(a.full_name)}</strong>${topIds.has(a.id) ? '<span class="top-badge">&#9733; Top scorer</span>' : ''}<br/><span style="font-size:8pt;color:#555">${escapeHtml(a.email)}</span></td>
+                <td>${a.office ? escapeHtml(a.office) : '&mdash;'}</td>
                 <td>${(a.application_type ?? '').toLowerCase().includes('promot') ? 'Promotional' : 'Original'}</td>
                 <td class="center" style="font-weight:700">${fmtScore(a.total_score)}</td>
-                <td>${a.status || 'Pending'}</td>
+                <td>${escapeHtml(a.status || 'Pending')}</td>
               </tr>`).join('')}
           </tbody>
         </table>`).join('')}
@@ -391,10 +402,10 @@ export const ApplicantRankingPage = () => {
         </div>
 
         {/* Screen table */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white no-print">
-          <table className="w-full min-w-full">
+        <div className="abyan-table-wrap no-print">
+          <table className="abyan-table">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position Title</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Office / Department</th>
                 <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Applicants</th>
@@ -435,14 +446,13 @@ export const ApplicantRankingPage = () => {
                   </td>
                 </tr>
               ))}
-              {positionsInActiveDept.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-slate-400">
-                    <Trophy className="mx-auto mb-2 h-9 w-9 text-slate-300" />
-                    <p className="font-medium">No positions found in this department.</p>
-                  </td>
-                </tr>
-              )}
+              <TableStateRows
+                view={positionsInActiveDept.length === 0 ? 'empty' : 'rows'}
+                columns={6}
+                emptyIcon={Trophy}
+                emptyTitle="No positions found in this department"
+                emptyMessage="Positions appear here once applicants apply for them. Go back to choose another department."
+              />
             </tbody>
           </table>
         </div>
@@ -486,10 +496,10 @@ export const ApplicantRankingPage = () => {
         </div>
 
         {/* Ranking table */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white no-print">
-          <table className="w-full min-w-full">
+        <div className="abyan-table-wrap no-print">
+          <table className="abyan-table">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr>
                 <th className="w-12 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
                   <input
                     type="checkbox"
@@ -509,14 +519,14 @@ export const ApplicantRankingPage = () => {
             <tbody>
               {(activeGroup?.members ?? []).map((a, idx) => {
                 const rank     = idx + 1;
-                const medal    = medalStyle(rank);
+                const isTop    = topIds.has(a.id);
                 const isSelected = selected.has(a.id);
                 const alreadyMarked = isMarked(a.status);
                 const isHired = a.status.toLowerCase().includes('hired') && !a.status.toLowerCase().includes('recommended');
                 return (
                   <tr
                     key={a.id}
-                    className={`border-b border-slate-100 last:border-0 transition-colors ${isSelected ? 'bg-blue-50' : alreadyMarked ? 'bg-emerald-50/50' : 'hover:bg-slate-50'}`}
+                    className={[isSelected ? 'is-selected' : '', topScorerRowClass(isTop)].filter(Boolean).join(' ')}
                   >
                     <td className="px-4 py-3.5 text-center">
                       <input
@@ -528,13 +538,13 @@ export const ApplicantRankingPage = () => {
                       />
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medal.bg} ${medal.text}`}>
+                      <span className={RANK_CHIP}>
                         {rank}
                       </span>
                     </td>
                     <td className="px-4 py-3.5">
-                      <p className="font-semibold text-sm text-slate-900">{a.full_name}</p>
-                      <p className="text-xs text-slate-400">{a.email}</p>
+                      <span className="abyan-cell-primary flex flex-wrap items-center gap-2">{a.full_name}{isTop && <TopScorerBadge />}</span>
+                      <span className="abyan-cell-secondary">{a.email}</span>
                     </td>
                     <td className="px-4 py-3.5 text-sm text-slate-600">{a.office || '—'}</td>
                     <td className="px-4 py-3.5">

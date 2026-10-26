@@ -523,8 +523,8 @@ export const OfficeTrainingCourses = ({ officeName = null, initialSubtab = 'all'
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full text-left">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <SortHeader label="Training title" k="title" />

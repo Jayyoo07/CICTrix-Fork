@@ -359,8 +359,8 @@ export const GenerateCredentialsPage = () => {
             <ul className="mt-1 list-disc pl-5">{failures.map((f) => <li key={f}>{f}</li>)}</ul>
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="abyan-table-wrap">
+          <table className="abyan-table w-full">
             <thead>
               <tr className="border-b border-[var(--neutral-200)] text-left text-[13px] font-semibold text-[var(--color-primary-900)]">
                 <th scope="col" className="pb-2">Name</th>

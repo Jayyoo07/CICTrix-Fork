@@ -569,8 +569,8 @@ export function PMReportsAnalytics() {
                 </div>
               ) : (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full text-left">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                           <th className="px-4 py-3">Office</th>
@@ -643,8 +643,8 @@ export function PMReportsAnalytics() {
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-slate-800">Closed-Out Bundles</h3>
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
+                    <div className="abyan-table-wrap">
+                      <table className="abyan-table w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                             <th className="px-4 py-3">Office</th>
@@ -748,8 +748,8 @@ export function PMReportsAnalytics() {
                 </div>
               ) : (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full text-left">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                           <th className="px-4 py-3">Employee</th>
@@ -865,8 +865,8 @@ export function PMReportsAnalytics() {
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Preview — {exportType === 'comparison' ? 'Office Comparison' : exportType === 'timings' ? 'Cycle Performance' : 'Records Archive'}</p>
                 <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                   {exportType === 'comparison' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
+                    <div className="abyan-table-wrap">
+                      <table className="abyan-table w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                             <th className="px-4 py-2.5">Office</th>
@@ -895,8 +895,8 @@ export function PMReportsAnalytics() {
                     </div>
                   )}
                   {exportType === 'timings' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
+                    <div className="abyan-table-wrap">
+                      <table className="abyan-table w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                             <th className="px-4 py-2.5">Office</th>
@@ -921,8 +921,8 @@ export function PMReportsAnalytics() {
                     </div>
                   )}
                   {exportType === 'records' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
+                    <div className="abyan-table-wrap">
+                      <table className="abyan-table w-full text-left">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-100">
                             <th className="px-4 py-2.5">Employee</th>

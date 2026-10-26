@@ -621,8 +621,8 @@ export function InterviewerDashboard({
                 <p className="text-body-l">Open a posting to view and evaluate its applicants.</p>
               </div>
 
-              <div className="ivd-table-wrap">
-                <table className="ivd-table" aria-busy={loading}>
+              <div className="abyan-table-wrap">
+                <table className="abyan-table" aria-busy={loading}>
                   <thead>
                     <tr>
                       <th scope="col">Job title / position</th>
@@ -720,8 +720,8 @@ export function InterviewerDashboard({
                 <p className="text-body-l">Your submitted evaluations</p>
               </div>
 
-              <div className="ivd-table-wrap">
-                <table className="ivd-table" aria-busy={loading}>
+              <div className="abyan-table-wrap">
+                <table className="abyan-table" aria-busy={loading}>
                   <thead>
                     <tr>
                       <th scope="col">Candidate</th>

@@ -27,6 +27,9 @@ import { formatDisplayDate, localIsoDate } from '../lib/scheduleSelection';
 import { supabase } from '../lib/supabase';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { buildEvaluationSnapshotMap, subscribeToEvaluationChanges, type EvaluationSnapshot } from '../lib/evaluationScores';
+import { fetchWrittenExamTotals } from '../lib/api/examTotalPoints';
+import { TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
+import { convertExamScore, totalForPosition } from '../lib/examTotalPoints';
 import {
   AlertTriangle,
   Briefcase,
@@ -128,6 +131,14 @@ export const ForHiringPage = () => {
   const [acknowledged, setAcknowledged]         = useState(false);
   const [reserving, setReserving]               = useState(false);
   const [selectError, setSelectError]           = useState<string | null>(null);
+  // Written Exam total points per position; missing positions read as the default.
+  const [examTotals, setExamTotals]             = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchWrittenExamTotals().then((result) => { if (!cancelled) setExamTotals(result.totals); });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Data loading ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -475,6 +486,12 @@ export const ForHiringPage = () => {
       .sort((a, b) => (b.interviewScore ?? b.examScore ?? -1) - (a.interviewScore ?? a.examScore ?? -1));
   }, [rows, selectedDept, selectedPosition]);
 
+  // Top scorer for this plantilla, on the same basis the list is ranked by (Task 5).
+  const topIds = useMemo(
+    () => topScorerIds(deptApplicants, { idOf: (r) => r.id, scoreOf: (r) => r.interviewScore ?? r.examScore }),
+    [deptApplicants],
+  );
+
   /** Who holds this plantilla while they sign; nobody else can be selected. */
   const reservedRow = deptApplicants.find(r => isReserved(r.status)) ?? null;
   const selectedRow = deptApplicants.find(r => r.id === selectedId) ?? null;
@@ -548,8 +565,8 @@ export const ForHiringPage = () => {
             <p className="mt-1 text-sm">Applicants completed in the Applicant Score appear here.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full min-w-full">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full min-w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Department</th>
@@ -615,8 +632,8 @@ export const ForHiringPage = () => {
             <p className="font-medium">No applicants in this department.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full min-w-full">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full min-w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
@@ -714,8 +731,8 @@ export const ForHiringPage = () => {
             <p className="font-medium">No applicants for this position.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <table className="w-full min-w-full">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full min-w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="w-12 px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Rank</th>
@@ -730,11 +747,7 @@ export const ForHiringPage = () => {
               <tbody className={tableBodyClass(rowsLoad.refreshing)}>
                 {deptApplicants.map((row, idx) => {
                   const rank = idx + 1;
-                  const medalBg =
-                    rank === 1 ? 'bg-yellow-400 text-yellow-900'  :
-                    rank === 2 ? 'bg-slate-300 text-slate-800'    :
-                    rank === 3 ? 'bg-amber-500 text-amber-900'    :
-                                 'bg-slate-100 text-slate-600';
+                  const isTop = topIds.has(row.id);
                   const reserved = isReserved(row.status);
                   const blockedReason = !row.slot
                     ? 'This application is not linked to a plantilla. Link it from the job post first.'
@@ -744,10 +757,10 @@ export const ForHiringPage = () => {
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${selectedId === row.id ? 'bg-[var(--color-primary-50)]' : ''} ${reservedRow && !reserved ? 'opacity-60' : ''}`}
+                      className={`${selectedId === row.id ? 'is-selected' : ''} ${topScorerRowClass(isTop)} ${reservedRow && !reserved ? 'opacity-60' : ''}`}
                     >
                       <td className="px-4 py-4 text-center">
-                        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalBg}`}>
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-primary-50)] text-xs font-bold text-[var(--color-primary-700)]">
                           {rank}
                         </span>
                       </td>
@@ -764,8 +777,8 @@ export const ForHiringPage = () => {
                         />
                       </td>
                       <td className="px-5 py-4">
-                        <p className="text-sm font-semibold text-slate-900">{row.fullName}</p>
-                        <p className="text-xs text-slate-400">{row.email}</p>
+                        <span className="abyan-cell-primary flex flex-wrap items-center gap-2">{row.fullName}{isTop && <TopScorerBadge />}</span>
+                        <span className="abyan-cell-secondary">{row.email}</span>
                         {row.selectionRevokedAt && !reserved && (
                           <p className="mt-0.5 text-xs text-[var(--neutral-600)]">
                             Selection revoked {formatDisplayDate(row.selectionRevokedAt)}: did not report
@@ -786,8 +799,13 @@ export const ForHiringPage = () => {
                       </td>
                       <td className="px-5 py-4 text-center">
                         <span className={`text-sm font-bold ${row.examScore != null ? 'text-[var(--color-primary-900)]' : 'text-slate-300'}`}>
-                          {fmtScore(row.examScore)}
+                          {row.examScore != null ? `${fmtScore(row.examScore)} / ${totalForPosition(examTotals, row.position)}` : fmtScore(row.examScore)}
                         </span>
+                        {convertExamScore(row.examScore, totalForPosition(examTotals, row.position)).exceedsTotal && (
+                          <span className="mt-0.5 flex items-center justify-center gap-1 whitespace-nowrap text-xs font-semibold text-[var(--error-700)]">
+                            <AlertTriangle size={11} aria-hidden="true" /> Score exceeds total
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

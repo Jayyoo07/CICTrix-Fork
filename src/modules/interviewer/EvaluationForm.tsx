@@ -627,8 +627,8 @@ export function EvaluationForm() {
                 </div>
               </div>
 
-              <div className="pcpt-table-wrapper">
-                <table className="pcpt-table">
+              <div className="pcpt-table-wrapper"><div className="abyan-table-wrap">
+                <table className="abyan-table pcpt-table">
                   <thead>
                     <tr>
                       <th>TRAITS</th>
@@ -779,7 +779,7 @@ export function EvaluationForm() {
                       </td>
                     </tr>
                   </tbody>
-                </table>
+                </table></div>
               </div>
 
               {hasOralEvaluation && (
@@ -907,8 +907,8 @@ export function EvaluationForm() {
               </div>
 
               <form onSubmit={handleSubmit}>
-                <div className="oral-table-wrapper">
-                  <table className="oral-table">
+                <div className="abyan-table-wrap oral-table-wrapper">
+                  <table className="abyan-table oral-table">
                     <thead>
                       <tr>
                         <th>CRITERIA</th>

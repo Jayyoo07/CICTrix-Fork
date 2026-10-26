@@ -395,8 +395,8 @@ export const LandingPage = () => {
           </div>
 
           {/* Responsive Table */}
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="abyan-table-wrap">
+            <table className="abyan-table w-full">
               <thead className="bg-slate-100">
                 <tr className="border-b border-slate-200">
                   <th className="px-4 py-3 text-left font-semibold text-[#050D65]">Position Title</th>

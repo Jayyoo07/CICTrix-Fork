@@ -197,8 +197,8 @@ export const LndArchive = ({
           ) : visibleOffices.length === 0 ? (
             <EmptyState icon={Archive} title="No offices" description="No offices match your search." />
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
+            <div className="abyan-table-wrap">
+              <table className="abyan-table w-full min-w-[720px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                     <SortHead label="Office" k="office" />
@@ -310,8 +310,8 @@ export const LndArchive = ({
                       </button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[820px] border-collapse text-sm">
+                  <div className="abyan-table-wrap">
+                    <table className="abyan-table w-full min-w-[820px]">
                       <thead>
                         <tr className="border-b border-gray-100 bg-white text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                           <th className="px-4 py-2.5">Training Title</th>

@@ -202,8 +202,8 @@ export const SalaryGradesPage = () => {
                   </p>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-[var(--neutral-200)] bg-white">
-                  <table className="w-full min-w-[960px] text-sm">
+                <div className="abyan-table-wrap">
+                  <table className="abyan-table w-full min-w-[960px]">
                     <thead>
                       <tr className="bg-[var(--bg-page)] text-[13px] font-semibold text-[var(--color-primary-900)]">
                         <th scope="col" className="px-4 py-2.5 text-left">SG</th>

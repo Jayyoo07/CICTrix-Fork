@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">86 plans &middot; 73 done</p>
+    <p class="counts">84 plans &middot; 72 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -91,7 +91,7 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
-        <td><a href="2026-10-26-rsp-view-first-documents.md">Open RSP documents in a viewer before printing or downloading</a><p class="summary">Make RSP document actions view-first using the existing in-site viewer, with explicit Print and Download controls instead of immediate file downloads. Preserve document access rules and leave report exports unchanged.</p></td>
+        <td><a href="2026-10-26-rsp-route-loading.md">Load RSP dashboard data per section</a><p class="summary">Stop the RSP shell from loading recruitment, employee and exam data on Succession, and remove the queries whose results were always discarded.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -107,11 +107,6 @@
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-pm-dashboard-cleanup.md">PM dashboard cleanup</a><p class="summary">Remove the Competency &amp; Succession Watchlist and the IPCR Submissions panel from the PM dashboard, after confirming the submissions data exists elsewhere.</p></td>
-        <td class="status"><span class="badge badge-success">Done</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="2026-10-26-opencode-handoff.md">Retarget the agent handoff to OpenCode</a><p class="summary">Rewrite docs/handoff/agent-handoff.md for OpenCode instead of Claude Code, and add the two missing slash commands so /grill-me and /grill-with-docs work as AGENTS.md describes.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -366,11 +361,6 @@
       </tr>
       <tr>
         <td class="date">2026-10-16</td>
-        <td><a href="2026-10-16-security-remediation.md">Security remediation (key rotation, history purge, password hashing, real RLS)</a><p class="summary">Close the gaps that let anyone read or change HR data. Rotate the leaked service-role key, purge secrets from git history, move every portal login to Supabase Auth with hashed passwords, then replace the allow-all database access with per-role RLS, private storage and authenticated backend routes.</p></td>
-        <td class="status"><span class="badge badge-neutral">Draft</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-16</td>
         <td><a href="2026-10-16-pm-dashboard.md">PM dashboard submission rate and IPCR results</a><p class="summary">Replace the PM dashboard header, KPI cards and Performance Distribution donut with a gradient header, an IPCR submission rate KPI, a submission-by-department table and an IPCR results section, all in DESIGN_IDENTITY.md colors.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
@@ -526,7 +516,7 @@
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
-        <td><a href="../session-summaries/2026-10-26-rsp-view-first-documents-summary.md">RSP view-first document viewing</a><p class="summary">RSP applicant and employee submission actions open an in-site viewer, with explicit Print and Download and file-by-file collection review. Local checks pass; live authenticated files and physical printing were not tested.</p><p class="meta">Plan: <a href="2026-10-26-rsp-view-first-documents.md">2026-10-26-rsp-view-first-documents.md</a></p></td>
+        <td><a href="../session-summaries/2026-10-26-rsp-route-loading-summary.md">Load RSP dashboard data per section - session summary</a><p class="summary">Succession routes now make no parent recruitment, employee, newly-hired or exam-total reads, while Dashboard, Accounts and Reports keep their existing data.</p></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -539,10 +529,6 @@
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-pm-dashboard-cleanup-summary.md">PM dashboard cleanup summary</a><p class="meta">Plan: <a href="2026-10-26-pm-dashboard-cleanup.md">2026-10-26-pm-dashboard-cleanup.md</a></p></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="../session-summaries/2026-10-26-opencode-handoff-summary.md">Session Summary: Retarget the Agent Handoff to OpenCode</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>

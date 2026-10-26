@@ -553,8 +553,13 @@ function AppContent() {
     }
   };
 
+  const boundary = moduleBoundaryFor(location.pathname);
+
   return (
     <div className="app">
+      {/* One boundary per portal, keyed by path: a crash stays in its module
+          and clears when the user navigates away. */}
+      <ErrorBoundary key={location.pathname} scope={boundary.scope} homeHref={boundary.home}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -1054,6 +1059,7 @@ function AppContent() {
           <Route path="/prototype/training-courses" element={<TrainingCoursesPrototype />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+      </ErrorBoundary>
 
         <Dialog open={isInterviewerRoute && revokedInterviewerDialogOpen} onClose={handleRevokedInterviewerAcknowledge}>
           <div style={{ textAlign: 'center' }}>
@@ -1081,6 +1087,18 @@ function AppContent() {
     </div>
   );
 }
+
+/** The portal a path belongs to, for its error boundary's wording and home link. */
+const moduleBoundaryFor = (pathname: string): { scope: string; home: string } => {
+  if (pathname.startsWith('/admin/rsp')) return { scope: 'RSP portal', home: '/admin/rsp' };
+  if (pathname.startsWith('/admin/lnd')) return { scope: 'L&D portal', home: '/admin/lnd' };
+  if (pathname.startsWith('/admin/pm')) return { scope: 'Performance Management portal', home: '/admin/pm' };
+  if (pathname.startsWith('/admin')) return { scope: 'admin portal', home: '/admin' };
+  if (pathname.startsWith('/office')) return { scope: 'Department Head console', home: '/office/dashboard' };
+  if (pathname.startsWith('/employee')) return { scope: 'Employee portal', home: '/employee/dashboard' };
+  if (pathname.startsWith('/interviewer')) return { scope: 'Interviewer portal', home: '/interviewer/dashboard' };
+  return { scope: 'page', home: '/' };
+};
 
 function App() {
   return (

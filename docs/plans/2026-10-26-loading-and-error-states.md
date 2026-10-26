@@ -1,7 +1,7 @@
 ---
 title: Loading states and error handling across the system
 date: 2026-10-26
-status: Approved
+status: In Progress
 summary: Audit every fetch/action site, extend the shared loading/error building blocks, and fix every site module by module so failures say what went wrong, whether it completed, and what to do next.
 ---
 

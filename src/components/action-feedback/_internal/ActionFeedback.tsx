@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, Info, RefreshCw, X, XCircle } from 'lucide-react';
 
+import type { ErrorContext } from '../../../lib/friendlyErrors';
 import './action-feedback.css';
+import { goToLogin } from './loginPath';
 import type { FeedbackTone } from './types';
 
 export interface ActionFeedbackProps {
@@ -16,6 +18,8 @@ export interface ActionFeedbackProps {
   className?: string;
   /** Moves focus to the notice when it appears. On by default for errors. */
   focusOnMount?: boolean;
+  /** From the failure. 'session' adds a "Sign in again" action. */
+  context?: ErrorContext;
 }
 
 const ICONS = {
@@ -40,7 +44,9 @@ export const ActionFeedback = ({
   onDismiss,
   className = '',
   focusOnMount = tone === 'error',
+  context,
 }: ActionFeedbackProps) => {
+  const needsSignIn = tone === 'error' && context === 'session';
   const ref = useRef<HTMLDivElement>(null);
   const Icon = ICONS[tone];
 
@@ -65,9 +71,14 @@ export const ActionFeedback = ({
             <strong>Next:</strong> {nextStep}
           </p>
         )}
-        {(onRetry || onDismiss) && (
+        {(onRetry || onDismiss || needsSignIn) && (
           <div className="afb-actions">
-            {onRetry && (
+            {needsSignIn && (
+              <button type="button" className="afb-action" onClick={goToLogin}>
+                Sign in again
+              </button>
+            )}
+            {onRetry && !needsSignIn && (
               <button type="button" className="afb-action" onClick={onRetry}>
                 <RefreshCw size={13} strokeWidth={2} aria-hidden="true" /> {retryLabel}
               </button>

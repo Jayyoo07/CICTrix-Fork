@@ -43,6 +43,7 @@ export const ErrorBanner = ({
       message={failure.message}
       nextStep={failure.nextStep}
       onRetry={onRetry}
+      context={failure.context}
       focusOnMount={false}
       className={className}
     />

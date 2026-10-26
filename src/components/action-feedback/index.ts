@@ -7,3 +7,4 @@ export type {
   AsyncActionSuccess,
 } from './_internal/useAsyncAction';
 export type { FeedbackAction, FeedbackInput, FeedbackOptions, FeedbackTone } from './_internal/types';
+export { goToLogin, loginPathFor } from './_internal/loginPath';

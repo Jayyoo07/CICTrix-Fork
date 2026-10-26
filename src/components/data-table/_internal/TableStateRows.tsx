@@ -1,6 +1,7 @@
 import { AlertTriangle, FolderOpen, RefreshCw } from 'lucide-react';
 import type React from 'react';
 import { describeActionFailure, type ErrorContext } from '../../../lib/friendlyErrors';
+import { goToLogin } from '../../action-feedback';
 import { TableSkeletonRows, type SkeletonCell } from '../../table-loading';
 
 export type TableView = 'loading' | 'error' | 'empty' | 'rows';
@@ -80,7 +81,9 @@ export function TableStateRows({
             <p className="abyan-table-state-title">{failure.title}</p>
             <p>{failure.message}</p>
             <p>{failure.nextStep}</p>
-            {onRetry && (
+            {failure.context === 'session' ? (
+              <button type="button" className="btn btn-sm btn-secondary" onClick={goToLogin}>Sign in again</button>
+            ) : onRetry && (
               <button type="button" className="btn btn-sm btn-secondary" onClick={onRetry}>
                 <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" /> Retry
               </button>

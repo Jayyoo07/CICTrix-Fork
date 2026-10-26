@@ -30,7 +30,9 @@ import { mockDatabase } from '../../lib/mockDatabase';
 import { sendEmail } from '../../lib/email';
 import { getApplicants, getAuthoritativeJobPostings, saveApplicants } from '../../lib/recruitmentData';
 import { ATTACHMENTS_BUCKET, isMockModeEnabled, supabase } from '../../lib/supabase';
-import { fetchAndDecryptApplicantAttachment } from '../../lib/applicantDocuments';
+import type { ViewerDocument } from '../../lib/documentViewing';
+import { DocumentCollectionModal } from '../../components/DocumentCollectionModal';
+import { DocumentPreviewModal } from '../../components/DocumentPreviewModal';
 import { normalizeStatus } from '../../lib/api/applicantStatus';
 import { getAdminEmail } from '../../lib/adminSession';
 import {
@@ -449,28 +451,14 @@ const computeScoreBreakdown = (
   };
 };
 
-const openDocument = async (filePath: string) => {
-  if (!filePath) return;
-  try {
-    const { objectUrl, cleanup } = await fetchAndDecryptApplicantAttachment(filePath);
-    const tab = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    if (!tab) alert('Pop-up blocked. Please allow pop-ups for this site to view the document.');
-    setTimeout(() => cleanup(), 60000);
-    return;
-  } catch (err) {
-    console.error('Failed to open decrypted document:', err);
-  }
-  if (isMockModeEnabled) {
-    window.open(filePath, '_blank', 'noopener,noreferrer');
-    return;
-  }
-
-  const signed = await supabase.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(filePath, 3600);
-  const signedUrl = signed.data?.signedUrl;
-  if (signedUrl) {
-    window.open(signedUrl, '_blank', 'noopener,noreferrer');
-  }
-};
+/** An attachment for the in-site viewer, which signs, fetches and decrypts it without a new tab. */
+const applicantViewerDocument = (filePath: string, fileName: string, label?: string): ViewerDocument => ({
+  id: filePath,
+  url: filePath,
+  fileName,
+  bucket: ATTACHMENTS_BUCKET,
+  label,
+});
 
 const buildApplicantRecordFromRecruitment = (applicant: Applicant, job: JobPosting | null): ApplicantRecord => ({
   id: applicant.id,
@@ -834,6 +822,8 @@ function ApplicantDetailsPageView() {
   const pendingDecision = usePendingDecision();
   const [docReviews, setDocReviews] = useState<Record<string, DocReview>>(loadDocReviews);
   const [, setOpenedDocFilePaths] = useState<Set<string>>(new Set());
+  const [previewDocument, setPreviewDocument] = useState<ViewerDocument | null>(null);
+  const [documentCollection, setDocumentCollection] = useState<ViewerDocument[] | null>(null);
   const [docsValidated, setDocsValidated] = useState(false);
   const [docEvents, setDocEvents] = useState<DocumentEvent[]>([]);
   const [docEventsLoaded, setDocEventsLoaded] = useState(false);
@@ -1713,8 +1703,9 @@ function ApplicantDetailsPageView() {
     }
   };
 
-  const handleOpenDocument = async (filePath: string) => {
-    await openDocument(filePath);
+  const handleOpenDocument = (filePath: string, fileName: string, label?: string) => {
+    if (!filePath) return;
+    setPreviewDocument(applicantViewerDocument(filePath, fileName, label));
     setOpenedDocFilePaths((prev) => new Set([...prev, filePath]));
   };
 
@@ -2513,7 +2504,7 @@ function ApplicantDetailsPageView() {
                                     const approved = docReviews[getDocReviewKey(entry.filePath)]?.status === 'approved';
                                     return (
                                       <div key={entry.id} className={`mt-2 rounded-lg border px-3 py-2 ${entry.isCurrent ? 'border-blue-200 bg-white' : 'border-slate-100 bg-slate-50'}`}>
-                                        <button className="w-full text-left" onClick={() => void handleOpenDocument(entry.filePath)}>
+                                        <button className="w-full text-left" onClick={() => handleOpenDocument(entry.filePath, entry.fileName, entry.label)}>
                                           <div className="flex flex-wrap items-center gap-1.5">
                                             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${entry.isCurrent ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
                                               {entry.label}
@@ -3070,11 +3061,15 @@ function ApplicantDetailsPageView() {
                       return (
                         <button
                           type="button"
-                          onClick={() => experienceDocs.forEach((doc) => void openDocument(doc.file_path))}
+                          onClick={() => {
+                            const docs = experienceDocs.map((doc) => applicantViewerDocument(doc.file_path, doc.file_name));
+                            if (docs.length === 1) setPreviewDocument(docs[0]);
+                            else setDocumentCollection(docs);
+                          }}
                           disabled={experienceDocs.length === 0}
                           className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 hover:text-blue-800 disabled:cursor-not-allowed disabled:text-slate-400"
                         >
-                          <FileText size={14} /> View Experience Documents ({experienceDocs.length} {experienceDocs.length === 1 ? 'file' : 'files'}) ↗
+                          <FileText size={14} /> View Experience Documents ({experienceDocs.length} {experienceDocs.length === 1 ? 'file' : 'files'})
                         </button>
                       );
                     })()}
@@ -3499,6 +3494,26 @@ function ApplicantDetailsPageView() {
         </div>
       )}
       </div>{/* /admin-layout wrapper */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          open
+          viewFirst
+          fileUrl={previewDocument.url}
+          fileName={previewDocument.fileName}
+          storageBucket={previewDocument.bucket}
+          title={previewDocument.fileName}
+          subtitle={previewDocument.label}
+          onClose={() => setPreviewDocument(null)}
+        />
+      )}
+      {documentCollection && (
+        <DocumentCollectionModal
+          title="Experience Documents"
+          subtitle="Select a document to view, print, or download."
+          files={documentCollection}
+          onClose={() => setDocumentCollection(null)}
+        />
+      )}
     </div>
   );
 }

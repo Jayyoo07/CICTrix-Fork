@@ -57,6 +57,8 @@ The first implementation was merged (`c4b4ea3`) and reverted (`87593cf`) so it c
 4. **The scoring file list lost each file's size and upload date.** They are restored as the row subtitle.
 5. **View stayed enabled for documents with no file,** opening a viewer that could only show an error. It is now disabled.
 
+The applicant details page (`src/modules/interviewer/ApplicantDetailsPage.tsx`), used by RSP admins and interviewers, was missed by the original trace. It opened documents in a new tab with `noopener`, so `window.open` always returned `null` and a "Pop-up blocked" alert showed even when the tab opened. It now uses the same in-site viewer, and View Experience Documents opens the file-by-file list instead of one tab per file.
+
 
 ## Steps
 

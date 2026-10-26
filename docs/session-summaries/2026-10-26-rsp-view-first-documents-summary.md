@@ -73,3 +73,8 @@ Checks on this branch:
 - `npm run build:verify`: pass.
 - Not run: the browser pass and live authenticated file access. The plans dashboard was not regenerated because `docs/plans/build-plans-index.ps1` is not in the repository; the plan's frontmatter is unchanged, so the restored `index.html` entry is still accurate.
 
+## Word (.docx) preview
+
+Branch `fix/docx-preview` adds in-browser `.docx` previews: `prepareDocumentPreview` marks Word files (including ones stored as octet-stream or zip) as a `docx` kind, and `ViewFirstDocumentPreview` renders them with `docx-preview` in a sandboxed frame and prints only that frame. Legacy `.doc` files keep the download fallback with a clearer message.
+
+Checks: `npx tsc --noEmit` and `npm run lint` pass; `documentViewing.test.ts` and `DocumentPreviewModal.test.tsx` (new docx detection, rendering, print and failure cases) pass. In Chromium, a generated application letter rendered with its heading, bold run and table, Print reached the frame with no sandbox warning, and the console had no errors. Not verified: real applicant uploads with complex layouts, and the live site.

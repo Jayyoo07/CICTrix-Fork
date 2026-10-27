@@ -40,6 +40,12 @@ vi.mock('./ApplicantsTabBar', () => ({ ApplicantsTabBar: () => null }));
 
 beforeEach(() => {
   localStorage.clear();
+  // For Hiring lists only applicants carrying both scores
+  // (docs/plans/2026-10-28-for-hiring-scored-only.md); this test is about the
+  // columns the select names, so Ana is scored to keep her on the page.
+  localStorage.setItem('cictrix_category_scores', JSON.stringify({
+    a1: { writtenExam: { finalScore: 89 }, oralExam: { finalScore: 19.33 } },
+  }));
   // The legacy backend returns nothing, so the page reads applicants from Supabase.
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => [] }));
 });

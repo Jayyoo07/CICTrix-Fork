@@ -282,6 +282,41 @@ describe('reviewed work calendar arithmetic', () => {
 });
 
 describe('training review and certificate deduplication', () => {
+  const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+
+  it.each(orders.map(order => ({ order })))(
+    'qualifies the same distinct fractional training in order $order', ({ order }) => {
+      const records = [0.3, 0.3, 39.4].map((hours, index) => training({
+        sourceId: `fraction-${index}`, certificateId: `certificate-${index}`, hours,
+      }));
+      const result = scored(input({ training: { complete: true, records: order.map(index => records[index]) } }));
+      expect(result.audit.trainingHours).toBe(40);
+      expect(result.audit.minimums.training).toBe('met');
+      expect(result.contributions.training).toBe(10);
+      expect(result.total).toBe(63);
+    });
+
+  it.each(orders.flatMap(order => [
+    { order, hours: [0.3, 0.3, 39.39999999999999] },
+    { order, hours: [0.3, 0.299999999999999, 39.4] },
+  ]))('excludes genuinely insufficient fractional training $hours in order $order', ({ order, hours }) => {
+    const records = hours.map((value, index) => training({
+      sourceId: `fraction-${index}`, certificateId: `certificate-${index}`, hours: value,
+    }));
+    const result = evaluateSuccessionV2(input({ training: { complete: true, records: order.map(index => records[index]) } }));
+    expect(result.status).toBe('excluded');
+    expect(result.audit.minimums.training).toBe('failed');
+    expect(result.reasonCodes).toEqual(['TRAINING_MINIMUM_NOT_MET']);
+    expect(result).not.toHaveProperty('total');
+  });
+
+  it('preserves full-precision fractional requirements rather than rounding the gate', () => {
+    const value = input({ training: { complete: true, records: [training({ hours: 40 })] } });
+    value.requirements.trainingHours = 40.00000000000001;
+    expect(evaluateSuccessionV2(value)).toMatchObject({ status: 'excluded',
+      reasonCodes: ['TRAINING_MINIMUM_NOT_MET'] });
+  });
+
   it('avoids denominator overflow for finite hours and requirements', () => {
     const value = input({ training: { complete: true, records: [training({ hours: 1.5e308 })] } });
     value.requirements.trainingHours = 1e308;
@@ -508,6 +543,34 @@ describe('readiness, rounding, audit and deterministic ranking', () => {
     rankSuccessionV2([result]);
     expect(value).toEqual(before);
     expect(result).not.toHaveProperty('rank');
+  });
+
+  it('snapshots nested audit requirements, professional mappings and competency counts', () => {
+    const value = input({ education: { complete: true, records: [education({ kind: 'JD' })] },
+      eligibility: { complete: true, records: [eligibility()] }, competencies: { required: 2, met: 1 } });
+    value.requirements.education = { minimum: 'master', field: 'Law' };
+    value.requirements.eligibility = { kind: 'required', key: 'reviewed licence' };
+    value.requirements.professionalDegreeMappings = { JD: { approved: true, equivalentKind: 'master' } };
+    const result = scored(value);
+
+    value.requirements.experienceYears = 200;
+    value.requirements.trainingHours = 400;
+    value.requirements.education.minimum = 'doctorate';
+    value.requirements.education.field = 'Different field';
+    value.requirements.eligibility.key = 'Different licence';
+    value.requirements.professionalDegreeMappings.JD.approved = false;
+    value.requirements.professionalDegreeMappings.JD.equivalentKind = 'doctorate';
+    value.requirements.professionalDegreeMappings.MD = { approved: true, equivalentKind: 'doctorate' };
+    value.competencies.required = 10;
+    value.competencies.met = 10;
+
+    expect(result.audit.requirements).toEqual({ experienceYears: 2, trainingHours: 40,
+      education: { minimum: 'master', field: 'Law' },
+      eligibility: { kind: 'required', key: 'reviewed licence' },
+      professionalDegreeMappings: { JD: { approved: true, equivalentKind: 'master' } } });
+    expect(result.audit.competencies).toEqual({ required: 2, met: 1 });
+    expect(result.total).toBe(86.5);
+    expect(result.readiness).toBe('Ready in 1–2 Years');
   });
 
   it('ranks scored results only without reserving zero ranks for pending states', () => {

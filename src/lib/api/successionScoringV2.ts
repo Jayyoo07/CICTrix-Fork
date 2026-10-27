@@ -201,6 +201,30 @@ function unionDays(intervals: [number, number][]): number {
   return days;
 }
 
+interface DecimalHours {
+  coefficient: bigint;
+  exponent: number;
+}
+
+function decimalHours(value: number): DecimalHours {
+  const [significand, exponent = '0'] = value.toString().split('e');
+  const [whole, fraction = ''] = significand.split('.');
+  return { coefficient: BigInt(whole + fraction), exponent: Number(exponent) - fraction.length };
+}
+
+function trainingTotal(hours: readonly number[], required: unknown): { hours: number; minimumMet: boolean } {
+  // Preserve every digit of validated numeric decimal hours, including scientific notation.
+  // Exact integer addition/comparison avoids both encounter-order loss and a permissive gate epsilon.
+  const terms = hours.map(decimalHours);
+  const requirement = positive(required) ? decimalHours(required) : null;
+  const exponent = terms.reduce((smallest, term) => Math.min(smallest, term.exponent), requirement?.exponent ?? 0);
+  const scaled = (term: DecimalHours) => term.coefficient * 10n ** BigInt(term.exponent - exponent);
+  const total = terms.reduce((sum, term) => sum + scaled(term), 0n);
+  const minimumMet = requirement !== null && total >= scaled(requirement);
+  // Only the audit/contribution projection uses Number; qualification uses the exact comparison above.
+  return { hours: Number(`${total}e${exponent}`), minimumMet };
+}
+
 export function evaluateSuccessionV2(input: SuccessionV2Input): SuccessionV2Result {
   const reviewReasons = new Set<SuccessionV2ReasonCode>();
   const configReasons = new Set<SuccessionV2ReasonCode>();
@@ -288,7 +312,7 @@ export function evaluateSuccessionV2(input: SuccessionV2Input): SuccessionV2Resu
     : fingerprint([normalized(record.title), normalized(record.provider), record.startDate, record.endDate]),
   record => fingerprint([record.hours, record.startDate, record.endDate, record.relevant, record.completed, record.cityHall]),
   () => block(training, 'CONFLICTING_TRAINING_DUPLICATE'));
-  let trainingHours = 0;
+  const reviewedHours: number[] = [];
   for (const record of training.records) {
     const start = day(record.startDate);
     const finish = day(record.endDate);
@@ -302,12 +326,14 @@ export function evaluateSuccessionV2(input: SuccessionV2Input): SuccessionV2Resu
       block(training, 'TRAINING_REVIEW_INCOMPLETE');
       continue;
     }
-    if (record.relevant && record.completed && scoringDay !== null && finish <= scoringDay) trainingHours += record.hours;
+    if (record.relevant && record.completed && scoringDay !== null && finish <= scoringDay) reviewedHours.push(record.hours);
   }
+  const trainingSum = trainingTotal(reviewedHours, requirements?.trainingHours);
+  const trainingHours = trainingSum.hours;
   if (!Number.isFinite(trainingHours)) block(training, 'INVALID_TRAINING');
   const trainingConfigured = positive(requirements?.trainingHours);
   if (!trainingConfigured) configReasons.add('TRAINING_REQUIREMENT_NEEDED');
-  const trainingMinimum = minimum(trainingConfigured && trainingHours >= requirements.trainingHours,
+  const trainingMinimum = minimum(trainingSum.minimumMet,
     training, trainingConfigured, 'TRAINING_MINIMUM_NOT_MET');
 
   const education = review(input.education, 'EDUCATION_REVIEW_INCOMPLETE', 'INVALID_EDUCATION', 'CONFLICTING_EDUCATION_DUPLICATE');
@@ -376,7 +402,8 @@ export function evaluateSuccessionV2(input: SuccessionV2Input): SuccessionV2Resu
     modelVersion: 'v2', candidate: { ...input.candidate }, positionId: input.positionId, scoringDate: input.scoringDate,
     reasonCodes: [...failures, ...configReasons, ...reviewReasons].sort(),
     audit: { performanceRating: input.performanceRating, relevantWorkDays, relevantYears, trainingHours,
-      highestRelevantDegree, distinctEligibilityTypes: [...types].sort(), requirements, competencies: coverage,
+      highestRelevantDegree, distinctEligibilityTypes: [...types].sort(),
+      requirements: structuredClone(requirements), competencies: structuredClone(coverage),
       minimums: { experience: experienceMinimum, training: trainingMinimum, education: educationMinimum, eligibility: eligibilityMinimum } },
   };
   if (failures.size) return { ...base, status: 'excluded' };

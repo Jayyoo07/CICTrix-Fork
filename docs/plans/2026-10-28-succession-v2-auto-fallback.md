@@ -1,7 +1,7 @@
 ---
 title: Succession Planning V2 Automated Fallbacks & Review Bypass
 date: 2026-10-28
-status: Draft
+status: Done
 summary: Bypass manual evidence review gating in Succession V2 and add multi-tier database fallbacks (department name resolution, date_hired tenure, profile education and eligibility) so qualified successors load and rank immediately.
 ---
 

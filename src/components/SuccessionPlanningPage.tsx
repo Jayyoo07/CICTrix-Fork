@@ -291,6 +291,7 @@ const OcboTableView = (_props: { admin: string }) => {
   const [modelByPos, setModelByPos] = useState<Record<string, 'v1' | 'v2'>>({});
   const [poolV2ByPos, setPoolV2ByPos] = useState<Record<string, SuccessionPoolV2>>({});
   const [loadingV2ByPos, setLoadingV2ByPos] = useState<Record<string, boolean>>({});
+  const [errorV2ByPos, setErrorV2ByPos] = useState<Record<string, string | null>>({});
   const [reviewTarget, setReviewTarget] = useState<{
     candidate: { employeeId: string; name: string };
     position: { id: string; title: string; requirements: PositionRequirementsV2 };
@@ -298,11 +299,13 @@ const OcboTableView = (_props: { admin: string }) => {
 
   const loadPoolV2 = async (posId: string) => {
     setLoadingV2ByPos((prev) => ({ ...prev, [posId]: true }));
+    setErrorV2ByPos((prev) => ({ ...prev, [posId]: null }));
     try {
       const pool = await fetchSuccessionPoolV2(posId);
       setPoolV2ByPos((prev) => ({ ...prev, [posId]: pool }));
     } catch (err) {
       console.error('Failed to load V2 succession pool:', err);
+      setErrorV2ByPos((prev) => ({ ...prev, [posId]: err instanceof Error ? err.message : 'Failed to load V2 succession pool.' }));
     } finally {
       setLoadingV2ByPos((prev) => ({ ...prev, [posId]: false }));
     }
@@ -567,6 +570,10 @@ const OcboTableView = (_props: { admin: string }) => {
                           <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
                             Loading V2 scoring pool...
                           </div>
+                        ) : errorV2ByPos[pos.id] ? (
+                          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-xs text-red-600">
+                            Failed to load V2 pool: {errorV2ByPos[pos.id]}
+                          </div>
                         ) : poolV2ByPos[pos.id] ? (
                           (() => {
                             const pool = poolV2ByPos[pos.id];
@@ -599,7 +606,7 @@ const OcboTableView = (_props: { admin: string }) => {
                                       {pool.ranked.length === 0 ? (
                                         <tr>
                                           <td colSpan={10} className="px-3 py-4 text-center text-slate-400">
-                                            No candidates currently meet all requirements with complete reviews.
+                                            No candidates currently meet all minimum qualifications.
                                           </td>
                                         </tr>
                                       ) : (

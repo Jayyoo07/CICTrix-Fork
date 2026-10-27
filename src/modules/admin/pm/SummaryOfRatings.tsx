@@ -1,49 +1,23 @@
 import { useBackClosesView } from '../../../hooks/useHistoryBack';
-import { ArrowUpDown, Building2, ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, ArrowUpDown, Building2, ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
 import { BackButton } from '../../../components/BackButton';
 import { EmptyState } from '../../../components/EmptyState';
-import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../../lib/api/competencyGapAnalysis';
+import { getActiveHeadcountByDepartment, getActiveOfficeKeys, normDeptKey } from '../../../lib/api/competencyGapAnalysis';
+import {
+  getDepartmentSourceSemester,
+  getPublishedRecords,
+  type DepartmentSourceSemester,
+  type IPCRRatingRecord,
+  type CompetencyAssessmentState,
+} from '../../../lib/api/sorSemesterSource';
 import { CompetencyGapPanel } from './CompetencyGapPanel';
 import { SemesterSummarySection } from './SemesterSummarySection';
 
-export interface IPCRRatingRecord {
-  id: string;
-  department: string;
-  name: string;
-  position: string;
-  period: string;
-  numericalRating: number | null;
-  remarks: string;
-  submissionStatus: 'SUBMITTED' | 'PENDING' | 'OVERDUE';
-  competencies?: {
-    name: string;
-    possessed: number;
-    /**
-     * Required proficiency from the Competency Map, or null when the Map has no
-     * row for this position + competency. Null is not a gap and not a 0: the
-     * card says "Required level not configured" instead.
-     */
-    required: number | null;
-    /** False when `required` is null (Map has no level for this pair). */
-    requiredAvailable?: boolean;
-    isGap: boolean;
-    /**
-     * False when no possessed score exists for this competency yet (the employee
-     * submitted their IPCR but the AI competency assessment hasn't run). The
-     * `possessed` number is meaningless in that case — the UI shows "Not yet
-     * assessed" instead. Absent/undefined means assessed (the default, so the
-     * existing gap-view section is unaffected).
-     */
-    possessedAvailable?: boolean;
-  }[];
-  /**
-   * Competency id used by the drill-down trace API (semester section only). The
-   * existing gap-view section doesn't set it and its cards stay non-expandable.
-   */
-  cycleId?: number | null;
-}
+export type { IPCRRatingRecord, CompetencyAssessmentState, DepartmentSourceSemester };
+
+export const RATED_PERIOD_LABEL = 'All rated periods';
 
 export type Adjectival = 'Outstanding' | 'Very Satisfactory' | 'Satisfactory' | 'Unsatisfactory' | 'Poor' | 'Non-Submission';
 
@@ -130,6 +104,10 @@ export interface DeptCompletionRow {
   rate: number | null;
   lowCount: number;
   nonSubmission: number;
+  period?: string | null;
+  cycleId?: number | null;
+  status?: 'published' | 'correction_pending' | 'none';
+  isOlderSemester?: boolean;
 }
 
 // Keep only offices that are active in `departments`, and give every active
@@ -158,9 +136,20 @@ export function buildDeptCompletionRows(
   records: IPCRRatingRecord[],
   headcount: Map<string, { name: string; count: number }>,
   ascending: boolean,
+  deptSemesters?: Map<string, DepartmentSourceSemester>,
 ): DeptCompletionRow[] {
   const groups = groupByDept(records);
   const rows = new Map<string, DeptCompletionRow>();
+
+  // Determine highest cycle_id across all published departments to mark older semesters
+  let maxCycleId = 0;
+  if (deptSemesters) {
+    for (const sem of deptSemesters.values()) {
+      if (sem.cycleId && sem.cycleId > maxCycleId) {
+        maxCycleId = sem.cycleId;
+      }
+    }
+  }
 
   for (const [department, g] of groups.entries()) {
     rows.set(normDeptKey(department), {
@@ -181,7 +170,21 @@ export function buildDeptCompletionRows(
   return Array.from(rows.values())
     .map(row => {
       const total = Math.max(row.total, row.completed);
-      return { ...row, total, rate: total > 0 ? row.completed / total : null };
+      const sem = deptSemesters?.get(normDeptKey(row.department));
+      const period = sem?.periodTitle ?? null;
+      const status = sem?.status ?? (sem?.cycleId ? 'published' : 'none');
+      const cycleId = sem?.cycleId ?? null;
+      const isOlderSemester = Boolean(maxCycleId > 0 && cycleId && cycleId < maxCycleId);
+
+      return {
+        ...row,
+        total,
+        rate: total > 0 ? row.completed / total : null,
+        period,
+        status,
+        cycleId,
+        isOlderSemester,
+      };
     })
     .sort((a, b) => {
       const diff = (a.rate ?? -1) - (b.rate ?? -1);
@@ -210,14 +213,6 @@ export const DeptCompletionCell = ({ row }: { row: DeptCompletionRow }) => {
   );
 };
 
-/**
- * Label for the rating period, not a filter. The gap view exposes no
- * `rating_period`, so this page averages every period it can read; claiming a
- * single semester would misdescribe the number. Shared with the L&D summary and
- * the PM overview so the three agree.
- */
-export const RATED_PERIOD_LABEL = 'All rated periods';
-
 const NEEDS_IMPROVEMENT_THRESHOLD = 3;
 
 const fmtDate = (d: Date) =>
@@ -232,6 +227,7 @@ const fmtDate = (d: Date) =>
 export const SummaryOfRatings = () => {
   const [records, setRecords] = useState<IPCRRatingRecord[]>([]);
   const [headcount, setHeadcount] = useState<Map<string, { name: string; count: number }>>(new Map());
+  const [deptSemesters, setDeptSemesters] = useState<Map<string, DepartmentSourceSemester>>(new Map());
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
@@ -248,11 +244,8 @@ export const SummaryOfRatings = () => {
     const loadId = ++latestLoadId.current;
     if (!isSilent) setLoading(true);
     try {
-      // Headcount is the completion denominator; if it fails, fall back to the
-      // rated employees alone rather than blanking the whole page.
-      // The active-office list only filters; if it fails, show everything.
-      const [data, roster, activeOffices] = await Promise.all([
-        getIPCRRecordsFromGapView(RATED_PERIOD_LABEL),
+      // 1. Fetch headcount and active offices list
+      const [roster, activeOffices] = await Promise.all([
         getActiveHeadcountByDepartment().catch(err => {
           console.error('Error loading office headcount:', err);
           return new Map<string, { name: string; count: number }>();
@@ -262,10 +255,75 @@ export const SummaryOfRatings = () => {
           return null;
         }),
       ]);
+
+      // Collect active department names to inspect
+      const deptNames: string[] = activeOffices
+        ? Array.from(activeOffices.values())
+        : Array.from(roster.values()).map(v => v.name);
+
+      // 2. Fetch each department's published semester source via getDepartmentSourceSemester
+      const semesterResults = await Promise.all(
+        deptNames.map(async dept => {
+          try {
+            const sem = await getDepartmentSourceSemester(dept);
+            if (!sem) {
+              return {
+                department: dept,
+                cycleId: null,
+                periodTitle: null,
+                status: 'none' as const,
+                requiredCount: 0,
+                approvedCount: 0,
+                assessmentCompleteCount: 0,
+              };
+            }
+            return {
+              department: dept,
+              cycleId: sem.cycleId,
+              periodTitle: sem.cycleTitle ?? sem.periodTitle ?? null,
+              status: sem.status,
+              requiredCount: sem.requiredCount,
+              approvedCount: sem.approvedCount,
+              assessmentCompleteCount: sem.assessmentCompleteCount,
+            };
+          } catch (err) {
+            console.error(`Error fetching semester for ${dept}:`, err);
+            return {
+              department: dept,
+              cycleId: null,
+              periodTitle: null,
+              status: 'none' as const,
+              requiredCount: 0,
+              approvedCount: 0,
+              assessmentCompleteCount: 0,
+            };
+          }
+        }),
+      );
+
+      const semesterMap = new Map<string, DepartmentSourceSemester>();
+      semesterResults.forEach(res => {
+        semesterMap.set(normDeptKey(res.department), res);
+      });
+
+      // 3. For departments with a published cycle, fetch published records
+      const publishedRecordsNested = await Promise.all(
+        semesterResults
+          .filter(res => res.cycleId != null && res.status !== 'none')
+          .map(res =>
+            getPublishedRecords(res.department, res.cycleId!).catch(err => {
+              console.error(`Error loading published records for ${res.department}:`, err);
+              return [];
+            }),
+          ),
+      );
+      const allRecords = publishedRecordsNested.flat();
+
       if (loadId !== latestLoadId.current) return;
-      const scoped = restrictToActiveOffices(data, roster, activeOffices);
+      const scoped = restrictToActiveOffices(allRecords, roster, activeOffices);
       setRecords(scoped.records);
       setHeadcount(scoped.headcount);
+      setDeptSemesters(semesterMap);
       setLastSynced(new Date());
     } catch (err) {
       console.error('Error loading IPCR records:', err);
@@ -282,7 +340,13 @@ export const SummaryOfRatings = () => {
 
   useRealtimeRefresh({
     channel: 'pm-summary-of-ratings-mirrored',
-    tables: ['success_indicator_ratings', 'ipcr_competency_matches'],
+    tables: [
+      'success_indicator_ratings',
+      'ipcr_competency_matches',
+      'ipcr_department_publication',
+      'competency_assessment_runs',
+      'performance_evaluations',
+    ],
     onChange: useCallback(() => {
       void fetchRecords(true);
     }, [fetchRecords]),
@@ -291,11 +355,17 @@ export const SummaryOfRatings = () => {
   // Department landing rows — IPCR completion (rated / Active headcount) and
   // low-performer counts.
   const deptRows = useMemo(
-    () => buildDeptCompletionRows(records, headcount, deptSortAsc),
-    [records, headcount, deptSortAsc],
+    () => buildDeptCompletionRows(records, headcount, deptSortAsc, deptSemesters),
+    [records, headcount, deptSortAsc, deptSemesters],
   );
   const totalEmployees = deptRows.reduce((sum, d) => sum + d.total, 0);
   const totalCompleted = deptRows.reduce((sum, d) => sum + d.completed, 0);
+
+  // Active department semester publication info
+  const activeDeptSemester = useMemo(() => {
+    if (!activeDept) return null;
+    return deptSemesters.get(normDeptKey(activeDept)) ?? null;
+  }, [activeDept, deptSemesters]);
 
   // Employees within the drilled-in department, searched + sorted by rating.
   const filteredSorted = useMemo(() => {
@@ -339,8 +409,20 @@ export const SummaryOfRatings = () => {
             <p className="mt-1 text-sm text-gray-500">
               {activeDept === null
                 ? 'IPCR performance ratings by department — read-only identification surface'
-                : `Employee ratings · sorted lowest-first · ${RATED_PERIOD_LABEL}`}
+                : activeDeptSemester?.periodTitle
+                  ? `Employee ratings · sorted lowest-first · Period: ${activeDeptSemester.periodTitle}`
+                  : 'Employee ratings · sorted lowest-first · No completed semester'}
             </p>
+            {activeDept !== null && activeDeptSemester?.status === 'correction_pending' && (
+              <div
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
+                role="alert"
+                data-testid="correction-pending-alert"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>Correction pending: one or more records reopened</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {lastSynced && (
@@ -411,10 +493,27 @@ export const SummaryOfRatings = () => {
                   className="grid w-full grid-cols-12 items-center px-5 py-4 text-left transition hover:bg-blue-50/40"
                 >
                   <div className="col-span-5 flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                       <Building2 className="h-4 w-4" />
                     </span>
-                    <span className="text-sm font-semibold text-gray-900">{d.department}</span>
+                    <div className="min-w-0">
+                      <span className="block text-sm font-semibold text-gray-900 truncate">{d.department}</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <span className={`text-xs ${d.period ? 'text-gray-500' : 'text-amber-600 font-medium'}`}>
+                          {d.period || 'No completed semester'}
+                        </span>
+                        {d.status === 'correction_pending' && (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                            Correction pending
+                          </span>
+                        )}
+                        {d.isOlderSemester && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                            Previous cycle
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="col-span-2 text-center text-sm text-gray-600">{d.total}</div>
                   <div className="col-span-2 flex justify-center">
@@ -496,8 +595,12 @@ export const SummaryOfRatings = () => {
         {filteredSorted.length === 0 && !loading ? (
           <div className="py-12">
             <EmptyState
-              title="No employees found"
-              description="No IPCR records match the current search."
+              title={activeDeptSemester?.cycleId ? 'No employees found' : 'No completed semester'}
+              description={
+                activeDeptSemester?.cycleId
+                  ? 'No IPCR records match the current search.'
+                  : 'This department does not have a fully approved completed semester published yet.'
+              }
             />
           </div>
         ) : (

@@ -17,7 +17,7 @@ import type { JobPosting } from '../types/recruitment.types';
 import { plantillaLabel, plantillaNumberOf } from '../lib/plantillaRules';
 import { vacancySalaryLabel } from '../lib/vacancySalary';
 import { useSalarySchedule } from '../hooks/useSalarySchedule';
-import { vacantPlantillaSlots } from '../lib/vacancySearch';
+import { isAdvertised, vacantPlantillaSlots } from '../lib/vacancySearch';
 import { TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 
 /* ── trish UI theme tokens ──────────────────────────────────────────
@@ -47,16 +47,6 @@ type VacancyRow = {
   originalJob: JobPosting;
 };
 
-// A posting is open to the public when RSP left it Active and its closing date
-// (if it has one) is today or later. The deadline is a date, so "today" counts.
-const isOpenToday = (job: JobPosting, today: string): boolean => {
-  if (job.status !== 'Active') return false;
-  const deadline = job.applicationDeadline ? String(job.applicationDeadline).slice(0, 10) : '';
-  return !deadline || deadline >= today;
-};
-
-const localIsoDate = (date: Date): string =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 
 
@@ -92,9 +82,11 @@ export const LandingPage = () => {
           return;
         }
 
-        const today = localIsoDate(new Date());
+        // isAdvertised is the predicate Job Vacancies uses too: open vacancy,
+        // and a plantilla left to fill. It reads the deadline against the
+        // Manila date, as the database does, rather than the visitor's own.
         const rows = getAuthoritativeJobPostings()
-          .filter((job) => isOpenToday(job, today))
+          .filter((job) => isAdvertised(job))
           // Only vacant, open plantillas: a filled one is held by an employee
           // and a closed one isn't taking applications, so neither gets a row.
           // One row per plantilla, even when several share a position title.

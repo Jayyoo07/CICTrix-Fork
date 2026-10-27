@@ -1,7 +1,8 @@
 # backend/app/routes/competency_assessment.py
 import json
 import math
-from fastapi import APIRouter, HTTPException, status
+from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException, Header, Query, status
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
@@ -30,6 +31,14 @@ class CompetencyAssessmentRequest(BaseModel):
     employee_id: str = Field(..., min_length=1)
     cycle_id: Optional[int] = None
 
+class QueueDrainResponse(BaseModel):
+    ok: bool
+    total: int
+    succeeded: int
+    failed: int
+    retried_count: int
+    results: List[Dict[str, Any]]
+
 # Text mapping to integer scores for position competency requirements
 MAP_TEXT_TO_INT = {
     'Basic': 3,
@@ -46,6 +55,135 @@ def competency_from_objectives(objectives: List[str]) -> Optional[str]:
                 return name
     return None
 
+async def match_employee_targets(
+    employee_id: str,
+    cycle_id: Optional[int] = None,
+    client: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Standalone matcher stage (Step 4).
+    Maps an employee's approved IPCR targets to canonical competencies using Gemini
+    and persists them to `ipcr_competency_matches`.
+    If matches already exist for this employee and cycle, returns existing matches.
+    """
+    if client is None:
+        client = db.get_service_client()
+
+    # 1. Check if matches already exist for this cycle
+    if cycle_id is not None:
+        matches_query = client.table("ipcr_competency_matches").select(
+            "competency, confidence, target_text, success_indicator_id"
+        ).eq("employee_id", employee_id).eq("rating_period", str(cycle_id))
+        matches_res = matches_query.execute()
+        if matches_res.data:
+            return matches_res.data
+
+    # 2. Fetch employee details
+    emp_res = client.table("employees_with_department").select(
+        "id, full_name, current_position, department"
+    ).eq("id", employee_id).execute()
+
+    if not emp_res.data:
+        emp_res = client.table("employees").select("id, first_name, last_name, position").eq("id", employee_id).execute()
+        if not emp_res.data:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        employee = emp_res.data[0]
+        position_title = employee.get("position") or "Unassigned"
+    else:
+        employee = emp_res.data[0]
+        position_title = employee.get("current_position") or "Unassigned"
+
+    # 3. Fetch target settings
+    ts_query = client.table("target_settings").select("id, employee_id, cycle_id")
+    if cycle_id is not None:
+        ts_query = ts_query.eq("employee_id", employee_id).eq("cycle_id", cycle_id)
+    else:
+        ts_query = ts_query.eq("employee_id", employee_id).order("created_at", desc=True).limit(1)
+
+    ts_res = ts_query.execute()
+    if not ts_res.data:
+        raise HTTPException(status_code=404, detail="No IPCR targets found for this employee")
+    target_setting = ts_res.data[0]
+    ts_id = target_setting["id"]
+    resolved_cycle_id = target_setting["cycle_id"]
+
+    # If cycle_id was None, check again with resolved_cycle_id
+    if cycle_id is None and resolved_cycle_id is not None:
+        matches_query = client.table("ipcr_competency_matches").select(
+            "competency, confidence, target_text, success_indicator_id"
+        ).eq("employee_id", employee_id).eq("rating_period", str(resolved_cycle_id))
+        matches_res = matches_query.execute()
+        if matches_res.data:
+            return matches_res.data
+
+    # 4. Fetch MFOs and Success Indicators
+    mfos_res = client.table("mfos").select("id, title").eq("target_setting_id", ts_id).execute()
+    mfo_ids = [m["id"] for m in (mfos_res.data or [])]
+    if not mfo_ids:
+        raise HTTPException(status_code=404, detail="No targets configured in this IPCR cycle")
+
+    sis_res = client.table("success_indicators").select("id, mfo_id, description").in_("mfo_id", mfo_ids).execute()
+    si_ids = [si["id"] for si in (sis_res.data or [])]
+    if not si_ids:
+        raise HTTPException(status_code=404, detail="No success indicators configured in this IPCR")
+
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Competency matching is required but GEMINI_API_KEY is unset.",
+        )
+
+    # Build composite target texts
+    mfo_by_id = {m["id"]: m for m in mfos_res.data}
+    targets_list = []
+    si_mapping = {}  # composite text -> success_indicator_id
+
+    for si in sis_res.data:
+        mfo = mfo_by_id.get(si["mfo_id"])
+        mfo_title = mfo["title"] if mfo else "Untitled MFO"
+        composite_text = f"{mfo_title} — {si['description'] or 'No indicator description'}"
+        targets_list.append(composite_text)
+        si_mapping[composite_text] = si["id"]
+
+    cleaned_targets = _clean_targets(targets_list)
+    if not cleaned_targets:
+        return []
+
+    try:
+        response = gemini_generate_content(
+            api_key=settings.GEMINI_API_KEY,
+            model=settings.GEMINI_MODEL,
+            system_instruction=MATCHER_SYSTEM_PROMPT,
+            user_message=build_matcher_user_message(position_title, None, cleaned_targets),
+            response_schema=MATCHER_OUTPUT_SCHEMA,
+            temperature=0.2,
+        )
+        parsed = _extract_json(response)
+
+        class MockReq:
+            def __init__(self, emp_id, pos, cycle):
+                self.employee_id = emp_id
+                self.job_position = pos
+                self.rating_period = str(cycle) if cycle else None
+                self.created_by = "AI Assessor"
+
+        mock_req = MockReq(employee_id, position_title, resolved_cycle_id)
+        rows = _rows_from_result(mock_req, settings.GEMINI_MODEL, parsed)
+
+        # Attach success_indicator_id robustly
+        for row in rows:
+            txt = row.get("target_text")
+            if txt in si_mapping:
+                row["success_indicator_id"] = si_mapping[txt]
+
+        # Write to database
+        insert_res = client.table("ipcr_competency_matches").insert(rows).execute()
+        return insert_res.data or []
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI matching backfill failed: {e}")
+
 @router.post("/assess")
 async def assess_employee_competencies(req: CompetencyAssessmentRequest):
     client = db.get_service_client()
@@ -53,10 +191,19 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
     # ── 1. Fetch employee details ─────────────────────────────────────────────
     emp_res = client.table("employees_with_department").select("id, full_name, current_position, department").eq("id", req.employee_id).execute()
     if not emp_res.data:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    employee = emp_res.data[0]
-    position_title = employee.get("current_position") or "Unassigned"
-    department = employee.get("department") or "Unassigned"
+        emp_res = client.table("employees").select("id, first_name, last_name, position").eq("id", req.employee_id).execute()
+        if not emp_res.data:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        employee = emp_res.data[0]
+        first = employee.get("first_name") or ""
+        last = employee.get("last_name") or ""
+        employee["full_name"] = f"{first} {last}".strip() or "Unknown"
+        position_title = employee.get("position") or "Unassigned"
+        department = "Unassigned"
+    else:
+        employee = emp_res.data[0]
+        position_title = employee.get("current_position") or "Unassigned"
+        department = employee.get("department") or "Unassigned"
 
     # ── 2. Fetch target settings ──────────────────────────────────────────────
     ts_query = client.table("target_settings").select("id, employee_id, cycle_id")
@@ -106,65 +253,12 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
     
     matches = matches_res.data or []
     
-    # If no matches exist, run the Claude-matching engine first to backfill
+    # If no matches exist, call match_employee_targets standalone function (Step 4)
     if not matches:
-        if not settings.GEMINI_API_KEY:
-            raise HTTPException(
-                status_code=503,
-                detail="Competency matching is required but GEMINI_API_KEY is unset.",
-            )
-        # Build composite target texts
-        mfo_by_id = {m["id"]: m for m in mfos_res.data}
-        targets_list = []
-        si_mapping = {} # composite text -> success_indicator_id
-        
-        for si in sis_res.data:
-            mfo = mfo_by_id.get(si["mfo_id"])
-            mfo_title = mfo["title"] if mfo else "Untitled MFO"
-            composite_text = f"{mfo_title} — {si['description'] or 'No indicator description'}"
-            targets_list.append(composite_text)
-            si_mapping[composite_text] = si["id"]
-            
-        cleaned_targets = _clean_targets(targets_list)
-        if cleaned_targets:
-            try:
-                response = gemini_generate_content(
-                    api_key=settings.GEMINI_API_KEY,
-                    model=settings.GEMINI_MODEL,
-                    system_instruction=MATCHER_SYSTEM_PROMPT,
-                    user_message=build_matcher_user_message(position_title, None, cleaned_targets),
-                    response_schema=MATCHER_OUTPUT_SCHEMA,
-                    temperature=0.2,
-                )
-                parsed = _extract_json(response)
-                
-                # Format into database rows
-                # Prepare mock request structure for _rows_from_result compatibility
-                class MockReq:
-                    def __init__(self, emp_id, pos, cycle):
-                        self.employee_id = emp_id
-                        self.job_position = pos
-                        self.rating_period = str(cycle) if cycle else None
-                        self.created_by = "AI Assessor"
-                
-                mock_req = MockReq(req.employee_id, position_title, cycle_id)
-                rows = _rows_from_result(mock_req, settings.GEMINI_MODEL, parsed)
-                
-                # Attach success_indicator_id robustly
-                for row in rows:
-                    txt = row.get("target_text")
-                    if txt in si_mapping:
-                        row["success_indicator_id"] = si_mapping[txt]
-                
-                # Write to database
-                insert_res = client.table("ipcr_competency_matches").insert(rows).execute()
-                matches = insert_res.data or []
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"AI matching backfill failed: {e}")
+        matches = await match_employee_targets(req.employee_id, cycle_id, client=client)
 
     # Map success indicators and ratings by normalized text/id for join
     mfo_by_id = {m["id"]: m for m in mfos_res.data}
-    si_by_id = {si["id"]: si for si in sis_res.data}
     si_to_composite = {}
     for si in sis_res.data:
         mfo = mfo_by_id.get(si["mfo_id"])
@@ -264,11 +358,9 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
             required_text_levels[comp] = "No requirement configured"
 
     # ── 7. Fetch active training sessions scheduled for next calendar month ──
-    from datetime import datetime, timedelta
     today = datetime.now()
     next_month_start = datetime(today.year, today.month, 1) + timedelta(days=32)
     next_month_start = datetime(next_month_start.year, next_month_start.month, 1)
-    # Next month end
     next_month_end = datetime(next_month_start.year, next_month_start.month, 1) + timedelta(days=32)
     next_month_end = datetime(next_month_end.year, next_month_end.month, 1)
     
@@ -381,8 +473,6 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
     normalized_comp_map = {normalize_comp_name(name): uuid for name, uuid in comp_map.items()}
 
     # Check and insert any missing competencies in `competencies` table
-    # Competencies list is 12 standards
-    # We map using standards info
     standards_res = client.table("competency_standards").select("*").execute()
     standards_list = standards_res.data or []
     
@@ -390,7 +480,6 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
         name = std["competency_name"]
         norm_name = normalize_comp_name(name)
         if norm_name not in normalized_comp_map:
-            # Create a new competency catalog row
             new_comp = {
                 "name": name,
                 "category": std["training_stream"],
@@ -402,31 +491,25 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
                 normalized_comp_map[norm_name] = comp_uuid
                 comp_map[name] = comp_uuid
 
-    # Now we insert/upsert employee competency levels
+    # Insert/upsert employee competency levels per cycle
     for idx, comp in enumerate(COMPETENCIES, start=1):
         score_info = calculated_scores[comp]
         possessed_val = score_info["possessed"]
         required_val = required_levels[comp]
         
         if possessed_val is None and required_val is None:
-            # Neither demonstrated in IPCR nor required for the position —
-            # nothing to record
+            # Neither demonstrated in IPCR nor required for the position
             continue
 
         norm_name = normalize_comp_name(comp)
         comp_uuid = normalized_comp_map.get(norm_name)
         if not comp_uuid:
-            # Defensive check
             continue
 
-        # Convert possessed rating average (1.0 - 5.0) to integer (1 - 5).
-        # NULL proficiency = required for the position but never demonstrated
-        # in IPCR targets — the UI surfaces that as a Gap.
         proficiency_level = (
             max(1, min(5, round(possessed_val))) if possessed_val is not None else None
         )
         
-        # Save to employee_competencies
         emp_comp_row = {
             "employee_id": req.employee_id,
             "competency_id": comp_uuid,
@@ -436,8 +519,7 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
             "cycle_id": cycle_id
         }
         
-        # Upsert per cycle: the same competency is assessed once per semester, and
-        # the unique key includes cycle_id so history is never overwritten.
+        # Upsert per cycle: unique key is (employee_id, competency_id, cycle_id)
         client.table("employee_competencies").upsert(
             [emp_comp_row],
             on_conflict="employee_id,competency_id,cycle_id"
@@ -470,8 +552,6 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
         gap = 0.0
         status_str = "Met"
         if required is not None:
-            # A required competency never demonstrated in IPCR counts as a
-            # full gap (possessed treated as 0), matching what is persisted.
             gap_val = required - (possessed if possessed is not None else 0)
             if gap_val > 0:
                 gap = round(gap_val, 2)
@@ -505,4 +585,34 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
         "recommendations": qual_res.get("recommendations"),
         "prompt_version": PROMPT_VERSION,
         "model": settings.GEMINI_MODEL
+    }
+
+@router.post("/queue/drain", response_model=QueueDrainResponse)
+async def drain_competency_queue_endpoint(
+    x_queue_secret: Optional[str] = Header(None, alias="X-Queue-Secret"),
+    limit: int = Query(default=10, ge=1, le=50),
+    retry_failed: bool = Query(default=False),
+):
+    """
+    Operator / Cron drain endpoint (Step 6).
+    Guarded by shared secret header `X-Queue-Secret`.
+    Processes up to `limit` pending jobs from `competency_assessment_runs`.
+    """
+    expected_secret = settings.QUEUE_DRAIN_SECRET or "cictrix-queue-drain-secret"
+    if not x_queue_secret or x_queue_secret != expected_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-Queue-Secret header.",
+        )
+
+    from run_competency_queue import drain_queue
+    client = db.get_service_client()
+    summary = await drain_queue(client, limit=limit, retry_failed=retry_failed)
+    return {
+        "ok": True,
+        "total": summary.get("total", 0),
+        "succeeded": summary.get("succeeded", 0),
+        "failed": summary.get("failed", 0),
+        "retried_count": summary.get("retried_count", 0),
+        "results": summary.get("results", []),
     }

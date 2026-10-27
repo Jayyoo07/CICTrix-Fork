@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  comparePositionRows, daysUntilDeadline, dashboardPostingStatus, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
+  comparePositionRows, daysUntilDeadline, dashboardPostingStatus, hasOpenPlantilla, isAdvertised, isOpenVacancy, manilaToday, positionStatus, searchPositions, vacancyEligibility, vacancyStatus, vacantPlantillaSlots,
 } from './vacancySearch';
 import type { JobPosting } from '../types/recruitment.types';
 
@@ -47,6 +47,38 @@ describe('vacantPlantillaSlots', () => {
   it('leaves filled plantillas out (public vacancy table)', () => {
     const withSlots = { ...job('A', 'Active'), plantillaSlots: (['open', 'filled', 'closed'] as const).map((status, i) => ({ id: `s${i}`, jobPostingId: 'A', slotNumber: i + 1, itemNumber: `PLT-${i}`, status })) } as JobPosting;
     expect(vacantPlantillaSlots(withSlots).map((s) => s.status)).toEqual(['open', 'closed']);
+  });
+});
+
+describe('hasOpenPlantilla / isAdvertised', () => {
+  const withSlots = (statuses: ('open' | 'filled' | 'closed')[]): JobPosting =>
+    ({
+      ...job('A', 'Active', '2026-11-15'),
+      plantillaSlots: statuses.map((status, i) => ({ id: `s${i}`, jobPostingId: 'A', slotNumber: i + 1, itemNumber: `PLT-${i}`, status })),
+    } as JobPosting);
+
+  it('needs one plantilla still taking applications', () => {
+    expect(hasOpenPlantilla(withSlots(['open', 'filled']))).toBe(true);
+    expect(hasOpenPlantilla(withSlots(['filled']))).toBe(false);
+    expect(hasOpenPlantilla(withSlots(['closed']))).toBe(false);
+  });
+
+  it('treats a position with no slot rows as open, not as filled', () => {
+    // Pre-migration, or a posting whose slots were never written. Reading an
+    // empty list as "nothing left" would blank the public table.
+    expect(hasOpenPlantilla({ ...job('A', 'Active') } as JobPosting)).toBe(true);
+  });
+
+  it('is the public listing test: open vacancy AND somewhere to apply', () => {
+    expect(isAdvertised(withSlots(['open']), today)).toBe(true);
+    expect(isAdvertised(withSlots(['filled']), today)).toBe(false);
+    expect(isAdvertised({ ...withSlots(['open']), status: 'Closed' } as JobPosting, today)).toBe(false);
+  });
+
+  it('reports a fully filled vacancy as such instead of Open', () => {
+    // The 2026-10-27 report: reopened, deadline tomorrow, only plantilla filled.
+    expect(vacancyStatus(withSlots(['filled']), today)).toEqual({ label: 'Fully filled', tone: 'neutral' });
+    expect(vacancyStatus(withSlots(['open']), today)).toEqual({ label: 'Open', tone: 'success' });
   });
 });
 

@@ -15,6 +15,12 @@ const ROWS = [{ id: 'a1', first_name: 'Ana', last_name: 'Cruz', email: 'a@x.ph',
 
 beforeEach(() => {
   localStorage.clear();
+  // For Hiring lists only applicants carrying both scores
+  // (docs/plans/2026-10-28-for-hiring-scored-only.md). This test is about
+  // the Back buttons, so Ana needs scores to reach the plantilla view.
+  localStorage.setItem('cictrix_category_scores', JSON.stringify({
+    a1: { writtenExam: { finalScore: 89 }, oralExam: { finalScore: 19.33 } },
+  }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ROWS }));
 });
 

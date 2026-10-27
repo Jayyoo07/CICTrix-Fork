@@ -128,9 +128,37 @@ describe('getSuccessionDashboardOverview', () => {
       table: 'critical_positions',
       filters: [{ column: 'id', values: ['p-eng', 'p-fin', 'p-zero'] }],
     }]);
-    for (const table of ['positions', 'employees', 'employee_training', 'target_settings', 'succession_candidates']) {
+    for (const table of ['positions', 'employees', 'employee_training', 'employee_education', 'target_settings', 'succession_candidates']) {
       expect(queries.filter((q) => q.table === table), table).toHaveLength(1);
     }
+  });
+
+  it('uses PDS education rows, not only the legacy attainment column', async () => {
+    tables.critical_positions.push(
+      position('p-grad', 'd-eng', { required_education: 'Master in Public Administration' }),
+    );
+    tables.employees.push(employee('emp-grad', 'Engineering', {
+      highest_educational_attainment: 'BS in Civil Engineering',
+    }));
+
+    // Without PDS rows the legacy column is the only record, and its field does not match.
+    expect(await counts()).toContainEqual(['p-grad', 0]);
+
+    tables.employee_education = [
+      { employee_id: 'emp-grad', level: 'College', course: 'BS in Civil Engineering', year_graduated: 2015 },
+      { employee_id: 'emp-grad', level: 'Graduate Studies', course: 'Master in Public Administration', year_graduated: 2026 },
+    ];
+
+    expect(await counts()).toContainEqual(['p-grad', 1]);
+  });
+
+  it('falls back to the legacy attainment column when the education read fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    errors.set('employee_education', 'Read failed');
+
+    expect(await counts()).toContainEqual(['p-eng', 1]);
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
   });
 
   it('keeps manual candidates outside the active pool in the right position', async () => {

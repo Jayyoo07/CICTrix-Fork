@@ -36,9 +36,16 @@ import {
   experienceScore,
   normalizeWeights,
   poolExclusionReason,
+  educationRank,
   type ExperiencePart,
   type RankingWeights,
 } from './successionCriteria';
+import {
+  educationLabel,
+  educationSearchTexts,
+  highestEducation,
+  type EducationRow,
+} from './educationAttainment';
 
 // Re-exported: ReadinessScore carries these, so a consumer of this module
 // should not have to import from the criteria module to describe one.
@@ -1510,16 +1517,18 @@ function educationFields(text: string): string[] {
 
 /**
  * Education gate as a COURSE/FIELD match (2026-07-26 spec §2.1), not a generic
- * attainment ladder: passes when the position names no specific field, or the
- * employee's degree/field shares a field token with the required field(s). So a
- * Master's in an unrelated field does not auto-pass, and a Bachelor's in the
- * exact required field can.
+ * attainment ladder: passes when the position names no specific field, or any
+ * degree on file shares a field token with the required field(s). Every row is
+ * offered, so a Bachelor's in the required field still passes after an
+ * unrelated Master's is added; the highest degree alone would fail it.
  */
-function educationFieldMatches(empEdu: string | null, requiredEdu: string | null): boolean {
+function educationTextsMatch(empTexts: readonly string[], requiredEdu: string | null): boolean {
   const reqFields = educationFields(requiredEdu ?? '');
   if (reqFields.length === 0) return true; // no specific field required
-  const empFields = new Set(educationFields(empEdu ?? ''));
-  return reqFields.some((f) => empFields.has(f));
+  return empTexts.some((text) => {
+    const empFields = new Set(educationFields(text));
+    return reqFields.some((f) => empFields.has(f));
+  });
 }
 
 /**
@@ -1872,6 +1881,14 @@ export interface AutoSuccessorContext {
   /** The active pool plus manually-added candidates from outside it. */
   employeeById: Map<string, any>;
   eligibilityByEmployee: Map<string, EligibilityRecord[]>;
+  /**
+   * Employee id → every PDS education row on file.
+   *
+   * `employees.highest_educational_attainment` is a copy the PDS editor never
+   * writes, so it is a fallback, not the source. A failed read leaves this map
+   * empty and the evaluator falls back to the column per employee.
+   */
+  educationByEmployee: Map<string, EducationRow[]>;
   eligibilityTypes: EligibilityTypePoints[];
   pointsForFullMarks: number;
   scores: Map<string, EmployeeScore>;
@@ -2009,8 +2026,10 @@ async function loadAutoSuccessorContext(
   // returns the same score for each employee and removes the repeated
   // target_settings / mfos / performance_cycles reads.
   //
-  // Training history is the third independent read.
-  const [eligibilityScoring, scores, trainingRes] = await Promise.all([
+  // Training history and PDS education rows are the third and fourth
+  // independent reads. Education is read from the detail table because the
+  // PDS editor never writes employees.highest_educational_attainment.
+  const [eligibilityScoring, scores, trainingRes, educationRes] = await Promise.all([
     loadEligibilityScoring(allEmployeeIds),
     getLatestOverallScores(allEmployeeIds),
     allEmployeeIds.length
@@ -2019,6 +2038,15 @@ async function loadAutoSuccessorContext(
           .select('id, employee_id, training_title, training_type, number_of_hours, from_date')
           .in('employee_id', allEmployeeIds)
       : Promise.resolve({ data: [] as any[] }),
+    allEmployeeIds.length
+      ? supabase
+          .from('employee_education')
+          .select('employee_id, level, course, year_graduated')
+          .in('employee_id', allEmployeeIds)
+          // The PDS writes sort_order in form order. Ordering by it keeps the
+          // helper's "first row wins a tie" deterministic across loads.
+          .order('sort_order')
+      : Promise.resolve({ data: [] as any[], error: null }),
   ]);
   const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } = eligibilityScoring;
 
@@ -2029,6 +2057,24 @@ async function loadAutoSuccessorContext(
     const list = trainingByEmployee.get(id) ?? [];
     list.push(t);
     trainingByEmployee.set(id, list);
+  }
+
+  // A read failure must not fail every education gate: the map stays empty and
+  // the evaluator falls back to the legacy column, which is what it read before.
+  if ((educationRes as any)?.error) {
+    console.error('[succession] education read failed:', (educationRes as any).error.message);
+  }
+  const educationByEmployee = new Map<string, EducationRow[]>();
+  for (const r of ((educationRes as any)?.data ?? []) as any[]) {
+    const id = String(r.employee_id ?? '');
+    if (!id) continue;
+    const list = educationByEmployee.get(id) ?? [];
+    list.push({
+      level: r.level ?? null,
+      course: r.course ?? null,
+      year_graduated: r.year_graduated != null ? Number(r.year_graduated) : null,
+    });
+    educationByEmployee.set(id, list);
   }
 
   // ── Real competency tags from employee_training_competencies ──────────
@@ -2076,6 +2122,7 @@ async function loadAutoSuccessorContext(
     employees: empRows,
     employeeById,
     eligibilityByEmployee,
+    educationByEmployee,
     eligibilityTypes,
     pointsForFullMarks,
     scores,
@@ -2143,6 +2190,39 @@ export function evaluateAutoSuccessors(
     if (cat === 'Leadership' || isRelevantTraining(t.training_title)) agg.fit += 1;
   };
 
+  const educationRowsFor = (empId: string): EducationRow[] =>
+    ctx.educationByEmployee.get(empId) ?? [];
+  /** Whether a PDS row names a course — i.e. states the field of study. */
+  const namesCourse = (row: EducationRow): boolean =>
+    String(row.course ?? '').trim().length > 0;
+
+  /**
+   * The attainment text this employee is scored on. The PDS is authoritative
+   * because its editor never writes `employees.highest_educational_attainment`,
+   * which is kept as a fallback.
+   *
+   * A row with a level but no course cannot name a degree — the PDS editor
+   * requires School and leaves Degree optional — so the highest row only wins
+   * when it names a course. Below that, both remaining texts are evidence
+   * already on file and the higher attainment wins: the legacy column is the
+   * standing held before the PDS existed, and it can be stale in either
+   * direction, so taking the higher one means a blank Degree field cannot
+   * demote the employee whichever way the column drifted. A level label is the
+   * last resort, and it is why "Graduate Studies" alone never scores a degree.
+   */
+  const educationFor = (emp: any, empId: string): string | null => {
+    const rows = educationRowsFor(empId);
+    const legacy = String(emp?.highest_educational_attainment ?? '').trim();
+    const highest = highestEducation(rows);
+    if (highest && namesCourse(highest)) return educationLabel(highest);
+    const named = highestEducation(rows.filter(namesCourse));
+    const namedLabel = named ? educationLabel(named) : '';
+    if (legacy && namedLabel) {
+      return educationRank(namedLabel) >= educationRank(legacy) ? namedLabel : legacy;
+    }
+    return legacy || namedLabel || (highest ? educationLabel(highest) : '') || null;
+  };
+
   // Gate 1+2: Status + position-field keyword match (pre-filter)
   const positioned = ctx.employees
     .filter((e) => String(e.employment_status ?? '').toLowerCase() !== 'probationary')
@@ -2204,12 +2284,21 @@ export function evaluateAutoSuccessors(
     const failedGates: string[] = [];
 
     // Gate 3: Education — course/field match (not a generic attainment ladder).
+    // Every PDS row is offered, so adding an unrelated master's cannot cost a
+    // candidate the match their bachelor's already made.
+    const empEducation = educationFor(e, empId);
     if (requiredEducation) {
-      const empEdu = e.highest_educational_attainment ?? null;
-      if (!empEdu) {
+      const empRows = educationRowsFor(empId);
+      const educationTexts = educationSearchTexts(empRows);
+      // Rows that name no course still contribute a level label, but if no row
+      // names the field, the legacy column is the only field evidence on file.
+      if (!empRows.some(namesCourse) && empEducation && !educationTexts.includes(empEducation)) {
+        educationTexts.push(empEducation);
+      }
+      if (!educationTexts.length) {
         failedGates.push(`No education record on file — requires ${requiredEducation}`);
-      } else if (!educationFieldMatches(empEdu, requiredEducation)) {
-        failedGates.push(`Course mismatch — position requires ${requiredEducation}, candidate holds ${empEdu}`);
+      } else if (!educationTextsMatch(educationTexts, requiredEducation)) {
+        failedGates.push(`Course mismatch — position requires ${requiredEducation}, candidate holds ${empEducation ?? educationTexts[0]}`);
       }
     }
 
@@ -2300,7 +2389,7 @@ export function evaluateAutoSuccessors(
       adjectival: score?.adjectival ?? null,
       ratedPeriod: score?.period ?? null,
       matchedKeyword: keyword,
-      empEducation: e.highest_educational_attainment ?? null,
+      empEducation,
       requiredEducation,
       empEligibility: e.eligibility ?? null,
       eligibilityRecords: empEligRecords,
@@ -2384,7 +2473,7 @@ export function evaluateAutoSuccessors(
       adjectival: mcScore?.adjectival ?? null,
       ratedPeriod: mcScore?.period ?? null,
       matchedKeyword: sharedFieldKeyword(String(mcEmp?.position ?? ''), positionTitle),
-      empEducation: mcEmp?.highest_educational_attainment ?? null,
+      empEducation: educationFor(mcEmp, mcId),
       requiredEducation,
       empEligibility: mcEmp?.eligibility ?? null,
       eligibilityRecords: mcEligibilityRecords,

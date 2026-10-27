@@ -4,7 +4,7 @@ Verified 2026-10-26 against the repo and the production schema. Every claim belo
 
 ## Why this file exists
 
-An IPCR is stored in eleven places. Screens each read a different subset, and two of the stores have no writer in the running app at all. That is how the Summary of Ratings came to show 0 of 130 while 272 approved IPCRs existed.
+An IPCR is stored in twelve places. Screens each read a different subset, and two of the stores have no writer in the running app at all. That is how the Summary of Ratings came to show 0 of 130 while 272 approved IPCRs existed.
 
 ## The stores
 
@@ -19,8 +19,9 @@ An IPCR is stored in eleven places. Screens each read a different subset, and tw
 | `ipcr_workspace` | employee workspace save; roll-up updates only, never inserts | employee portal, PDF | no rows for seeded staff |
 | `performance_evaluations` | **nothing live** | PM dashboard, PM reports, 2.4, succession transfer, analytics | empty |
 | `ipcr_performance` | **nothing live** | SoR landing via view, archive, gap view, 2.4 rows | empty |
-| `employee_competencies` | FastAPI assessor only | semester card, framework, gap analysis | empty |
+| `employee_competencies` | FastAPI assessor only | semester card, framework, gap analysis | cycle-scoped unique key |
 | `ipcr_competency_matches` | FastAPI matcher only | L&D needs, recommendations, trace | empty |
+| `competency_assessment_runs` | Phase 1/2 triggers, `run_competency_batch.py` | Queue runner, SoR pending state | durable queue |
 
 ## What a finished IPCR is meant to leave
 
@@ -33,8 +34,62 @@ Derived from the write paths, not from intent.
 5. `ipcr_workspace` — category averages and overall rolled up, if a row already exists ([ipcrRatings.ts:505-533](src/lib/api/ipcrRatings.ts#L505-L533)).
 6. `ipcr_audit_log` — approve and rate actions.
 7. `performance_evaluations` — never written by the Phase 1/2 path at all.
+8. `competency_assessment_runs` — background matching & assessment tasks queued upon approval.
 
 The seed migration wrote 1 and 2 (without accomplishments) and none of 3 to 7.
+
+## Competency assessment queue and runner (2026-10-27)
+
+Added under `docs/plans/2026-10-27-sor-previous-semester-competency.md`.
+
+### Queue mechanism
+
+- **Table**: `public.competency_assessment_runs` with unique `(target_setting_id, stage)`.
+- **Stages**:
+  - `matching`: Enqueued via trigger `trg_enqueue_competency_matching` when `target_settings.status` becomes `approved` (Phase 1 approval). Dispatches to `match_employee_targets(employee_id, cycle_id)`.
+  - `assessing`: Enqueued via trigger `trg_enqueue_competency_assessing` when `phase2_approved_at` is set while `status = 'approved'` (Phase 2 approval). Dispatches to `assess_employee_competencies(CompetencyAssessmentRequest(employee_id, cycle_id))`.
+- **Status lifecycle**: `pending` → `running` → `complete` on success, or `failed` on error.
+- **Retries & terminal failures**: On error, `attempts` is incremented and `last_error` is logged. Jobs can be retried up to 3 attempts. Once `attempts >= 3`, the job is marked terminal and permanently remains `failed`.
+- **Cycle-scoped upsert**: `employee_competencies` upserts on `(employee_id, competency_id, cycle_id)` and `employee_competency_summaries` upserts on `(employee_id, cycle_id)`. Re-running does not duplicate rows.
+
+### Operator commands
+
+- Run queue runner for a single batch:
+  ```powershell
+  python backend/run_competency_queue.py --once
+  ```
+- Run queue runner with limit:
+  ```powershell
+  python backend/run_competency_queue.py --once --limit 10
+  ```
+- Inspect queue without executing:
+  ```powershell
+  python backend/run_competency_queue.py --dry-run
+  ```
+- Re-enqueue failed jobs with attempts < 3:
+  ```powershell
+  python backend/run_competency_queue.py --retry-failed
+  ```
+- Batch-enqueue an entire cycle manually:
+  ```powershell
+  python backend/run_competency_batch.py --cycle 6
+  ```
+
+### HTTP drain endpoint
+
+- **Endpoint**: `POST /api/competency-assessment/queue/drain?limit=10&retry_failed=false`
+- **Security**: Guarded by header `X-Queue-Secret`. Must match `settings.QUEUE_DRAIN_SECRET` (configured in `backend/.env`).
+- **Response**:
+  ```json
+  {
+    "ok": true,
+    "total": 1,
+    "succeeded": 1,
+    "failed": 0,
+    "retried_count": 0,
+    "results": [...]
+  }
+  ```
 
 ## Dead code, verified by call-site search
 

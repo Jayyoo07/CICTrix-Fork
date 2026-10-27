@@ -2,6 +2,7 @@ import { useBackClosesView } from '../../../hooks/useHistoryBack';
 import { ArrowUpDown, Building2, ChevronDown, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '../../../hooks/useRealtimeRefresh';
+import { BackButton } from '../../../components/BackButton';
 import { EmptyState } from '../../../components/EmptyState';
 import { getActiveHeadcountByDepartment, getActiveOfficeKeys, getIPCRRecordsFromGapView, normDeptKey } from '../../../lib/api/competencyGapAnalysis';
 import { CompetencyGapPanel } from './CompetencyGapPanel';
@@ -324,6 +325,7 @@ export const SummaryOfRatings = () => {
         </p>
         <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
           <div>
+            {activeDept !== null && <BackButton className="mb-3" onBack={backToDepartments} />}
             <h1 className="text-3xl font-bold text-gray-900">
               {activeDept === null ? 'Summary of Ratings' : activeDept}
             </h1>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { DEPARTMENTS } from '../constants/positions';
 import { getDepartmentOptions, type DepartmentOption } from '../lib/api/departments';
@@ -70,6 +70,10 @@ export const useDepartmentOptions = (enabled = true): DepartmentOption[] => {
   return options;
 };
 
-/** Names only — for screens that render a plain string dropdown. */
-export const useDepartmentNames = (enabled = true): string[] =>
-  useDepartmentOptions(enabled).map((option) => option.value);
+/** Names only — for screens that render a plain string dropdown. Memoized so
+ *  the array is stable between renders: RSPDashboard lists it as an effect
+ *  dependency, and a fresh array each render made that effect loop forever. */
+export const useDepartmentNames = (enabled = true): string[] => {
+  const options = useDepartmentOptions(enabled);
+  return useMemo(() => options.map((option) => option.value), [options]);
+};

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackButton } from './BackButton';
 import { ErrorBanner } from './ErrorBanner';
 import { useBackClosesView } from '../hooks/useHistoryBack';
 import {
@@ -165,6 +166,7 @@ export const OfficeDirectorySection: React.FC<OfficeDirectorySectionProps> = () 
       {selectedOfficeRow ? (
         /* Office employee list for selected office */
         <>
+          <BackButton onBack={() => setSelectedOfficeRow(null)} />
           <div>
             <h2 className="!mb-0.5 text-xl font-bold text-slate-900">{selectedOfficeRow.officeName}</h2>
             <p className="!mb-0 text-sm text-slate-500">{officeEmployees.length} employee{officeEmployees.length === 1 ? '' : 's'}</p>

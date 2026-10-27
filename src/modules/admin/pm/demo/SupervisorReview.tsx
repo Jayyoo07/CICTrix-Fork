@@ -11,6 +11,7 @@ import { useBackClosesView } from '../../../../hooks/useHistoryBack';
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { BackButton } from '../../../../components/BackButton';
 import { listAccounts } from './api';
 import {
   listSchedules,
@@ -59,14 +60,17 @@ export function SupervisorReview({ account, readOnly = false }: { account: DemoA
 
   if (active) {
     return (
-      <ReviewEditor
-        pending={active}
-        reviewer={account}
-        onDone={() => {
-          setActive(null);
-          refresh();
-        }}
-      />
+      <div className="space-y-4">
+        <BackButton onBack={() => setActive(null)} />
+        <ReviewEditor
+          pending={active}
+          reviewer={account}
+          onDone={() => {
+            setActive(null);
+            refresh();
+          }}
+        />
+      </div>
     );
   }
 

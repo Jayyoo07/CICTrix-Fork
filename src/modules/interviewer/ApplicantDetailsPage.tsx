@@ -24,6 +24,7 @@ import { describeActionFailure } from '../../lib/friendlyErrors';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useHistoryBack } from '../../hooks/useHistoryBack';
+import { BackButton } from '../../components/BackButton';
 import { EditApplicantDetailsModal } from './EditApplicantDetailsModal';
 import { getPreferredDataSourceMode } from '../../lib/dataSourceMode';
 import { mockDatabase } from '../../lib/mockDatabase';
@@ -2034,6 +2035,7 @@ function ApplicantDetailsPageView() {
         {isRspAdmin && <Sidebar activeModule="RSP" userRole="rsp" />}
         <main className={isRspAdmin ? 'admin-content bg-white !p-0' : 'bg-slate-100 !p-0'}>
           <header className="border-b border-slate-200 bg-white px-6 py-4">
+            <BackButton className="mb-3" onBack={goBack} />
             {navQueue && inReviewQueue && (
               <div className="mb-3 flex items-center justify-end gap-3">
                 {navQueue.length <= MAX_PROGRESS_DOTS && (

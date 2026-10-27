@@ -14,6 +14,7 @@ import { useBackClosesView } from '../../hooks/useHistoryBack';
 import { Archive, Building2, CalendarClock, ChevronRight, ExternalLink, FileText, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BackButton } from '../../components/BackButton';
 import { EmptyState } from '../../components/EmptyState';
 import { COMPETENCIES } from '../../constants/positions';
 import { SkeletonList, useDelayedLoading } from '../../components/table-loading';
@@ -244,6 +245,7 @@ export const LndArchive = ({
       ) : (
         /* ── Level 2: employees within the selected office ─────────────────── */
         <>
+          <BackButton onBack={() => setSelectedOffice(null)} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
               <div className="relative max-w-sm flex-1">

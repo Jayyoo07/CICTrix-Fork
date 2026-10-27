@@ -9,6 +9,7 @@ import { useBackClosesView } from '../../../hooks/useHistoryBack';
 
 import { useEffect, useMemo, useState } from 'react';
 import { Archive, Building2, Search } from 'lucide-react';
+import { BackButton } from '../../../components/BackButton';
 import { EmptyState } from '../../../components/EmptyState';
 import {
   getEmployeeArchive,
@@ -70,6 +71,7 @@ export const PMArchive = () => {
     const adj = getAdjectival(selected.overall);
     return (
       <div className="space-y-5">
+        <BackButton onBack={() => setSelected(null)} />
         <div>
           <h2 className="text-2xl font-bold text-slate-900">{selected.name}</h2>
           <p className="mt-0.5 text-sm text-slate-500">

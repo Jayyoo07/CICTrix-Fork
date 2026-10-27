@@ -2,14 +2,14 @@
 title: Security remediation (credentials, document encryption, authorization and public applicant flows)
 date: 2026-10-16
 status: Draft
-summary: Expanded by the October 27 evidence-based review. Contain leaked service-role and document keys, replace browser-only credentials, enforce role and record authorization, and secure applicant identity, document validation, audit history and resource limits.
+summary: Expanded by the October 27 evidence-based review and succession scoring dependency. Contain leaked keys, replace browser-only credentials, enforce role and office authorization, and protect applicant flows, qualification evidence, review decisions and audit history.
 ---
 
 ## Goal
 
 After this plan, someone holding only the public publishable/anon key (which every visitor's browser has) can read open job postings and public reference data, and start a controlled application submission. Access to an existing person's applications, resubmissions and documents requires verified ownership. A reference number or a typed email address is not proof of identity. Staff access requires a signed-in Supabase Auth user, and database policies and backend checks limit that user to their active role and assigned records.
 
-The remediation remains **Draft**. The user approved the investigation and expansion of this document on 2026-10-27, not execution of the remediation phases. Review scope: trace code and live read-only security configuration, reproduce suspected flaws locally with synthetic data, add supported findings and checks, then update the session summary and generated dashboard.
+The remediation remains **Draft**. The user approved the investigation and expansion of this document on 2026-10-27, not execution of the remediation phases. Review scope: trace code and live read-only security configuration, reproduce suspected flaws locally with synthetic data, add supported findings and checks, then update the session summary and generated dashboard. The later succession discussion authorized adding the focused succession access-control work below to this plan, not applying live permissions or starting the broader security rebuild.
 
 ## Findings this plan fixes
 
@@ -48,7 +48,7 @@ The chosen identity architecture is **Supabase Auth for every person who signs i
 | Employee profile and PDS (`employees`, `employee_*`) | none | own row | own office (read) | none | read; write where module owns it | all |
 | IPCR, evaluations | none | own | own office | none | PM: all | all |
 | Training, IDP | none | own | own office | none | L&D: all | all |
-| Succession | none | none | none | none | assigned modules | all |
+| Succession | none | none | own-office requirements and relevance reviews; no cross-office writes | none | RSP succession reads/ranking and assigned configuration; no implied access for other module admins | all |
 | Accounts, roles, password resets, audit logs | none | none | none | none | none (via admin RPCs only) | all |
 
 ## Steps
@@ -103,6 +103,22 @@ The chosen identity architecture is **Supabase Auth for every person who signs i
 10. Document review/auditing (F14–F15): separate public file metadata from staff approval markers. Derive actor ID and timestamps from the verified server context and save the business action and audit event atomically. Prevent clients from fabricating approval/undo events or changing other people's uploads; restrict audit reads and make audit writes server-owned and append-only.
 11. Abuse/privacy controls (F20–F21): bound recipient counts, body/request size, upload counts and AI input sizes; add identity-aware rate limits and provider budgets. Remove full applicant payload/response logging and raw database/provider exceptions from public responses; use redacted structured events and correlation IDs.
 
+### Phase 4A: Succession scoring trust boundary
+
+**Dependency and scope:** This is the focused security prerequisite for [Succession Scoring V2](2026-10-27-succession-scoring-v2.md), not approval to execute the entire security plan. Complete Phase 3's verified identity and active assignment linkage before relying on Office Account review decisions. Coordinate source-table protection with Phase 4's PDS and training work; do not implement conflicting policies twice.
+
+**Verified evidence:** Read-only live catalog checks during succession planning found RLS disabled and anon SELECT/INSERT/UPDATE grants on `critical_positions`, `succession_candidates`, `employee_work_experience`, `employee_training`, and `employee_eligibility`. `office_role_assignments` had RLS enabled with no anon SELECT/INSERT/UPDATE grants, but its inspected columns had no `auth_user_id` link. These are configuration findings, not a claim of exploitation or a direct mutation test. Source checks read column names and privileges, not employee records or credential values.
+
+- [ ] Define and test the role/action matrix for each affected table and mutation API before changing grants. Preserve employee-owned PDS maintenance, authorized HR/RSP access, legitimate L&D training updates, office succession setup, and Gap Analysis reads. An office review permission does not automatically grant the right to edit an employee's underlying PDS or create an eligibility.
+- [ ] Resolve the caller from a verified Auth session and current active role/office assignment server-side. Office review writes must verify the critical position belongs to that assignment and that the employee/evidence belongs to the allowed scope. Ignore client-provided actor/office identifiers for authorization. Revoked/disabled assignments, missing identity, ambiguous mappings and failed role reads deny access, including with stale tokens or metadata.
+- [ ] Protect both the review decisions and their inputs: `critical_positions`, `succession_candidates`, applicable employee education/profile fields, `employee_work_experience`, `employee_training`, `employee_eligibility`, and recognized eligibility/configuration sources used by the scorer. Remove unintended anonymous write paths and inspect effective grants, RLS, views, RPCs and privileged backend routes together. Securing only a new review table still permits score manipulation through editable source evidence. Do not add anon-open policies or privileged-client fallbacks to keep pages working.
+- [ ] Make review decisions position-specific and bind them to source and requirement versions. Derive reviewer identity and timestamps on the server; save the decision and append-only audit event atomically. Reject stale concurrent saves and edits of another office's reviews. Source edits/deletions, changed position requirements, employee office changes and reviewer access changes must invalidate affected decisions before reuse; do not silently retain an authoritative final score.
+- [ ] In a local or preview database, add pgTAP/API denial tests for anonymous access, signed-in wrong-role access, cross-office reads/writes, forged attribution, self-assigned office IDs, revoked assignments, direct source mutations, bypass RPCs and audit modification. Assert rejected mutations have no side effects. Add positive tests for each legitimate role/action from the matrix and for source-change invalidation and audit/save rollback.
+- [ ] Deploy authenticated client/API paths and their database policies as a coordinated release through reviewed repository migrations. Test employee PDS, Office Account Critical Positions, Gap Analysis, RSP succession/overview and L&D training flows before tightening live access. Do not lock live tables ahead of compatible clients or apply repository migrations by hand. Recovery must preserve the access protections; never reopen public writes as a rollback strategy.
+- [ ] Keep the V2 pure calculation engine build/test work independent and the existing scoring path active during preparation. Do not activate persisted relevance reviews or the V2 scoring cutover until identity, office authorization, protected source evidence, audit/invalidation checks and workflow regressions pass. Record the evidence that clears this gate in both plans; deployment/activation remains separately authorized.
+
+The approved succession workflow has **no additional HR approval queue**. This section enforces the Office Account user's assigned scope, not a new approval stage. Pending relevance reviews stay visible in succession without a final score/rank/readiness; confirmed qualification failures stay hidden. The scoring implementation owns these presentation rules; security must not turn an authorization/read error into a successful empty list or zero score.
+
 ### Phase 5: Keep it closed
 
 1. Run `get_advisors` (security) after every migration; zero `ERROR` lints is a necessary release gate, not proof of security. Business authorization, leaked browser keys and identity verification also need tests.
@@ -113,6 +129,7 @@ The chosen identity architecture is **Supabase Auth for every person who signs i
 
 - **Phase 1 breaks anything that hardcodes the old keys,** including the local scripts in the repo root and `scratch/`. They need the new keys from `.env`.
 - **Phase 4 breaks screens.** Many components read tables directly with the anon client; each table group needs its UI paths tested in every portal before it goes live.
+- **Succession trust depends on source integrity.** Protecting review rows while leaving qualification records or position requirements anonymously editable permits manipulated rankings. Conversely, disabling source access without compatible authenticated PDS/L&D/office clients can interrupt legitimate work. Phase 4A is a coordinated release gate, not a blanket live lockdown.
 - **Force-push disrupts collaborators** and any open PRs on both repos; it needs coordination with whoever owns upstream.
 - **Users without an email** can't use self-service password reset with synthetic addresses; resets stay admin-driven through a server endpoint.
 - **Exposed credentials** must be replaced through a trusted provisioning/recovery process. Hashing the same exposed password does not revoke it, and the existing password-change screen does not update the database.
@@ -126,6 +143,7 @@ The chosen identity architecture is **Supabase Auth for every person who signs i
 - After Phase 2: secret scanning passes on a fresh clone and built assets; assert the leaked service-role and private-key material is absent, including bare Base64 keys. Public JWT-shaped values alone are not proof of a secret leak.
 - After Phase 3: no plaintext password column/cache exists; anonymous password-column access fails; every portal signs in, changes its password durably and signs out of the underlying Auth session. Old passwords fail in a clean second browser; inactive users and stale role metadata cannot restore privileges.
 - After Phase 4: Supabase security advisors show 0 `ERROR` lints; pgTAP/API tests prove role, owner, office, interviewer assignment and workflow boundaries for SELECT/INSERT/UPDATE/DELETE and RPCs. Anonymous protected API calls fail before side effects; authenticated wrong-role calls fail too. Explicit public endpoints have separate scoped tests.
+- Before succession V2 activation: Phase 4A tests prove own-office reviews, denied anonymous/cross-office source and review writes, verified reviewer attribution, atomic audit, stale-save rejection and invalidation after evidence/requirement/assignment changes. Employee PDS, L&D training, Critical Positions, Gap Analysis and RSP succession/overview regressions must pass; failed authorization/reads must never masquerade as zero scores or empty successful results.
 - Every phase: `npx tsc --noEmit`, `npm run lint`, `npm test`, and a click-through of each portal.
 
 ## October 27 review: evidence and additional findings

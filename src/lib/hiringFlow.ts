@@ -68,7 +68,7 @@ export const fetchOtherOpenApplications = async (
     const [{ data, error }, slots] = await Promise.all([
       client
         .from('applicants')
-        .select('id, position, office, department, status, plantilla_slot_id, deleted_at')
+        .select('id, position, office, status, plantilla_slot_id, deleted_at')
         .ilike('email', normalized),
       slotIndex(),
     ]);
@@ -154,7 +154,13 @@ export const fetchReservedApplicants = async (): Promise<ReservedApplicant[]> =>
     const [{ data, error }, slots] = await Promise.all([
       client
         .from('applicants')
-        .select('id, first_name, middle_name, last_name, full_name, email, reference_no, position, office, department, plantilla_slot_id, signing_deadline, total_score, deleted_at')
+        // Only columns public.applicants actually has. Naming one it lacks
+        // makes PostgREST reject the whole select with 42703, which is how
+        // this page came to show "The server couldn't return this data" —
+        // full_name, department and total_score are not columns of this
+        // table. fullNameOf already builds the name from the parts, and
+        // `office` carries the department.
+        .select('id, first_name, middle_name, last_name, email, reference_no, position, office, plantilla_slot_id, signing_deadline, deleted_at')
         .eq('status', RESERVED_STATUS),
       slotIndex(),
     ]);
@@ -181,7 +187,10 @@ export const fetchReservedApplicants = async (): Promise<ReservedApplicant[]> =>
           slotItemNumber: slot?.itemNumber,
           slotNumber: slot?.slotNumber,
           signingDeadline: row.signing_deadline ? String(row.signing_deadline) : slot?.signingDeadline ?? null,
-          interviewScore: row.total_score == null ? null : Number(row.total_score),
+          // Not on this table. The interview score lives with the evaluation,
+          // and ForHiringPage resolves it from the score snapshot; this page
+          // only lists who is awaiting credentials, so it does not read it.
+          interviewScore: null,
         };
       });
   } catch (err) {
@@ -208,7 +217,7 @@ export const fetchArchivedApplicants = async (): Promise<ArchivedApplicant[]> =>
     const [{ data, error }, slots] = await Promise.all([
       client
         .from('applicants')
-        .select('id, first_name, middle_name, last_name, full_name, email, reference_no, position, office, department, plantilla_slot_id, archived_at, deleted_at')
+        .select('id, first_name, middle_name, last_name, email, reference_no, position, office, plantilla_slot_id, archived_at, deleted_at')
         .not('archived_at', 'is', null)
         .order('archived_at', { ascending: false }),
       slotIndex(),

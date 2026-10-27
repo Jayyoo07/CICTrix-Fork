@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-flash-latest"
 
+    # Queue drain shared secret (Step 6)
+    QUEUE_DRAIN_SECRET: str = ""
+
     # SMTP (Email Configuration)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

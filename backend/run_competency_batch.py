@@ -1,12 +1,12 @@
-"""Run the IPCR competency matcher + assessor over finalized IPCRs, one cycle at a time.
+"""Enqueue finalized IPCRs into the competency assessment queue, one cycle at a time.
 
-Plan: docs/plans/2026-10-27-sor-competency-breakdown.md
+Plan: docs/plans/2026-10-27-sor-previous-semester-competency.md (Step 5)
 
-Why a batch runner: the endpoints live in the FastAPI app, but nothing in the
-front end calls them, so `ipcr_competency_matches` and `employee_competencies`
-have never been populated in production — which is why Summary of Ratings shows
-"No competency breakdown available" for every employee. This drives the same
-route function in-process, sequentially, with a resumable skip list.
+Why an enqueue batch script:
+Instead of running assessment synchronously in-process, this script enqueues
+finalized IPCRs into `competency_assessment_runs` (`stage = 'assessing'`).
+The queue runner (`run_competency_queue.py`) then processes them with durable
+state, retry handling, and error tracking.
 
 Setup (backend/.env, gitignored — see backend/.env.example):
     SUPABASE_URL=
@@ -17,32 +17,30 @@ Setup (backend/.env, gitignored — see backend/.env.example):
 
 Usage:
     python run_competency_batch.py --cycle 6 --dry-run          # list targets only
-    python run_competency_batch.py --cycle 6 --limit 1          # one employee
-    python run_competency_batch.py --cycle 6                    # the whole cycle
-    python run_competency_batch.py --cycle 6 --force            # re-assess everyone
-
-Each employee costs one matcher call (only when that cycle has no matches yet)
-and one assessment call. Existing assessments for the cycle are skipped unless
---force is passed.
+    python run_competency_batch.py --cycle 6 --limit 1          # enqueue one employee
+    python run_competency_batch.py --cycle 6                    # enqueue the whole cycle
+    python run_competency_batch.py --cycle 6 --force            # re-enqueue everyone
 """
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
-import time
 from pathlib import Path
+from typing import Any, Dict, List, Set
+
+# Ensure sys.stdout handles UTF-8 on Windows
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 # Make `app` importable when the script is run from anywhere.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
     from app.core.config import settings
-    from app.routes.competency_assessment import (
-        CompetencyAssessmentRequest,
-        assess_employee_competencies,
-    )
-    from fastapi import HTTPException
+    from app.core.supabase_client import db
 except Exception as exc:  # noqa: BLE001 - configuration errors must read clearly
     print(f"Could not start: {exc}\n")
     print("Fill backend/.env from backend/.env.example first (SUPABASE_URL,")
@@ -50,33 +48,26 @@ except Exception as exc:  # noqa: BLE001 - configuration errors must read clearl
     raise SystemExit(2) from exc
 
 
-def service_db():
-    from supabase import create_client
-
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+def get_service_db():
+    return db.get_service_client()
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Batch-run the IPCR competency assessor.")
+    ap = argparse.ArgumentParser(description="Batch-enqueue IPCRs into competency assessment runs.")
     ap.add_argument("--cycle", type=int, required=True, help="performance_cycles.id")
     ap.add_argument("--limit", type=int, default=0, help="stop after N employees (0 = all)")
-    ap.add_argument("--employee", default="", help="assess one employees.id (uuid)")
-    ap.add_argument("--dry-run", action="store_true", help="list the work, call nothing")
-    ap.add_argument("--force", action="store_true", help="re-assess employees already done")
-    ap.add_argument("--sleep", type=float, default=1.0, help="seconds between employees")
+    ap.add_argument("--employee", default="", help="target one employees.id (uuid)")
+    ap.add_argument("--dry-run", action="store_true", help="list the work without modifying database")
+    ap.add_argument("--force", action="store_true", help="re-enqueue IPCRs already completed")
     return ap.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    db = service_db()
-
-    if not settings.GEMINI_API_KEY:
-        print("GEMINI_API_KEY is unset in backend/.env — matching and assessment need it.")
-        return 2
+    client = get_service_db()
 
     cycle_rows = (
-        db.table("performance_cycles")
+        client.table("performance_cycles")
         .select("id, title, start_date, end_date")
         .eq("id", args.cycle)
         .limit(1)
@@ -88,8 +79,8 @@ def main() -> int:
     print(f"Cycle {args.cycle}: {cycle_rows[0]['title']}")
 
     query = (
-        db.table("target_settings")
-        .select("employee_id")
+        client.table("target_settings")
+        .select("id, employee_id, cycle_id")
         .eq("cycle_id", args.cycle)
         .eq("status", "approved")
         .eq("phase2_status", "completed")
@@ -97,77 +88,74 @@ def main() -> int:
     if args.employee:
         query = query.eq("employee_id", args.employee)
     rows = query.execute().data or []
-    employee_ids = [str(r["employee_id"]) for r in rows]
+    if not rows:
+        print("No finalized IPCR target settings found for this cycle.")
+        return 0
 
-    done: set[str] = set()
+    done_targets: Set[str] = set()
     if not args.force:
-        existing = (
-            db.table("employee_competencies")
+        # Check existing completed runs in competency_assessment_runs
+        runs = (
+            client.table("competency_assessment_runs")
+            .select("target_setting_id, status")
+            .eq("cycle_id", args.cycle)
+            .eq("stage", "assessing")
+            .execute()
+        ).data or []
+        for r in runs:
+            if r.get("status") in ("complete", "pending", "running"):
+                done_targets.add(str(r["target_setting_id"]))
+
+        # Also check employee_competencies for already assessed employees
+        existing_comps = (
+            client.table("employee_competencies")
             .select("employee_id")
             .eq("cycle_id", args.cycle)
             .execute()
         ).data or []
-        done = {str(r["employee_id"]) for r in existing}
+        assessed_employees = {str(r["employee_id"]) for r in existing_comps}
+    else:
+        assessed_employees = set()
 
-    pending = [e for e in employee_ids if e not in done]
-    if args.limit:
-        pending = pending[: args.limit]
+    pending_rows = [
+        r for r in rows
+        if str(r["id"]) not in done_targets and str(r["employee_id"]) not in assessed_employees
+    ]
+
+    if args.limit and args.limit > 0:
+        pending_rows = pending_rows[: args.limit]
 
     print(
-        f"{len(employee_ids)} finalized IPCR(s); {len(done)} already assessed; "
-        f"{len(pending)} to run."
+        f"{len(rows)} finalized IPCR(s); {len(rows) - len(pending_rows)} already queued or assessed; "
+        f"{len(pending_rows)} to enqueue."
     )
-    if args.dry_run or not pending:
-        for e in pending:
-            print(f"  would assess {e}")
+
+    if args.dry_run or not pending_rows:
+        for r in pending_rows:
+            print(f"  would enqueue assessing run for employee {r['employee_id']} (target_setting {r['id']})")
         return 0
 
-    ok = failed = 0
-    started = time.time()
-    for i, employee_id in enumerate(pending, start=1):
-        try:
-            asyncio.run(
-                assess_employee_competencies(
-                    CompetencyAssessmentRequest(employee_id=employee_id, cycle_id=args.cycle)
-                )
-            )
-            ok += 1
-            print(f"[{i}/{len(pending)}] ok      {employee_id}")
-        except HTTPException as exc:
-            failed += 1
-            print(f"[{i}/{len(pending)}] FAILED  {employee_id}: {exc.status_code} {exc.detail}")
-        except Exception as exc:  # noqa: BLE001 - keep the batch going, report at the end
-            failed += 1
-            print(f"[{i}/{len(pending)}] FAILED  {employee_id}: {exc}")
-        if args.sleep and i < len(pending):
-            time.sleep(args.sleep)
+    enqueued_count = 0
+    for r in pending_rows:
+        payload = {
+            "target_setting_id": r["id"],
+            "employee_id": r["employee_id"],
+            "cycle_id": r["cycle_id"],
+            "stage": "assessing",
+            "status": "pending",
+            "attempts": 0,
+            "last_error": None,
+        }
+        client.table("competency_assessment_runs").upsert(
+            [payload],
+            on_conflict="target_setting_id,stage"
+        ).execute()
+        enqueued_count += 1
+        print(f"  enqueued target_setting {r['id']} (employee {r['employee_id']})")
 
-    # Belt and braces: the trigger on ipcr_competency_matches already tags the
-    # mirrored rows; this re-syncs every row once in case any were missed.
-    try:
-        sync = db.rpc("sync_ipcr_performance_competencies", {}).execute()
-        print(f"Re-synced mirrored competency tags: {sync.data} row(s).")
-    except Exception as exc:  # noqa: BLE001
-        print(f"WARNING: could not run sync_ipcr_performance_competencies: {exc}")
-
-    matches = (
-        db.table("ipcr_competency_matches")
-        .select("id", count="exact")
-        .eq("rating_period", str(args.cycle))
-        .execute()
-    )
-    comps = (
-        db.table("employee_competencies")
-        .select("id", count="exact")
-        .eq("cycle_id", args.cycle)
-        .execute()
-    )
-    print(
-        f"\nDone in {time.time() - started:.0f}s — {ok} assessed, {failed} failed.\n"
-        f"Cycle {args.cycle} now holds {matches.count or 0} competency match(es) and "
-        f"{comps.count or 0} employee competency row(s)."
-    )
-    return 1 if failed else 0
+    print(f"\nSuccessfully enqueued {enqueued_count} run(s) into competency_assessment_runs.")
+    print("To process them, run:\n    python run_competency_queue.py --once")
+    return 0
 
 
 if __name__ == "__main__":

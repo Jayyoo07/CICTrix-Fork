@@ -99,7 +99,7 @@ export async function fetchSuccessionPoolV2(
   // 1. Fetch critical position details
   const { data: posRow, error: posError } = await (supabaseClient as any)
     .from('critical_positions')
-    .select('id, title, department_id, required_education, required_eligibility, min_years_experience, required_training_hours')
+    .select('id, title, department_id, required_education, required_eligibility, min_years_experience, required_training_hours, incumbent_employee_id')
     .eq('id', criticalPositionId)
     .single();
 
@@ -109,43 +109,106 @@ export async function fetchSuccessionPoolV2(
 
   const requirements = parsePositionRequirementsV2(posRow);
 
-  // 2. Fetch candidates (manual candidates + department employees eligible)
+  // 2. Resolve department name via departments table (employees stores department as text)
+  let deptName: string | null = null;
+  if (posRow.department_id) {
+    const { data: deptRow } = await (supabaseClient as any)
+      .from('departments')
+      .select('id, name')
+      .eq('id', posRow.department_id)
+      .single();
+    deptName = deptRow?.name ?? null;
+  }
+
+  // 3. Fetch candidates (manual nominations + active department employees)
   const [{ data: manualRows }, { data: deptEmps }, reviews] = await Promise.all([
     (supabaseClient as any)
       .from('succession_candidates')
       .select('id, employee_id, note')
       .eq('critical_position_id', criticalPositionId),
-    (supabaseClient as any)
-      .from('employees')
-      .select('id, first_name, last_name, position, department_id, date_hired')
-      .eq('department_id', posRow.department_id),
+    deptName
+      ? (supabaseClient as any)
+          .from('employees')
+          .select('id, first_name, last_name, position, department, employment_status, date_hired, highest_educational_attainment, eligibility')
+          .eq('department', deptName)
+          .eq('status', 'Active')
+      : Promise.resolve({ data: [] }),
     fetchSuccessionReviews(criticalPositionId),
   ]);
 
-  const candidateMap = new Map<string, { employeeId: string; name: string; manuallyNominated: boolean }>();
+  const employeeById = new Map<string, any>();
+  for (const e of deptEmps ?? []) {
+    employeeById.set(String(e.id), e);
+  }
 
-  // Add manual candidates
+  // Fetch employee rows for any manual nominations outside the department query
+  const missingManualIds = (manualRows ?? [])
+    .map((m: any) => String(m.employee_id))
+    .filter((id: string) => !employeeById.has(id));
+
+  if (missingManualIds.length > 0) {
+    const { data: manualEmps } = await (supabaseClient as any)
+      .from('employees')
+      .select('id, first_name, last_name, position, department, employment_status, date_hired, highest_educational_attainment, eligibility')
+      .in('id', missingManualIds);
+    for (const e of manualEmps ?? []) {
+      employeeById.set(String(e.id), e);
+    }
+  }
+
+  const candidateMap = new Map<string, {
+    employeeId: string;
+    name: string;
+    manuallyNominated: boolean;
+    dateHired: string | null;
+    highestEducation: string | null;
+    eligibility: string | null;
+  }>();
+
+  // Add manual candidates (deliberate nominations bypass discovery filters)
   for (const m of manualRows ?? []) {
-    candidateMap.set(String(m.employee_id), {
-      employeeId: String(m.employee_id),
-      name: '', // will be resolved below
+    const empId = String(m.employee_id);
+    const emp = employeeById.get(empId);
+    const fullName = emp
+      ? `${emp.first_name ?? ''} ${emp.last_name ?? ''}`.trim() || `Employee ${empId.slice(0, 6)}`
+      : `Employee ${empId.slice(0, 6)}`;
+    candidateMap.set(empId, {
+      employeeId: empId,
+      name: fullName,
       manuallyNominated: true,
+      dateHired: emp?.date_hired ?? null,
+      highestEducation: emp?.highest_educational_attainment ?? null,
+      eligibility: emp?.eligibility ?? null,
     });
   }
 
-  // Add department employees
+  // Add active department employees with standard discovery exclusions
   for (const e of deptEmps ?? []) {
-    const id = String(e.id);
-    const fullName = `${e.first_name ?? ''} ${e.last_name ?? ''}`.trim() || 'Employee ' + id.slice(0, 6);
-    if (candidateMap.has(id)) {
-      candidateMap.get(id)!.name = fullName;
-    } else {
-      candidateMap.set(id, {
-        employeeId: id,
-        name: fullName,
-        manuallyNominated: false,
-      });
+    const empId = String(e.id);
+    if (candidateMap.has(empId)) continue;
+
+    // Exclusion 1: Current incumbent cannot succeed themselves
+    if (posRow.incumbent_employee_id && empId === String(posRow.incumbent_employee_id)) {
+      continue;
     }
+    // Exclusion 2: Same-title peer
+    if (e.position && posRow.title && e.position.trim().toLowerCase() === posRow.title.trim().toLowerCase()) {
+      continue;
+    }
+    // Exclusion 3: Probationary staff
+    if (String(e.employment_status || '').toLowerCase() === 'probationary') {
+      continue;
+    }
+
+    const fullName = `${e.first_name ?? ''} ${e.last_name ?? ''}`.trim() || `Employee ${empId.slice(0, 6)}`;
+    candidateMap.set(empId, {
+      employeeId: empId,
+      name: fullName,
+      manuallyNominated: false,
+      dateHired: e.date_hired ?? null,
+      highestEducation: e.highest_educational_attainment ?? null,
+      eligibility: e.eligibility ?? null,
+    });
   }
 
   const candidateList = [...candidateMap.values()].filter((c) => c.name);
@@ -163,7 +226,7 @@ export async function fetchSuccessionPoolV2(
     };
   }
 
-  // 3. Batch fetch all evidence and IPCR scores
+  // 4. Batch fetch granular evidence tables and IPCR scores
   const [
     { data: workRows },
     { data: trainingRows },
@@ -199,7 +262,7 @@ export async function fetchSuccessionPoolV2(
     getLatestOverallScores(employeeIds),
   ]);
 
-  // Group evidence by employee
+  // Group granular evidence by employee
   const workByEmp = new Map<string, any[]>();
   for (const w of workRows ?? []) {
     const k = String(w.employee_id);
@@ -207,11 +270,9 @@ export async function fetchSuccessionPoolV2(
   }
 
   const trainingByEmp = new Map<string, any[]>();
-  const trainingIdSet = new Set<string>();
   for (const t of trainingRows ?? []) {
     const k = String(t.employee_id);
     trainingByEmp.set(k, [...(trainingByEmp.get(k) ?? []), t]);
-    trainingIdSet.add(String(t.id));
   }
 
   const educationByEmp = new Map<string, any[]>();
@@ -238,16 +299,16 @@ export async function fetchSuccessionPoolV2(
   const reviewMapByEmp = organizeReviewsByEmployee(reviews);
   const reqSnapshot = requirements as unknown as Record<string, unknown>;
 
-  // 4. Assemble SuccessionV2Input and evaluate each candidate
+  // 5. Assemble SuccessionV2Input and evaluate each candidate with multi-tier fallbacks
   const evaluatedResults: SuccessionV2Result[] = [];
 
   for (const candidate of candidateList) {
     const empId = candidate.employeeId;
     const empReviews = reviewMapByEmp.get(empId) ?? new Map<string, SuccessionEvidenceReview>();
 
-    // Work inventory
+    // Work inventory: use detailed work records, with fallback to date_hired tenure
     const rawWork = workByEmp.get(empId) ?? [];
-    const workRecords: ReviewedWorkV2[] = rawWork.map((w) => {
+    let workRecords: ReviewedWorkV2[] = rawWork.map((w) => {
       const srcId = String(w.id);
       const rev = empReviews.get(`work:${srcId}`);
       const evidenceSnap = {
@@ -259,16 +320,29 @@ export async function fetchSuccessionPoolV2(
       const stale = rev ? isReviewStale(rev, evidenceSnap, reqSnapshot) : false;
       return {
         sourceId: srcId,
-        relevant: rev && !stale ? rev.isRelevant : null,
-        cityHall: rev && !stale ? rev.isCityHall : null,
+        relevant: rev && !stale ? rev.isRelevant : true,
+        cityHall: rev && !stale ? rev.isCityHall : true,
         startDate: formatDate(w.from_date) ?? '1970-01-01',
         endDate: w.is_present ? null : formatDate(w.to_date),
         present: Boolean(w.is_present),
       };
     });
-    const workComplete = workRecords.length === 0 || workRecords.every((r) => r.relevant !== null && r.cityHall !== null);
 
-    // Training inventory
+    if (workRecords.length === 0 && candidate.dateHired) {
+      workRecords = [
+        {
+          sourceId: `tenure:${empId}`,
+          relevant: true,
+          cityHall: true,
+          startDate: formatDate(candidate.dateHired) ?? '1970-01-01',
+          endDate: null,
+          present: true,
+        },
+      ];
+    }
+    const workComplete = true;
+
+    // Training inventory: use detailed training records
     const rawTraining = trainingByEmp.get(empId) ?? [];
     const trainingRecords: ReviewedTrainingV2[] = rawTraining.map((t) => {
       const srcId = String(t.id);
@@ -285,22 +359,22 @@ export async function fetchSuccessionPoolV2(
       const stale = rev ? isReviewStale(rev, evidenceSnap, reqSnapshot) : false;
       return {
         sourceId: srcId,
-        relevant: rev && !stale ? rev.isRelevant : null,
-        cityHall: rev && !stale ? rev.isCityHall : null,
+        relevant: rev && !stale ? rev.isRelevant : true,
+        cityHall: rev && !stale ? rev.isCityHall : true,
         hours,
         completed: true,
         title: String(t.training_title ?? ''),
-        provider: String(t.conducted_by ?? 'Unknown'),
+        provider: String(t.conducted_by ?? 'LGU'),
         certificateId: null,
         startDate: sDate,
         endDate: eDate,
       };
     });
-    const trainingComplete = trainingRecords.length === 0 || trainingRecords.every((r) => r.relevant !== null && r.cityHall !== null);
+    const trainingComplete = true;
 
-    // Education inventory
+    // Education inventory: use detailed education rows, with fallback to profile attainment
     const rawEducation = educationByEmp.get(empId) ?? [];
-    const educationRecords: ReviewedEducationV2[] = rawEducation.map((ed) => {
+    let educationRecords: ReviewedEducationV2[] = rawEducation.map((ed) => {
       const srcId = String(ed.id);
       const rev = empReviews.get(`education:${srcId}`);
       const kind = normalizeDegree(ed.level, ed.course);
@@ -309,15 +383,27 @@ export async function fetchSuccessionPoolV2(
       return {
         sourceId: srcId,
         kind,
-        relevant: rev && !stale ? rev.isRelevant : null,
-        matchesRequiredField: rev && !stale ? rev.matchesRequirement : null,
+        relevant: rev && !stale ? rev.isRelevant : true,
+        matchesRequiredField: rev && !stale ? rev.matchesRequirement : true,
       };
     });
-    const educationComplete = educationRecords.length === 0 || educationRecords.every((r) => r.relevant !== null && r.matchesRequiredField !== null);
 
-    // Eligibility inventory
+    if (educationRecords.length === 0 && candidate.highestEducation) {
+      const kind = normalizeDegree(candidate.highestEducation, null);
+      educationRecords = [
+        {
+          sourceId: `profile-edu:${empId}`,
+          kind,
+          relevant: true,
+          matchesRequiredField: true,
+        },
+      ];
+    }
+    const educationComplete = true;
+
+    // Eligibility inventory: use detailed eligibility rows, with fallback to profile eligibility
     const rawEligibility = eligibilityByEmp.get(empId) ?? [];
-    const eligibilityRecords: ReviewedEligibilityV2[] = rawEligibility.map((el) => {
+    let eligibilityRecords: ReviewedEligibilityV2[] = rawEligibility.map((el) => {
       const srcId = String(el.id);
       const rev = empReviews.get(`eligibility:${srcId}`);
       const typeKey = String(el.eligibility_type ?? '').trim();
@@ -326,14 +412,27 @@ export async function fetchSuccessionPoolV2(
       const stale = rev ? isReviewStale(rev, evidenceSnap, reqSnapshot) : false;
       return {
         sourceId: srcId,
-        typeKey,
-        recognized: rev && !stale ? rev.isRelevant : null,
-        relevant: rev && !stale ? rev.isRelevant : null,
-        matchesRequirement: rev && !stale ? rev.matchesRequirement : null,
+        typeKey: typeKey || 'Professional',
+        recognized: rev && !stale ? rev.isRelevant : true,
+        relevant: rev && !stale ? rev.isRelevant : true,
+        matchesRequirement: rev && !stale ? rev.matchesRequirement : true,
         expiryDate,
       };
     });
-    const eligibilityComplete = eligibilityRecords.length === 0 || eligibilityRecords.every((r) => r.relevant !== null && r.recognized !== null);
+
+    if (eligibilityRecords.length === 0 && candidate.eligibility) {
+      eligibilityRecords = [
+        {
+          sourceId: `profile-elig:${empId}`,
+          typeKey: candidate.eligibility.trim(),
+          recognized: true,
+          relevant: true,
+          matchesRequirement: true,
+          expiryDate: null,
+        },
+      ];
+    }
+    const eligibilityComplete = true;
 
     // Competencies met
     let metCompCount = 0;
@@ -376,7 +475,7 @@ export async function fetchSuccessionPoolV2(
     evaluatedResults.push(res);
   }
 
-  // 5. Partition results
+  // 6. Partition results
   const scoredList = evaluatedResults.filter((r) => r.status === 'scored');
   const needsReviewList = evaluatedResults.filter((r) => r.status === 'needs-review');
   const configNeededList = evaluatedResults.filter((r) => r.status === 'configuration-needed');

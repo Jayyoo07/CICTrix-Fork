@@ -70,7 +70,7 @@ describe('successionPipelineV2', () => {
   });
 
   describe('fetchSuccessionPoolV2', () => {
-    it('evaluates candidates and partitions them by status', async () => {
+    it('discovers department employees, applies fallbacks, and ranks candidates', async () => {
       // Mock critical_positions
       const mockSinglePos = vi.fn().mockResolvedValue({
         data: {
@@ -81,101 +81,76 @@ describe('successionPipelineV2', () => {
           required_training_hours: 40,
           required_education: "Bachelor's Degree in IT",
           required_eligibility: 'CSC Professional',
+          incumbent_employee_id: 'emp-incumbent',
         },
         error: null,
       });
 
-      // Mock employees
+      // Mock department lookup
+      const mockSingleDept = vi.fn().mockResolvedValue({
+        data: { id: 'dept-1', name: 'Information Technology Office' },
+        error: null,
+      });
+
+      // Mock active employees in department
       const mockEmps = [
         {
           id: 'emp-1',
           first_name: 'Juan',
           last_name: 'Dela Cruz',
-          department_id: 'dept-1',
+          position: 'IT Officer I',
+          department: 'Information Technology Office',
+          employment_status: 'Regular',
           date_hired: '2020-01-01',
+          highest_educational_attainment: 'BS Information Technology',
+          eligibility: 'CSC Professional',
         },
         {
           id: 'emp-2',
           first_name: 'Maria',
           last_name: 'Santos',
-          department_id: 'dept-1',
-          date_hired: '2022-01-01',
+          position: 'Computer Programmer II',
+          department: 'Information Technology Office',
+          employment_status: 'Permanent',
+          date_hired: '2019-01-01',
+          highest_educational_attainment: 'BS Computer Science',
+          eligibility: 'CSC Professional',
+        },
+        {
+          id: 'emp-incumbent',
+          first_name: 'Current',
+          last_name: 'Incumbent',
+          position: 'IT Officer II',
+          department: 'Information Technology Office',
+          employment_status: 'Permanent',
+          date_hired: '2015-01-01',
+        },
+        {
+          id: 'emp-peer',
+          first_name: 'Same',
+          last_name: 'Title',
+          position: 'IT Officer II', // same title peer -> excluded
+          department: 'Information Technology Office',
+          employment_status: 'Permanent',
+          date_hired: '2018-01-01',
+        },
+        {
+          id: 'emp-probationary',
+          first_name: 'New',
+          last_name: 'Hire',
+          position: 'IT Staff',
+          department: 'Information Technology Office',
+          employment_status: 'Probationary', // probationary -> excluded
+          date_hired: '2026-01-01',
         },
       ];
 
-      // Mock reviews
-      vi.spyOn(successionReviews, 'fetchSuccessionReviews').mockResolvedValue([
-        // emp-1 has complete reviews
-        {
-          id: 'rev-w1',
-          criticalPositionId: 'pos-1',
-          employeeId: 'emp-1',
-          criterion: 'work',
-          sourceRecordId: 'work-1',
-          isRelevant: true,
-          isCityHall: true,
-          matchesRequirement: null,
-          evidenceSnapshot: { from_date: '2020-01-01', to_date: '2024-01-01', is_present: false, position_title: 'IT Staff' },
-          requirementsSnapshot: { experienceYears: 2, trainingHours: 40, education: { minimum: 'bachelor', field: 'IT' }, eligibility: { kind: 'required', key: 'CSC Professional' } },
-          reviewedBy: 'Admin',
-          reviewedAt: '2026-10-28',
-          createdAt: '2026-10-28',
-          updatedAt: '2026-10-28',
-        },
-        {
-          id: 'rev-t1',
-          criticalPositionId: 'pos-1',
-          employeeId: 'emp-1',
-          criterion: 'training',
-          sourceRecordId: 't-1',
-          isRelevant: true,
-          isCityHall: true,
-          matchesRequirement: null,
-          evidenceSnapshot: { title: 'Network Admin', hours: 80, from_date: '2023-01-01', to_date: '2023-01-10' },
-          requirementsSnapshot: { experienceYears: 2, trainingHours: 40, education: { minimum: 'bachelor', field: 'IT' }, eligibility: { kind: 'required', key: 'CSC Professional' } },
-          reviewedBy: 'Admin',
-          reviewedAt: '2026-10-28',
-          createdAt: '2026-10-28',
-          updatedAt: '2026-10-28',
-        },
-        {
-          id: 'rev-ed1',
-          criticalPositionId: 'pos-1',
-          employeeId: 'emp-1',
-          criterion: 'education',
-          sourceRecordId: 'ed-1',
-          isRelevant: true,
-          isCityHall: null,
-          matchesRequirement: true,
-          evidenceSnapshot: { level: 'College', course: 'BS Information Technology' },
-          requirementsSnapshot: { experienceYears: 2, trainingHours: 40, education: { minimum: 'bachelor', field: 'IT' }, eligibility: { kind: 'required', key: 'CSC Professional' } },
-          reviewedBy: 'Admin',
-          reviewedAt: '2026-10-28',
-          createdAt: '2026-10-28',
-          updatedAt: '2026-10-28',
-        },
-        {
-          id: 'rev-el1',
-          criticalPositionId: 'pos-1',
-          employeeId: 'emp-1',
-          criterion: 'eligibility',
-          sourceRecordId: 'el-1',
-          isRelevant: true,
-          isCityHall: null,
-          matchesRequirement: true,
-          evidenceSnapshot: { eligibility_type: 'CSC Professional', validity_date: null },
-          requirementsSnapshot: { experienceYears: 2, trainingHours: 40, education: { minimum: 'bachelor', field: 'IT' }, eligibility: { kind: 'required', key: 'CSC Professional' } },
-          reviewedBy: 'Admin',
-          reviewedAt: '2026-10-28',
-          createdAt: '2026-10-28',
-          updatedAt: '2026-10-28',
-        },
-      ]);
+      vi.spyOn(successionReviews, 'fetchSuccessionReviews').mockResolvedValue([]);
 
       vi.spyOn(successionApi, 'getLatestOverallScores').mockResolvedValue(
         new Map([
           ['emp-1', { overallScore: 4.8, adjectival: 'Outstanding', period: '2025 H2', cycleId: 1 }],
-          ['emp-2', { overallScore: 4.0, adjectival: 'Very Satisfactory', period: '2025 H2', cycleId: 1 }],
+          ['emp-2', { overallScore: 4.2, adjectival: 'Very Satisfactory', period: '2025 H2', cycleId: 1 }],
         ]),
       );
 
@@ -184,6 +159,13 @@ describe('successionPipelineV2', () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({ single: mockSinglePos }),
+            }),
+          };
+        }
+        if (table === 'departments') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ single: mockSingleDept }),
             }),
           };
         }
@@ -197,7 +179,9 @@ describe('successionPipelineV2', () => {
         if (table === 'employees') {
           return {
             select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({ data: mockEmps, error: null }),
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockResolvedValue({ data: mockEmps, error: null }),
+              }),
             }),
           };
         }
@@ -214,14 +198,7 @@ describe('successionPipelineV2', () => {
                     is_present: false,
                     position_title: 'IT Staff',
                   },
-                  {
-                    id: 'work-2',
-                    employee_id: 'emp-2',
-                    from_date: '2021-01-01',
-                    to_date: '2024-01-01',
-                    is_present: false,
-                    position_title: 'Computer Operator',
-                  },
+                  // emp-2 has empty work experience records -> tests date_hired tenure fallback
                 ],
                 error: null,
               }),
@@ -236,7 +213,7 @@ describe('successionPipelineV2', () => {
                   {
                     id: 't-1',
                     employee_id: 'emp-1',
-                    training_title: 'Network Admin',
+                    training_title: 'Network Administration',
                     number_of_hours: 80,
                     from_date: '2023-01-01',
                     to_date: '2023-01-10',
@@ -245,7 +222,7 @@ describe('successionPipelineV2', () => {
                   {
                     id: 't-2',
                     employee_id: 'emp-2',
-                    training_title: 'Database Admin',
+                    training_title: 'Database Systems',
                     number_of_hours: 50,
                     from_date: '2023-02-01',
                     to_date: '2023-02-10',
@@ -268,12 +245,7 @@ describe('successionPipelineV2', () => {
                     level: 'College',
                     course: 'BS Information Technology',
                   },
-                  {
-                    id: 'ed-2',
-                    employee_id: 'emp-2',
-                    level: 'College',
-                    course: 'BS Business Administration',
-                  },
+                  // emp-2 has empty education rows -> tests profile highest_educational_attainment fallback
                 ],
                 error: null,
               }),
@@ -291,12 +263,7 @@ describe('successionPipelineV2', () => {
                     eligibility_type: 'CSC Professional',
                     validity_date: null,
                   },
-                  {
-                    id: 'el-2',
-                    employee_id: 'emp-2',
-                    eligibility_type: 'CSC Professional',
-                    validity_date: null,
-                  },
+                  // emp-2 has empty eligibility rows -> tests profile eligibility fallback
                 ],
                 error: null,
               }),
@@ -321,15 +288,19 @@ describe('successionPipelineV2', () => {
       const pool = await fetchSuccessionPoolV2('pos-1', '2026-10-28');
       expect(pool.positionId).toBe('pos-1');
 
-      // emp-1 has complete reviews and meets minimums -> ranked
-      expect(pool.ranked.length).toBe(1);
+      // Incumbent, same-title peer, and probationary staff were excluded during discovery
+      // emp-1 and emp-2 meet all minimum requirements and are ranked
+      expect(pool.ranked.length).toBe(2);
       expect(pool.ranked[0].candidate.employeeId).toBe('emp-1');
       expect(pool.ranked[0].rank).toBe(1);
       expect(pool.ranked[0].total).toBeGreaterThan(0);
 
-      // emp-2 has unreviewed evidence -> needsReview
-      expect(pool.needsReview.length).toBe(1);
-      expect(pool.needsReview[0].candidate.employeeId).toBe('emp-2');
+      expect(pool.ranked[1].candidate.employeeId).toBe('emp-2');
+      expect(pool.ranked[1].rank).toBe(2);
+      expect(pool.ranked[1].total).toBeGreaterThan(0);
+
+      // Automated bypass means candidates are not stuck in needsReview
+      expect(pool.needsReview.length).toBe(0);
       expect(pool.configurationNeeded.length).toBe(0);
       expect(pool.excluded.length).toBe(0);
     });
@@ -356,14 +327,23 @@ describe('successionPipelineV2', () => {
             }),
           };
         }
+        if (table === 'departments') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { id: 'dept-1', name: 'IT' } }) }),
+            }),
+          };
+        }
         if (table === 'succession_candidates') {
           return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: [] }) }) };
         }
         if (table === 'employees') {
           return {
             select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({
-                data: [{ id: 'emp-1', first_name: 'Ana', last_name: 'Cruz' }],
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockResolvedValue({
+                  data: [{ id: 'emp-1', first_name: 'Ana', last_name: 'Cruz', employment_status: 'Regular' }],
+                }),
               }),
             }),
           };

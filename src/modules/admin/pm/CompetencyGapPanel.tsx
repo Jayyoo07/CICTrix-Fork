@@ -3,16 +3,16 @@
  * Ratings so both portals show the same gap breakdown + AI summary.
  *
  * The "Assessment Summary" is generated from the employee's competency breakdown
- * (possessed vs required proficiency from v_competency_gap_analysis). It reads
- * as a narrative explaining where the employee lacks; swap summarizeGaps() for a
- * live LLM call if/when one is wired up — the inputs are already assembled here.
+ * (possessed vs required proficiency from v_competency_gap_analysis or sorSemesterSource).
+ * It reads as a narrative explaining where the employee lacks.
  */
 
-import { AlertCircle, CheckCircle2, ChevronDown, MinusCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, MinusCircle, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { IPCRRatingRecord } from './SummaryOfRatings';
+import type { IPCRRatingRecord, CompetencyAssessmentState } from './SummaryOfRatings';
 import { supabase } from '../../../lib/supabase';
 import { getCompetencyTargetTrace, type CompetencyTargetTrace } from '../../../lib/api/competencyTargetTrace';
+import { retryCompetencyAssessment } from '../../../lib/api/sorSemesterSource';
 
 type Comp = {
   name: string;
@@ -71,14 +71,47 @@ export function summarizeGaps(record: IPCRRatingRecord): string {
   return `${who}, ${record.position}, shows a development need in ${gaps.length} competenc${gaps.length === 1 ? 'y' : 'ies'}: ${list}.${strongClause}${unconfiguredClause}${pendingClause} Recommended action: targeted training on ${gaps.map((g) => g.name).join(', ')} to raise ${gaps.length === 1 ? 'it' : 'them'} to the required level.`;
 }
 
-export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => {
+export interface CompetencyGapPanelProps {
+  record: IPCRRatingRecord;
+  onRetryAssessment?: (record: IPCRRatingRecord) => void | Promise<void>;
+}
+
+export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapPanelProps) => {
   const comps = (record.competencies ?? []) as Comp[];
   const [recommendations, setRecommendations] = useState<string | null>(null);
   const [loadingRec, setLoadingRec] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState<CompetencyAssessmentState | null>(null);
+
+  const rawState = localStatus ?? record.assessmentState ?? record.assessmentStatus;
+
+  // Derive explicit assessment state (Step 9):
+  // 1. "pending" / "running" -> "Analysis pending"
+  // 2. "failed" -> "Analysis failed"
+  // 3. "never_assessed" or no competencies -> "Never assessed"
+  // 4. "complete" -> render normal breakdown (with "Required level not configured" for unconfigured position)
+  let effectiveState: CompetencyAssessmentState;
+  if (rawState === 'pending' || rawState === 'running') {
+    effectiveState = 'pending';
+  } else if (rawState === 'failed') {
+    effectiveState = 'failed';
+  } else if (rawState === 'never_assessed' || rawState === 'unassessed' || comps.length === 0) {
+    effectiveState = 'never_assessed';
+  } else if (rawState === 'complete') {
+    effectiveState = 'complete';
+  } else if (comps.length > 0 && comps.every((c) => c.possessedAvailable === false)) {
+    effectiveState = 'pending';
+  } else {
+    effectiveState = 'complete';
+  }
 
   useEffect(() => {
     let active = true;
+    if (effectiveState !== 'complete') {
+      return;
+    }
     const fetchRecommendations = async () => {
       setLoadingRec(true);
       try {
@@ -108,16 +141,98 @@ export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => 
     return () => {
       active = false;
     };
-  }, [record.id]);
+  }, [record.id, effectiveState]);
 
-  if (comps.length === 0) {
+  const handleRetry = async () => {
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      if (onRetryAssessment) {
+        await onRetryAssessment(record);
+        setLocalStatus('pending');
+      } else if (record.cycleId) {
+        const res = await retryCompetencyAssessment(record.id, record.cycleId);
+        if (res.success) {
+          setLocalStatus('pending');
+        } else {
+          setRetryError(res.error ?? 'Retry failed');
+        }
+      } else {
+        setLocalStatus('pending');
+      }
+    } catch (err: any) {
+      setRetryError(err?.message ?? 'Failed to retry assessment');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  // State 1: Analysis pending
+  if (effectiveState === 'pending') {
     return (
-      <p className="text-xs text-slate-400">
-        No competency assessment has been recorded for this employee yet, so there is no
-        per-competency breakdown. The rating above is the average of the IPCR target scores.
-      </p>
+      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4" data-testid="assessment-pending">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 animate-spin text-amber-600" />
+          <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+            Analysis pending
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-amber-800">
+          Competency evaluation is currently queued or in progress for this semester. Scores will be published once analysis completes.
+        </p>
+      </div>
     );
   }
+
+  // State 2: Analysis failed (with Retry assessment trigger)
+  if (effectiveState === 'failed') {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4" role="alert" data-testid="assessment-failed">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-rose-600" />
+            <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
+              Analysis failed
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            disabled={retrying}
+            className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50 transition disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${retrying ? 'animate-spin' : ''}`} />
+            {retrying ? 'Retrying…' : 'Retry assessment'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-rose-800">
+          Competency analysis encountered an error for this record. Click &ldquo;Retry assessment&rdquo; to re-queue the evaluation.
+        </p>
+        {retryError && (
+          <p className="mt-1 text-xs text-rose-600">{retryError}</p>
+        )}
+      </div>
+    );
+  }
+
+  // State 3: Never assessed (distinguished from 0 score)
+  if (effectiveState === 'never_assessed') {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4" data-testid="never-assessed">
+        <div className="flex items-center gap-2">
+          <MinusCircle className="h-4 w-4 text-slate-400" />
+          <span className="inline-flex items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+            Never assessed
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-slate-600">
+          No competency assessment has been run for this employee for this period. This is distinct from a zero score. The rating shown above is the official IPCR final score.
+        </p>
+      </div>
+    );
+  }
+
+  // State 4: Complete - shows competency breakdown
   const gapCount = comps.filter((c) => c.isGap).length;
 
   return (
@@ -180,7 +295,7 @@ export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => 
                   <div>
                     <span className="block text-[10px] uppercase tracking-wider text-slate-500">Required</span>
                     {comp.required == null ? (
-                      <span className="text-xs font-semibold text-slate-400">Not configured</span>
+                      <span className="text-xs font-semibold text-slate-400">Required level not configured</span>
                     ) : (
                       <span className="text-sm font-semibold text-slate-700">{comp.required.toFixed(2)}</span>
                     )}
@@ -240,10 +355,19 @@ const TraceDetail = ({
     let active = true;
     setLoading(true);
     getCompetencyTargetTrace({ employeeNumber, competencyName, cycleId })
-      .then((t) => { if (active) setTrace(t); })
-      .catch((e) => { console.error('trace error:', e); if (active) setTrace(null); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .then((t) => {
+        if (active) setTrace(t);
+      })
+      .catch((e) => {
+        console.error('trace error:', e);
+        if (active) setTrace(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [employeeNumber, competencyName, cycleId]);
 
   if (loading) {
@@ -262,7 +386,7 @@ const TraceDetail = ({
         <p className="mt-0.5 text-sm text-slate-700">
           {trace?.position ? `${trace.position} — ` : ''}{competencyName} — Required:{' '}
           {card.required == null
-            ? 'not configured for this position'
+            ? 'Required level not configured for this position'
             : trace?.requiredLevel
               ? `${trace.requiredLevel} (${card.required.toFixed(2)})`
               : card.required.toFixed(2)}
@@ -280,9 +404,6 @@ const TraceDetail = ({
         ) : (
           <ul className="mt-1 space-y-2">
             {targets.map((t, i) => {
-              // The individual IPCR rating for this target. When the Q/E/T detail
-              // isn't populated but this is the sole mapped target, Possessed comes
-              // directly from it, so show that number rather than a blank dash.
               const targetScore =
                 t.individualScore != null
                   ? t.individualScore

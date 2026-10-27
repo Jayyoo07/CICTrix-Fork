@@ -1,7 +1,7 @@
 ---
 title: Feed PDS education into succession readiness
 date: 2026-10-27
-status: Done
+status: In Progress
 summary: Succession reads `employee_education` directly, the way it already reads `employee_eligibility`, so an employee's PDS education edit changes their succession gate and education score. No migration, no backfill, no writes.
 # spec: none. Design follows the eligibility precedent in src/lib/api/succession.ts:1548.
 ---

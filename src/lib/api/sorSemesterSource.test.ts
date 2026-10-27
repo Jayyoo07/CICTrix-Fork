@@ -40,6 +40,10 @@ vi.mock('../supabase', () => {
           inFilters.push([col, vals]);
           return queryBuilder;
         }),
+        ilike: vi.fn((col: string, val: any) => {
+          eqFilters.push([col, val]);
+          return queryBuilder;
+        }),
         order: vi.fn(() => queryBuilder),
         update: vi.fn((_payload: any) => queryBuilder),
         maybeSingle: vi.fn(async () => {
@@ -91,7 +95,11 @@ vi.mock('../supabase', () => {
 
         return tableData.filter((row) => {
           for (const [col, val] of eqFilters) {
-            if (row[col] !== val) return false;
+            if (typeof row[col] === 'string' && typeof val === 'string') {
+              if (row[col].toLowerCase() !== val.toLowerCase()) return false;
+            } else if (row[col] !== val) {
+              return false;
+            }
           }
           for (const [col, vals] of inFilters) {
             if (!vals.includes(row[col])) return false;
@@ -474,6 +482,83 @@ describe('sorSemesterSource', () => {
 
       const records = await getPublishedRecords('Empty Office', 6);
       expect(records).toEqual([]);
+    });
+
+    it('matches positions with parenthetical functional titles against base requirements', async () => {
+      mockDb.standards = [
+        { id: 1, competency_name: 'Knowledge of Local Governance', training_stream: 'LEADERSHIP' },
+        { id: 5, competency_name: 'Fiscal Management/Budgeting for LGU', training_stream: 'TECHNICAL' },
+      ];
+      mockDb.positionRequirements = [
+        { position_title: 'Accountant II', competency_id: 1, proficiency_level: 'Basic' },
+        { position_title: 'Accountant II', competency_id: 5, proficiency_level: 'Intermediate' },
+      ];
+      mockDb.roster = [
+        { cycle_id: 6, employee_id: 'emp-alyssa', department_name: 'Office of The City Accountant', owes_ipcr: true },
+      ];
+      mockDb.employees = [
+        {
+          id: 'emp-alyssa',
+          employee_id: 'EMP-2026-114',
+          full_name: 'Alyssa Marie Fernandez',
+          current_position: 'Accountant II (Pre-Audit of Transactions)',
+          department: 'Office of The City Accountant',
+        },
+      ];
+      mockDb.evaluations = [
+        { cycle_id: 6, employee_id: 'emp-alyssa', final_score: 4.33, status: 'Approved' },
+      ];
+      mockDb.employeeCompetencies = [];
+
+      const records = await getPublishedRecords('Office of The City Accountant', 6);
+
+      expect(records).toHaveLength(1);
+      expect(records[0].numericalRating).toBe(4.33);
+      expect(records[0].competencies).toHaveLength(2);
+
+      const gov = records[0].competencies?.find((c) => c.name === 'Knowledge of Local Governance');
+      expect(gov).toBeDefined();
+      expect(gov?.required).toBe(3);
+      expect(gov?.stream).toBe('LEADERSHIP');
+      expect(gov?.possessedAvailable).toBe(false);
+
+      const fiscal = records[0].competencies?.find((c) => c.name === 'Fiscal Management/Budgeting for LGU');
+      expect(fiscal).toBeDefined();
+      expect(fiscal?.required).toBe(4);
+      expect(fiscal?.stream).toBe('TECHNICAL');
+      expect(fiscal?.possessedAvailable).toBe(false);
+    });
+
+    it('populates framework competencies for roles not yet in the Competency Map', async () => {
+      mockDb.standards = [
+        { id: 1, competency_name: 'Knowledge of Local Governance', training_stream: 'LEADERSHIP' },
+        { id: 3, competency_name: 'Community Engagement Skills', training_stream: 'EMPLOYEE DEVELOPMENT' },
+      ];
+      mockDb.positionRequirements = []; // No requirements for this role
+      mockDb.roster = [
+        { cycle_id: 6, employee_id: 'emp-sw', department_name: 'Office of The City Social Welfare and Development Officer', owes_ipcr: true },
+      ];
+      mockDb.employees = [
+        {
+          id: 'emp-sw',
+          employee_id: 'EMP-SW-01',
+          full_name: 'Maria Santos',
+          current_position: 'Social Welfare Officer II',
+          department: 'Office of The City Social Welfare and Development Officer',
+        },
+      ];
+      mockDb.evaluations = [
+        { cycle_id: 6, employee_id: 'emp-sw', final_score: 4.12, status: 'Approved' },
+      ];
+      mockDb.employeeCompetencies = [];
+
+      const records = await getPublishedRecords('Office of The City Social Welfare and Development Officer', 6);
+
+      expect(records).toHaveLength(1);
+      expect(records[0].competencies).toHaveLength(2);
+      expect(records[0].competencies?.[0].required).toBeNull();
+      expect(records[0].competencies?.[0].requiredAvailable).toBe(false);
+      expect(records[0].competencies?.[0].possessedAvailable).toBe(false);
     });
   });
 });

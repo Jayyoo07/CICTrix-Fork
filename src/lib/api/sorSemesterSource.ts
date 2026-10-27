@@ -17,7 +17,9 @@ import { listCompetencyStandards, PROFICIENCY_NUMERIC, type ProficiencyLevel } f
 
 const supabase = supabaseClient as any;
 
-const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
+export const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
+export const normComp = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+export const cleanPosition = (pos: unknown) => norm(String(pos ?? '').replace(/\s*\([^)]*\)/g, '').trim());
 
 export type CompetencyAssessmentState =
   | 'pending'
@@ -29,6 +31,7 @@ export type CompetencyAssessmentState =
 
 export interface IPCRRatingRecord {
   id: string;
+  employeeUuid?: string;
   department: string;
   name: string;
   position: string;
@@ -43,6 +46,7 @@ export interface IPCRRatingRecord {
     requiredAvailable?: boolean;
     isGap: boolean;
     possessedAvailable?: boolean;
+    stream?: string;
   }[];
   cycleId?: number | null;
   assessmentState?: CompetencyAssessmentState;
@@ -71,10 +75,14 @@ export interface DepartmentSourceSemester {
   assessmentCompleteCount: number;
 }
 
-// position (lowercased) -> competency name (lowercased) -> { display name, required }
-type RequiredMap = Map<string, Map<string, { name: string; required: number }>>;
+// position (lowercased) -> competency name (alphanumeric lowercased) -> { display name, required, stream }
+type RequiredMap = Map<string, Map<string, { name: string; required: number; stream: string }>>;
 
-async function buildRequiredMap(): Promise<RequiredMap> {
+async function buildRequiredMap(): Promise<{
+  requiredMap: RequiredMap;
+  allStandards: { name: string; stream: string }[];
+  streamByName: Map<string, string>;
+}> {
   const [reqRes, stdRes] = await Promise.all([
     supabase
       .from('position_competency_requirements')
@@ -82,22 +90,42 @@ async function buildRequiredMap(): Promise<RequiredMap> {
     listCompetencyStandards(),
   ]);
 
-  const nameById = new Map<number, string>();
+  const standardById = new Map<number, { name: string; stream: string }>();
+  const streamByName = new Map<string, string>();
+  const allStandards: { name: string; stream: string }[] = [];
+
   if (stdRes.ok && stdRes.data) {
-    for (const s of stdRes.data) nameById.set(Number(s.id), s.competency_name);
+    for (const s of stdRes.data) {
+      const stream = s.training_stream ?? 'TECHNICAL';
+      const info = { name: s.competency_name, stream };
+      standardById.set(Number(s.id), info);
+      streamByName.set(normComp(s.competency_name), stream);
+      allStandards.push(info);
+    }
   }
 
   const map: RequiredMap = new Map();
   for (const r of (reqRes.data ?? []) as any[]) {
-    const position = norm(r.position_title);
-    const compName = nameById.get(Number(r.competency_id));
-    if (!position || !compName) continue;
+    const rawPos = norm(r.position_title);
+    const cleanedPos = cleanPosition(r.position_title);
+    const compInfo = standardById.get(Number(r.competency_id));
+    if (!compInfo) continue;
     const required = PROFICIENCY_NUMERIC[r.proficiency_level as ProficiencyLevel];
     if (!required) continue;
-    if (!map.has(position)) map.set(position, new Map());
-    map.get(position)!.set(norm(compName), { name: compName, required });
+
+    const entry = { name: compInfo.name, required, stream: compInfo.stream };
+    const compKey = normComp(compInfo.name);
+
+    if (rawPos) {
+      if (!map.has(rawPos)) map.set(rawPos, new Map());
+      map.get(rawPos)!.set(compKey, entry);
+    }
+    if (cleanedPos && cleanedPos !== rawPos) {
+      if (!map.has(cleanedPos)) map.set(cleanedPos, new Map());
+      map.get(cleanedPos)!.set(compKey, entry);
+    }
   }
-  return map;
+  return { requiredMap: map, allStandards, streamByName };
 }
 
 /**
@@ -167,7 +195,7 @@ export async function getPublishedRecords(
       .from('ipcr_semester_roster')
       .select('employee_id, department_name, owes_ipcr')
       .eq('cycle_id', cycleId)
-      .eq('department_name', departmentName)
+      .ilike('department_name', departmentName)
       .eq('owes_ipcr', true);
 
     if (rosterErr) {
@@ -202,7 +230,7 @@ export async function getPublishedRecords(
 
     // 2. Fetch parallel dependent data scoped to eligible employees
     const [
-      requiredMap,
+      { requiredMap, allStandards, streamByName },
       { data: cycleRow },
       { data: evalRows },
       { data: possessedRows },
@@ -218,7 +246,7 @@ export async function getPublishedRecords(
         .maybeSingle(),
       supabase
         .from('performance_evaluations')
-        .select('employee_id, final_score, remarks, status')
+        .select('employee_id, final_score, status, rejection_reason')
         .eq('cycle_id', cycleId)
         .in('employee_id', empIdArray),
       supabase
@@ -250,7 +278,7 @@ export async function getPublishedRecords(
     for (const r of (evalRows ?? []) as any[]) {
       evalByEmp.set(String(r.employee_id), {
         finalScore: r.final_score != null ? Number(r.final_score) : null,
-        remarks: r.remarks ?? '',
+        remarks: r.rejection_reason ?? '',
         status: r.status ?? '',
       });
     }
@@ -266,6 +294,7 @@ export async function getPublishedRecords(
       const level = Number(r.proficiency_level);
       if (!empId || !name || !Number.isFinite(level)) continue;
       if (!possessedByEmp.has(empId)) possessedByEmp.set(empId, new Map());
+      possessedByEmp.get(empId)!.set(normComp(name), { name: display, level });
       possessedByEmp.get(empId)!.set(name, { name: display, level });
     }
 
@@ -295,8 +324,9 @@ export async function getPublishedRecords(
     for (const empId of empIdArray) {
       const emp = empById.get(empId);
       const evalData = evalByEmp.get(empId);
-      const positionKey = norm(emp?.current_position);
-      const positionReqs = requiredMap.get(positionKey);
+      const positionRaw = norm(emp?.current_position);
+      const positionClean = cleanPosition(emp?.current_position);
+      const positionReqs = requiredMap.get(positionRaw) ?? requiredMap.get(positionClean);
       const possessed = possessedByEmp.get(empId) ?? new Map<string, { name: string; level: number }>();
 
       // Assessment state: from queue run first, else completed if summary or possessed exists, else unassessed
@@ -307,19 +337,35 @@ export async function getPublishedRecords(
         assessmentState = 'complete';
       }
 
-      // Union Competency Map requirements with assessed competencies
-      const names = new Map<string, { name: string; required: number | null }>();
-      for (const req of positionReqs?.values() ?? []) {
-        names.set(norm(req.name), { name: req.name, required: req.required });
+      // Union Competency Map requirements with assessed competencies, or fallback to framework standards for unconfigured positions
+      const names = new Map<string, { name: string; required: number | null; stream?: string }>();
+
+      if (positionReqs && positionReqs.size > 0) {
+        for (const req of positionReqs.values()) {
+          names.set(normComp(req.name), { name: req.name, required: req.required, stream: req.stream });
+        }
+      } else {
+        // Position not yet in Competency Map: supply framework standards with unconfigured requirement
+        for (const std of allStandards) {
+          names.set(normComp(std.name), { name: std.name, required: null, stream: std.stream });
+        }
       }
+
+      // Union with any possessed competencies (e.g. from AI assessment run)
       for (const [key, hit] of possessed.entries()) {
-        if (!names.has(key)) {
-          names.set(key, { name: hit.name, required: null });
+        const compKey = normComp(key);
+        if (!names.has(compKey)) {
+          names.set(compKey, {
+            name: hit.name,
+            required: null,
+            stream: streamByName.get(compKey) ?? 'TECHNICAL',
+          });
         }
       }
 
       const competencies = [...names.values()].map((req) => {
-        const hit = possessed.get(norm(req.name));
+        const compKey = normComp(req.name);
+        const hit = possessed.get(compKey) ?? possessed.get(norm(req.name));
         const available = hit != null && Number.isFinite(hit.level);
         const possessedVal = available ? hit.level : 0;
         const requiredVal = req.required;
@@ -333,6 +379,7 @@ export async function getPublishedRecords(
           requiredAvailable,
           isGap,
           possessedAvailable: available,
+          stream: req.stream ?? streamByName.get(compKey) ?? 'TECHNICAL',
         };
       });
 
@@ -348,6 +395,7 @@ export async function getPublishedRecords(
 
       records.push({
         id: employeeNumber,
+        employeeUuid: empId,
         department: empDepartment,
         name: String(emp?.full_name ?? '').trim() || 'Unknown employee',
         position: emp?.current_position ?? '—',
@@ -378,13 +426,26 @@ export async function retryCompetencyAssessment(
   cycleId: number,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    let targetUuid = employeeId;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId);
+    if (!isUuid) {
+      const { data: emp } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('employee_id', employeeId)
+        .maybeSingle();
+      if (emp?.id) {
+        targetUuid = emp.id;
+      }
+    }
+
     const { error } = await supabase
       .from('competency_assessment_runs')
       .update({
         status: 'pending',
         last_error: null,
       })
-      .eq('employee_id', employeeId)
+      .eq('employee_id', targetUuid)
       .eq('cycle_id', cycleId)
       .eq('stage', 'assessing');
 

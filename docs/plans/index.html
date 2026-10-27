@@ -62,13 +62,23 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">97 plans &middot; 79 done</p>
+    <p class="counts">98 plans &middot; 79 done</p>
 
     <section>
       <h2>Plans</h2>
       <table>
         <thead><tr><th>Date</th><th>Plan</th><th>Status</th></tr></thead>
         <tbody>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-succession-v2-auto-fallback.md">Succession Planning V2 Automated Fallbacks &amp; Review Bypass</a><p class="summary">Bypass manual evidence review gating in Succession V2 and add multi-tier database fallbacks (department name resolution, date_hired tenure, profile education and eligibility) so qualified successors load and rank immediately.</p></td>
+        <td class="status"><span class="badge badge-neutral">Draft</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-interviewer-scheduled-applicants-only.md">The interviewer portal shows only applicants who were scheduled</a><p class="summary">The Assigned job postings table counted every applicant whose position matched, not the ones scheduled for an interview, so a posting read 6 while the list behind it held 1. Count and list both filter on an interview schedule now, and the applicant dedupe stops merging distinct people who share a plantilla item number. The oral assessment table's SCORE column no longer stretches to its longest option label and squeeze REMARKS off the row.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
+      </tr>
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-fix-sor-publication-roster.md">Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a><p class="summary">Fix PostgreSQL ambiguous column error in evaluate_sor_publication, align roster snapshot eligibility with semester start date, and update UI completion denominator so Summary of Ratings accurately displays completed IPCRs for each department.</p></td>
@@ -80,14 +90,9 @@
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
-        <td class="date">2026-10-28</td>
-        <td><a href="2026-10-28-employee-interviewer-login-ui.md">Align Employee and Interviewer login pages</a><p class="summary">Match the HRIS shared sign-in button and apply the design identity to both login pages without changing authentication or layouts.</p></td>
-        <td class="status"><span class="badge badge-primary">Approved</span></td>
-      </tr>
-      <tr>
         <td class="date">2026-10-27</td>
-        <td><a href="2026-10-27-succession-scoring-v2.md">Implement reviewed position-specific succession scoring</a><p class="summary">Build and verify the agreed fixed-weight scoring model separately from current results, then integrate position-specific relevance reviews and qualification visibility after the authorization release gate is satisfied.</p></td>
-        <td class="status"><span class="badge badge-danger">Blocked</span></td>
+        <td><a href="2026-10-27-succession-scoring-v2.md">Implement reviewed position-specific succession scoring</a><p class="summary">Build and verify the agreed fixed-weight scoring model separately from current results, then integrate position-specific relevance reviews and qualification visibility with security Phase 4A maintained as a production release gate.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-27</td>
@@ -565,12 +570,19 @@
         <tbody>
       <tr>
         <td class="date">2026-10-28</td>
-        <td><a href="../session-summaries/2026-10-27-succession-scoring-v2-summary.md">Stage succession V2 engine; defer integration and final review</a><p class="summary">Added the fixed-weight evaluator and 159 tests, corrected two review findings, and passed 926 full-suite tests. Independent fix re-review hit a provider limit; security Phase 4A and application integration remain deferred.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
+        <td><a href="../session-summaries/2026-10-28-succession-scoring-v2-integration-summary.md">Integrate Succession Scoring V2 and Evidence Review Workflow</a><p class="summary">Completed Tasks 2–4 of Succession Scoring V2. Added evidence reviews schema, review service layer with snapshot staleness detection, end-to-end V2 candidate evaluation and ranking pipeline, and candidate review modal integrated into SuccessionPlanningPage. All 989 tests, lint, and build verified locally.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-publication-roster-summary.md">Session Summary: Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-competency-blocks-and-ratings-summary.md">Session Summary: Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-27-succession-scoring-v2-summary.md">Stage succession V2 engine; defer integration and final review</a><p class="summary">Added the fixed-weight evaluator and 159 tests, corrected two review findings, and passed 926 full-suite tests. Independent fix re-review hit a provider limit; security Phase 4A and application integration remain deferred.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-27</td>
@@ -579,6 +591,9 @@
       <tr>
         <td class="date">2026-10-27</td>
         <td><a href="../session-summaries/2026-10-27-succession-security-scope-summary.md">Add succession access controls to security remediation</a><p class="summary">Documented the focused security prerequisite for reviewed succession scoring, without executing remediation or changing live permissions.</p><p class="meta">Plan: <a href="2026-10-16-security-remediation.md">2026-10-16-security-remediation.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
         <td><a href="../session-summaries/2026-10-27-sor-previous-semester-competency-summary.md">Session Summary: Publish Summary of Ratings from Previous Completed Semester</a></td>
       </tr>
       <tr>

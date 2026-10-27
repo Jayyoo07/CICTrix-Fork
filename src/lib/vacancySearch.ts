@@ -37,6 +37,32 @@ export const positionStatus = (job: JobPosting, now = new Date()): PositionStatu
 export const vacantPlantillaSlots = (job: JobPosting) =>
   (job.plantillaSlots ?? []).filter((slot) => slot.status !== 'filled');
 
+/**
+ * At least one plantilla still taking applications.
+ *
+ * A position with no slot rows is not a judgement: the mapper synthesises a
+ * slot for a posting whose slots were never written, and a pre-migration read
+ * returns none at all. Only an explicit set of slots, none of them open, means
+ * there is nothing left to apply for.
+ */
+export const hasOpenPlantilla = (job: JobPosting): boolean => {
+  const slots = job.plantillaSlots ?? [];
+  return slots.length === 0 || slots.some((slot) => slot.status === 'open');
+};
+
+/**
+ * What the public vacancy table lists: an open vacancy that still has a
+ * plantilla to fill.
+ *
+ * Job Vacancies used to ask only `isOpenVacancy` while the public page also
+ * required an open plantilla, so a position whose every plantilla was filled
+ * read as Open to RSP and was invisible to applicants
+ * (docs/plans/2026-10-27-open-vacancy-with-no-vacant-plantilla.md). Both sides
+ * ask this now.
+ */
+export const isAdvertised = (job: JobPosting, now = new Date()): boolean =>
+  isOpenVacancy(job, now) && hasOpenPlantilla(job);
+
 /** Whether a position can be opened as a vacancy right now. */
 export type VacancyEligibility = 'available' | 'open';
 
@@ -100,6 +126,9 @@ export type VacancyTone = 'success' | 'warning' | 'neutral';
 
 export const vacancyStatus = (job: JobPosting, now = new Date()): { label: string; tone: VacancyTone } => {
   if (!isOpenVacancy(job, now)) return { label: 'Closed', tone: 'neutral' };
+  // Open, but every plantilla is held by a hire. Saying "Open" here sent RSP
+  // looking for the position on a public page that was right to hide it.
+  if (!hasOpenPlantilla(job)) return { label: 'Fully filled', tone: 'neutral' };
   const days = daysUntilDeadline(job.applicationDeadline, now);
   if (days !== null && days <= CLOSING_SOON_DAYS) return { label: 'Closing soon', tone: 'warning' };
   return { label: 'Open', tone: 'success' };

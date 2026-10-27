@@ -313,7 +313,10 @@ export const ForHiringPage = () => {
           try {
             const { data, error } = await (supabase as any)
               .from('applicants')
-              .select('id,first_name,last_name,middle_name,full_name,email,position,office,department,status,qualification_score,total_score');
+              // Only columns public.applicants has: naming a missing one makes
+              // PostgREST reject the whole query. The row mapping below already
+              // treats full_name, department and the scores as optional.
+              .select('id,first_name,last_name,middle_name,email,position,office,status');
             if (error) throw error;
             if (Array.isArray(data)) remoteData.push(...data);
           } catch (error) {

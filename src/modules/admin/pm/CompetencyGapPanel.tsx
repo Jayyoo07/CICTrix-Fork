@@ -7,7 +7,7 @@
  * It reads as a narrative explaining where the employee lacks.
  */
 
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, MinusCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, MinusCircle, RefreshCw, Shield, Cpu, GraduationCap, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { IPCRRatingRecord, CompetencyAssessmentState } from './SummaryOfRatings';
 import { supabase } from '../../../lib/supabase';
@@ -21,7 +21,74 @@ type Comp = {
   required: number | null;
   isGap: boolean;
   possessedAvailable?: boolean;
+  stream?: string;
 };
+
+export type TrainingStreamKey = 'LEADERSHIP' | 'TECHNICAL' | 'EMPLOYEE DEVELOPMENT' | 'CULTURAL TRANSFORMATION';
+
+const normComp = (s: unknown) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const STREAM_BY_NAME: Record<string, TrainingStreamKey> = {
+  knowledgeoflocalgovernance: 'LEADERSHIP',
+  publicadministrationprinciples: 'LEADERSHIP',
+  projectmanagementinapublicsetting: 'LEADERSHIP',
+  fiscalmanagementbudgetingforlgu: 'TECHNICAL',
+  disasterriskreductionandmanagement: 'TECHNICAL',
+  digitalliteracyforgovernmentservices: 'TECHNICAL',
+  technicalwritingforgovernmentdocuments: 'TECHNICAL',
+  dataandrecordsmanagementandorganization: 'TECHNICAL',
+  communityengagementskills: 'EMPLOYEE DEVELOPMENT',
+  publiccommunicationskills: 'EMPLOYEE DEVELOPMENT',
+  transparencyandaccountabilitypractices: 'CULTURAL TRANSFORMATION',
+  ethicalconductandpublicservicestandards: 'CULTURAL TRANSFORMATION',
+};
+
+const STREAM_CONFIG: {
+  key: TrainingStreamKey;
+  title: string;
+  icon: React.ElementType;
+  badgeClass: string;
+  headerBorder: string;
+  bgTint: string;
+  description: string;
+}[] = [
+  {
+    key: 'LEADERSHIP',
+    title: 'Leadership',
+    icon: Shield,
+    badgeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    headerBorder: 'border-indigo-200',
+    bgTint: 'bg-indigo-50/20',
+    description: 'Local governance, public administration principles, and project execution',
+  },
+  {
+    key: 'TECHNICAL',
+    title: 'Technical & Functional',
+    icon: Cpu,
+    badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200',
+    headerBorder: 'border-sky-200',
+    bgTint: 'bg-sky-50/20',
+    description: 'Fiscal management, disaster risk reduction, records, and digital systems',
+  },
+  {
+    key: 'EMPLOYEE DEVELOPMENT',
+    title: 'Employee Development',
+    icon: GraduationCap,
+    badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    headerBorder: 'border-emerald-200',
+    bgTint: 'bg-emerald-50/20',
+    description: 'Community engagement and public communication skills',
+  },
+  {
+    key: 'CULTURAL TRANSFORMATION',
+    title: 'Cultural Transformation',
+    icon: Sparkles,
+    badgeClass: 'bg-amber-50 text-amber-700 border border-amber-200',
+    headerBorder: 'border-amber-200',
+    bgTint: 'bg-amber-50/20',
+    description: 'Transparency, accountability, and ethical public service standards',
+  },
+];
 
 /** A narrative summary of where the employee lacks, from their competency gaps. */
 export function summarizeGaps(record: IPCRRatingRecord): string {
@@ -151,7 +218,7 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
         await onRetryAssessment(record);
         setLocalStatus('pending');
       } else if (record.cycleId) {
-        const res = await retryCompetencyAssessment(record.id, record.cycleId);
+        const res = await retryCompetencyAssessment(record.employeeUuid ?? record.id, record.cycleId);
         if (res.success) {
           setLocalStatus('pending');
         } else {
@@ -167,56 +234,54 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
     }
   };
 
-  // State 1: Analysis pending
-  if (effectiveState === 'pending') {
-    return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4" data-testid="assessment-pending">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 animate-spin text-amber-600" />
-          <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-            Analysis pending
-          </span>
-        </div>
-        <p className="mt-2 text-xs text-amber-800">
-          Competency evaluation is currently queued or in progress for this semester. Scores will be published once analysis completes.
-        </p>
-      </div>
-    );
-  }
-
-  // State 2: Analysis failed (with Retry assessment trigger)
-  if (effectiveState === 'failed') {
-    return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4" role="alert" data-testid="assessment-failed">
-        <div className="flex items-center justify-between">
+  // When no competencies exist whatsoever, render explicit status box
+  if (comps.length === 0) {
+    if (effectiveState === 'pending') {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4" data-testid="assessment-pending">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-rose-600" />
-            <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
-              Analysis failed
+            <Clock className="h-4 w-4 animate-spin text-amber-600" />
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+              Analysis pending
             </span>
           </div>
-          <button
-            type="button"
-            onClick={handleRetry}
-            disabled={retrying}
-            className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50 transition disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${retrying ? 'animate-spin' : ''}`} />
-            {retrying ? 'Retrying…' : 'Retry assessment'}
-          </button>
+          <p className="mt-2 text-xs text-amber-800">
+            Competency evaluation is currently queued or in progress for this semester. Scores will be published once analysis completes.
+          </p>
         </div>
-        <p className="mt-2 text-xs text-rose-800">
-          Competency analysis encountered an error for this record. Click &ldquo;Retry assessment&rdquo; to re-queue the evaluation.
-        </p>
-        {retryError && (
-          <p className="mt-1 text-xs text-rose-600">{retryError}</p>
-        )}
-      </div>
-    );
-  }
+      );
+    }
 
-  // State 3: Never assessed (distinguished from 0 score)
-  if (effectiveState === 'never_assessed') {
+    if (effectiveState === 'failed') {
+      return (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4" role="alert" data-testid="assessment-failed">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600" />
+              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
+                Analysis failed
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={retrying}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50 transition disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${retrying ? 'animate-spin' : ''}`} />
+              {retrying ? 'Retrying…' : 'Retry assessment'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-rose-800">
+            Competency analysis encountered an error for this record. Click &ldquo;Retry assessment&rdquo; to re-queue the evaluation.
+          </p>
+          {retryError && (
+            <p className="mt-1 text-xs text-rose-600">{retryError}</p>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4" data-testid="never-assessed">
         <div className="flex items-center gap-2">
@@ -232,13 +297,69 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
     );
   }
 
-  // State 4: Complete - shows competency breakdown
   const gapCount = comps.filter((c) => c.isGap).length;
 
   return (
-    <div>
+    <div className="space-y-4">
+      {/* Informational Status Banner when assessment is not complete */}
+      {effectiveState === 'pending' && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3" data-testid="assessment-pending">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 animate-spin text-amber-600" />
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+              Analysis pending
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs text-amber-800">
+            Competency evaluation is currently queued or in progress for this semester. Position requirements are shown below; possessed ratings will populate once analysis completes.
+          </p>
+        </div>
+      )}
+
+      {effectiveState === 'failed' && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3" role="alert" data-testid="assessment-failed">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600" />
+              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
+                Analysis failed
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              disabled={retrying}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50 transition disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${retrying ? 'animate-spin' : ''}`} />
+              {retrying ? 'Retrying…' : 'Retry assessment'}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-rose-800">
+            Competency analysis encountered an error for this record. Click &ldquo;Retry assessment&rdquo; to re-queue evaluation.
+          </p>
+          {retryError && (
+            <p className="mt-1 text-xs text-rose-600">{retryError}</p>
+          )}
+        </div>
+      )}
+
+      {effectiveState === 'never_assessed' && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3" data-testid="never-assessed">
+          <div className="flex items-center gap-2">
+            <MinusCircle className="h-4 w-4 text-slate-400" />
+            <span className="inline-flex items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+              Never assessed
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs text-slate-600">
+            No competency assessment has been run for this employee for this period. Required competencies for this position are displayed below; possessed scores will appear once evaluated.
+          </p>
+        </div>
+      )}
+
       {/* Assessment summary */}
-      <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3">
+      <div className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-3">
         <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
           Assessment Summary
         </p>
@@ -247,13 +368,13 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
 
       {/* Recommended Training */}
       {loadingRec ? (
-        <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 animate-pulse">
+        <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 animate-pulse">
           <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
             Loading Recommended Training...
           </p>
         </div>
       ) : recommendations ? (
-        <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+        <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
             Recommended Training
           </p>
@@ -261,71 +382,147 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
         </div>
       ) : null}
 
-      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-        Competency gap evaluation {gapCount > 0 && <span className="text-rose-600">· {gapCount} gap{gapCount === 1 ? '' : 's'}</span>}
-        <span className="ml-1 font-medium normal-case tracking-normal text-slate-400">· click a competency to see its IPCR source</span>
-      </h4>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {comps.map((comp, i) => {
-          const notAssessed = comp.possessedAvailable === false;
-          const open = selected === i;
-          return (
-            <div key={i} className="contents">
-              <button
-                type="button"
-                onClick={() => setSelected(open ? null : i)}
-                aria-expanded={open}
-                className={`rounded-lg border p-3 text-left transition hover:shadow-sm ${
-                  open ? 'ring-2 ring-indigo-300 ' : ''
-                }${comp.isGap ? 'border-rose-200 bg-rose-50' : notAssessed ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+      {/* Four Training Stream Blocks */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Competency Assessment · 4 Streams {gapCount > 0 && <span className="text-rose-600">· {gapCount} gap{gapCount === 1 ? '' : 's'}</span>}
+          </h4>
+          <span className="text-xs text-slate-400">click a competency card for IPCR source trace</span>
+        </div>
+
+        <div className="space-y-4">
+          {STREAM_CONFIG.map((stream) => {
+            const StreamIcon = stream.icon;
+            const streamComps = comps.filter((c) => {
+              const compStream = (c.stream ? c.stream.toUpperCase() : null) ?? STREAM_BY_NAME[normComp(c.name)] ?? 'TECHNICAL';
+              return compStream === stream.key;
+            });
+
+            const streamGaps = streamComps.filter((c) => c.isGap).length;
+
+            return (
+              <div
+                key={stream.key}
+                className={`rounded-lg border ${stream.headerBorder} ${stream.bgTint} p-3.5 transition-all`}
+                data-testid={`stream-block-${stream.key.toLowerCase().replace(/\s+/g, '-')}`}
               >
-                <div className="mb-2 flex items-start justify-between">
-                  <span className="pr-2 text-xs font-bold leading-tight text-slate-800">{comp.name}</span>
-                  {comp.isGap ? (
-                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
-                  ) : notAssessed ? (
-                    <ChevronDown className={`h-4 w-4 shrink-0 text-amber-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-                  ) : comp.required == null ? (
-                    <MinusCircle className="h-4 w-4 shrink-0 text-slate-400" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                  )}
-                </div>
-                <div className="mt-2 flex items-center gap-4">
-                  <div>
-                    <span className="block text-[10px] uppercase tracking-wider text-slate-500">Required</span>
-                    {comp.required == null ? (
-                      <span className="text-xs font-semibold text-slate-400">Required level not configured</span>
-                    ) : (
-                      <span className="text-sm font-semibold text-slate-700">{comp.required.toFixed(2)}</span>
+                {/* Stream Header */}
+                <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <StreamIcon className="h-4 w-4 text-slate-600" />
+                    <span className="text-xs font-bold text-slate-800">{stream.title}</span>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${stream.badgeClass}`}>
+                      {streamComps.length} {streamComps.length === 1 ? 'competency' : 'competencies'}
+                    </span>
+                    {streamGaps > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                        {streamGaps} gap{streamGaps === 1 ? '' : 's'}
+                      </span>
                     )}
                   </div>
-                  <div>
-                    <span className="block text-[10px] uppercase tracking-wider text-slate-500">Possessed</span>
-                    {notAssessed ? (
-                      <span className="text-xs font-semibold text-amber-600">Not yet assessed</span>
-                    ) : (
-                      <span className={`text-sm font-bold ${comp.isGap ? 'text-rose-600' : 'text-emerald-600'}`}>{comp.possessed.toFixed(2)}</span>
-                    )}
+                  <span className="text-[11px] text-slate-500 italic hidden sm:inline">
+                    {stream.description}
+                  </span>
+                </div>
+
+                {/* Stream Competency Cards */}
+                {streamComps.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-slate-200 bg-white/60 p-3 text-center text-xs text-slate-400">
+                    No specific competencies required for the {record.position} role in this stream.
                   </div>
-                  {comp.isGap && (
-                    <span className="ml-auto inline-flex rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700">Gap</span>
-                  )}
-                </div>
-              </button>
-              {open && (
-                <div className="md:col-span-2 lg:col-span-3">
-                  <TraceDetail
-                    employeeNumber={record.id}
-                    competencyName={comp.name}
-                    cycleId={record.cycleId ?? null}
-                    card={comp}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {streamComps.map((comp) => {
+                      const notAssessed = comp.possessedAvailable === false;
+                      const compIndex = comps.indexOf(comp);
+                      const open = selected === compIndex;
+
+                      return (
+                        <div key={comp.name} className="contents">
+                          <button
+                            type="button"
+                            onClick={() => setSelected(open ? null : compIndex)}
+                            aria-expanded={open}
+                            className={`rounded-lg border p-3 text-left transition hover:shadow-sm ${
+                              open ? 'ring-2 ring-indigo-300 ' : ''
+                            }${
+                              comp.isGap
+                                ? 'border-rose-200 bg-rose-50/90'
+                                : notAssessed
+                                  ? 'border-amber-200 bg-amber-50/70'
+                                  : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="mb-2 flex items-start justify-between">
+                              <span className="pr-2 text-xs font-bold leading-tight text-slate-800">
+                                {comp.name}
+                              </span>
+                              {comp.isGap ? (
+                                <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+                              ) : notAssessed ? (
+                                <ChevronDown className={`h-4 w-4 shrink-0 text-amber-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+                              ) : comp.required == null ? (
+                                <MinusCircle className="h-4 w-4 shrink-0 text-slate-400" />
+                              ) : (
+                                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center gap-4">
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wider text-slate-500">
+                                  Required
+                                </span>
+                                {comp.required == null ? (
+                                  <span className="text-xs font-semibold text-slate-400">
+                                    Required level not configured
+                                  </span>
+                                ) : (
+                                  <span className="text-sm font-semibold text-slate-700">
+                                    {comp.required.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wider text-slate-500">
+                                  Possessed
+                                </span>
+                                {notAssessed ? (
+                                  <span className="text-xs font-semibold text-amber-600">
+                                    Not yet assessed
+                                  </span>
+                                ) : (
+                                  <span className={`text-sm font-bold ${comp.isGap ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {comp.possessed.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
+                              {comp.isGap && (
+                                <span className="ml-auto inline-flex rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700">
+                                  Gap
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          {open && (
+                            <div className="md:col-span-2 lg:col-span-3">
+                              <TraceDetail
+                                employeeNumber={record.employeeUuid ?? record.id}
+                                competencyName={comp.name}
+                                cycleId={record.cycleId ?? null}
+                                card={comp}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

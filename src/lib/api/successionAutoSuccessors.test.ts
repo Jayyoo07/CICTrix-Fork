@@ -166,6 +166,72 @@ describe('evaluateAutoSuccessors', () => {
     expect(result.qualified).toHaveLength(1);
   });
 
+  it('keeps the legacy attainment when the highest PDS row names no degree', () => {
+    // The PDS editor makes School required and Degree optional, so a graduate
+    // row with a blank degree is easy to create. It must not replace a named
+    // master's on file with a level label that scores zero.
+    const emp = employee('emp-blank-degree', 'Engineer I', 'Master in Public Administration');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-blank-degree', emp]]),
+      educationByEmployee: new Map([
+        ['emp-blank-degree', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2015 },
+          { level: 'Graduate Studies', course: null, year_graduated: null },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.notQualified).toEqual([]);
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Master in Public Administration');
+    expect(result.qualified[0].readiness.education).toBeCloseTo(9, 5);
+  });
+
+  it('does not let a stale-low legacy column outrank a named PDS degree', () => {
+    // The legacy column is stale in both directions. A graduate row with a
+    // blank Degree field must not hand the label back to a column that only
+    // ever recorded high school, when the PDS names a bachelor's.
+    const emp = employee('emp-stale-low', 'Engineer I', 'High School Graduate');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-stale-low', emp]]),
+      educationByEmployee: new Map([
+        ['emp-stale-low', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2015 },
+          { level: 'Graduate Studies', course: null, year_graduated: null },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Bachelor of Science in Civil Engineering');
+  });
+
+  it('falls back to the highest PDS row that names a course', () => {
+    const emp = employee('emp-blank-degree-2', 'Engineer I', '');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-blank-degree-2', emp]]),
+      educationByEmployee: new Map([
+        ['emp-blank-degree-2', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2015 },
+          { level: 'Graduate Studies', course: '  ', year_graduated: null },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Bachelor of Science in Civil Engineering');
+    expect(result.qualified[0].readiness.education).toBe(0);
+  });
+
   it('prefers the PDS rows over a mismatched legacy column', () => {
     const emp = employee('emp-mismatch', 'Engineer I', 'Bachelor of Science in Civil Engineering');
     const ctx = context({
@@ -235,6 +301,29 @@ describe('evaluateAutoSuccessors', () => {
       candidateId: 'mc-1',
       manualNote: 'Chosen by HR',
     });
+  });
+
+  it('scores a manual candidate from their PDS rows, not the legacy column', () => {
+    const manual = employee('emp-manual', 'Engineer I', 'College Graduate', { department: 'Finance' });
+    const ctx = context({
+      employees: [],
+      employeeById: new Map([['emp-manual', manual]]),
+      educationByEmployee: new Map([
+        ['emp-manual', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2015 },
+          { level: 'Graduate Studies', course: 'Master in Public Administration', year_graduated: 2026 },
+        ]],
+      ]),
+      manualCandidatesByPosition: new Map([
+        ['pos-1', [{ id: 'mc-1', employee_id: 'emp-manual', note: 'Chosen by HR' }]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Master in Public Administration');
+    expect(result.qualified[0].readiness.education).toBeCloseTo(9, 5);
   });
 
   it('leaves out the incumbent and employees from another office', () => {

@@ -36,6 +36,7 @@ import {
   experienceScore,
   normalizeWeights,
   poolExclusionReason,
+  educationRank,
   type ExperiencePart,
   type RankingWeights,
 } from './successionCriteria';
@@ -2042,6 +2043,9 @@ async function loadAutoSuccessorContext(
           .from('employee_education')
           .select('employee_id, level, course, year_graduated')
           .in('employee_id', allEmployeeIds)
+          // The PDS writes sort_order in form order. Ordering by it keeps the
+          // helper's "first row wins a tie" deterministic across loads.
+          .order('sort_order')
       : Promise.resolve({ data: [] as any[], error: null }),
   ]);
   const { eligibilityByEmployee, eligibilityTypes, pointsForFullMarks } = eligibilityScoring;
@@ -2188,26 +2192,35 @@ export function evaluateAutoSuccessors(
 
   const educationRowsFor = (empId: string): EducationRow[] =>
     ctx.educationByEmployee.get(empId) ?? [];
-  /** Whether any PDS row names a course — i.e. the field of study is on file. */
-  const namesCourse = (rows: readonly EducationRow[]): boolean =>
-    rows.some((r) => String(r.course ?? '').trim().length > 0);
+  /** Whether a PDS row names a course — i.e. states the field of study. */
+  const namesCourse = (row: EducationRow): boolean =>
+    String(row.course ?? '').trim().length > 0;
 
   /**
-   * The attainment text this employee is scored on: the highest PDS row, or the
-   * legacy column when no row exists. The PDS is authoritative because its
-   * editor never writes that column.
+   * The attainment text this employee is scored on. The PDS is authoritative
+   * because its editor never writes `employees.highest_educational_attainment`,
+   * which is kept as a fallback.
    *
-   * A row with a level but no course cannot name the field of study, so the
-   * legacy column wins when it has text: it is stale, not necessarily wrong,
-   * and dropping it would lose the only field evidence on file.
+   * A row with a level but no course cannot name a degree — the PDS editor
+   * requires School and leaves Degree optional — so the highest row only wins
+   * when it names a course. Below that, both remaining texts are evidence
+   * already on file and the higher attainment wins: the legacy column is the
+   * standing held before the PDS existed, and it can be stale in either
+   * direction, so taking the higher one means a blank Degree field cannot
+   * demote the employee whichever way the column drifted. A level label is the
+   * last resort, and it is why "Graduate Studies" alone never scores a degree.
    */
   const educationFor = (emp: any, empId: string): string | null => {
     const rows = educationRowsFor(empId);
     const legacy = String(emp?.highest_educational_attainment ?? '').trim();
     const highest = highestEducation(rows);
-    const label = highest ? educationLabel(highest) : '';
-    if (!namesCourse(rows) && legacy) return legacy;
-    return label || legacy || null;
+    if (highest && namesCourse(highest)) return educationLabel(highest);
+    const named = highestEducation(rows.filter(namesCourse));
+    const namedLabel = named ? educationLabel(named) : '';
+    if (legacy && namedLabel) {
+      return educationRank(namedLabel) >= educationRank(legacy) ? namedLabel : legacy;
+    }
+    return legacy || namedLabel || (highest ? educationLabel(highest) : '') || null;
   };
 
   // Gate 1+2: Status + position-field keyword match (pre-filter)
@@ -2279,7 +2292,7 @@ export function evaluateAutoSuccessors(
       const educationTexts = educationSearchTexts(empRows);
       // Rows that name no course still contribute a level label, but if no row
       // names the field, the legacy column is the only field evidence on file.
-      if (!namesCourse(empRows) && empEducation && !educationTexts.includes(empEducation)) {
+      if (!empRows.some(namesCourse) && empEducation && !educationTexts.includes(empEducation)) {
         educationTexts.push(empEducation);
       }
       if (!educationTexts.length) {

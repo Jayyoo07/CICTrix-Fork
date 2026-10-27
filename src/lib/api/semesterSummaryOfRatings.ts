@@ -19,6 +19,9 @@
  * Competency Map keys competencies by integer id (competency_standards) while
  * employee_competencies keys them by uuid (competencies) — two id spaces over
  * the same 12 LGU competency names.
+ *
+ * Required is nullable: a competency the assessor scored but the Map has no row
+ * for is still shown, with required unknown and no gap claimed.
  */
 
 import type { IPCRRatingRecord } from '../../modules/admin/pm/SummaryOfRatings';
@@ -147,15 +150,16 @@ export async function getSemesterRatingRecords(newCycleId: number): Promise<IPCR
   // Employees whose new-cycle IPCR is finalized — the authoritative population.
   const finalizedIds = new Set(((finalizedRows ?? []) as any[]).map((r) => String(r.employee_id)));
 
-  // employeeId → competencyName(lower) → possessed level (may be absent).
-  const possessedByEmp = new Map<string, Map<string, number>>();
+  // employeeId → competencyName(lower) → { display name, possessed level (may be absent) }.
+  const possessedByEmp = new Map<string, Map<string, { name: string; level: number }>>();
   for (const r of (possessedRows ?? []) as any[]) {
     const empId = String(r.employee_id);
-    const name = norm(r.competencies?.name);
+    const display = String(r.competencies?.name ?? '').trim();
+    const name = norm(display);
     const level = Number(r.proficiency_level);
     if (!empId || !name || !Number.isFinite(level)) continue;
     if (!possessedByEmp.has(empId)) possessedByEmp.set(empId, new Map());
-    possessedByEmp.get(empId)!.set(name, level);
+    possessedByEmp.get(empId)!.set(name, { name: display, level });
   }
 
   const records: IPCRRatingRecord[] = [];
@@ -166,21 +170,33 @@ export async function getSemesterRatingRecords(newCycleId: number): Promise<IPCR
 
     const positionKey = norm(emp.current_position);
     const positionReqs = requiredMap.get(positionKey);
-    if (!positionReqs || positionReqs.size === 0) continue; // no Map competencies for this position
+    const possessed = possessedByEmp.get(empId) ?? new Map<string, { name: string; level: number }>();
 
-    const possessed = possessedByEmp.get(empId) ?? new Map<string, number>();
+    // Every competency the employee was assessed on this semester, unioned with
+    // those the Map assigns to the position. The Map alone is not enough: it
+    // stores generic titles and covers only a few of the real plantilla titles,
+    // so requiring a Map row hid assessed employees entirely. A competency with
+    // no Map row renders with required unknown instead of being dropped.
+    const names = new Map<string, { name: string; required: number | null }>();
+    for (const req of positionReqs?.values() ?? []) {
+      names.set(norm(req.name), { name: req.name, required: req.required });
+    }
+    for (const [key, hit] of possessed.entries()) {
+      if (!names.has(key)) names.set(key, { name: hit.name, required: null });
+    }
+    if (names.size === 0) continue; // nothing known about this employee's competencies
 
-    // Every competency the Map assigns to the position — Required vs the new
-    // semester's Possessed. `possessedAvailable` distinguishes "assessed at 0"
-    // (never happens; ratings are 1-5) from "not yet assessed".
-    const competencies = [...positionReqs.values()].map((req) => {
-      const level = possessed.get(norm(req.name));
-      const available = level != null;
+    // `possessedAvailable` distinguishes "assessed at 0" (never happens; ratings
+    // are 1-5) from "not yet assessed".
+    const competencies = [...names.values()].map((req) => {
+      const hit = possessed.get(norm(req.name));
+      const available = hit != null;
       return {
         name: req.name,
-        possessed: available ? level : 0,
+        possessed: available ? hit.level : 0,
         required: req.required,
-        isGap: available && level < req.required,
+        requiredAvailable: req.required != null,
+        isGap: available && req.required != null && hit.level < req.required,
         possessedAvailable: available,
       };
     });

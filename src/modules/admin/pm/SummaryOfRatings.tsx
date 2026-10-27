@@ -20,7 +20,14 @@ export interface IPCRRatingRecord {
   competencies?: {
     name: string;
     possessed: number;
-    required: number;
+    /**
+     * Required proficiency from the Competency Map, or null when the Map has no
+     * row for this position + competency. Null is not a gap and not a 0: the
+     * card says "Required level not configured" instead.
+     */
+    required: number | null;
+    /** False when `required` is null (Map has no level for this pair). */
+    requiredAvailable?: boolean;
     isGap: boolean;
     /**
      * False when no possessed score exists for this competency yet (the employee

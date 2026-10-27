@@ -8,7 +8,7 @@
  * live LLM call if/when one is wired up — the inputs are already assembled here.
  */
 
-import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, MinusCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { IPCRRatingRecord } from './SummaryOfRatings';
 import { supabase } from '../../../lib/supabase';
@@ -17,7 +17,8 @@ import { getCompetencyTargetTrace, type CompetencyTargetTrace } from '../../../l
 type Comp = {
   name: string;
   possessed: number;
-  required: number;
+  /** Null when the Competency Map has no level for this position + competency. */
+  required: number | null;
   isGap: boolean;
   possessedAvailable?: boolean;
 };
@@ -41,11 +42,24 @@ export function summarizeGaps(record: IPCRRatingRecord): string {
     return `${who}'s IPCR is in, but the competency assessment for this semester hasn't run yet, so no possessed scores are available.${pendingClause}`;
   }
 
-  const gaps = comps.filter((c) => c.isGap).sort((a, b) => (b.required - b.possessed) - (a.required - a.possessed));
-  const strong = comps.length - gaps.length;
+  // An assessed competency whose position has no Competency Map row cannot be
+  // compared to a bar. It is neither a strength nor a gap; say so separately.
+  const unconfigured = comps.filter((c) => c.required == null);
+  const configured = comps.filter((c): c is Comp & { required: number } => c.required != null);
+  const unconfiguredClause = unconfigured.length
+    ? ` ${unconfigured.length} competenc${unconfigured.length === 1 ? 'y has' : 'ies have'} no required level configured for this position yet.`
+    : '';
+  if (configured.length === 0) {
+    return `${who} has ${comps.length} assessed competenc${comps.length === 1 ? 'y' : 'ies'}, but the Competency Map has no required level for the ${record.position} role, so no gap can be measured.${pendingClause}`;
+  }
+
+  const gaps = configured
+    .filter((c) => c.isGap)
+    .sort((a, b) => (b.required - b.possessed) - (a.required - a.possessed));
+  const strong = configured.length - gaps.length;
 
   if (gaps.length === 0) {
-    return `${who} meets or exceeds the required proficiency on all ${comps.length} evaluated competencies for the ${record.position} role. No training gap identified this period.${pendingClause}`;
+    return `${who} meets or exceeds the required proficiency on all ${configured.length} evaluated competencies for the ${record.position} role. No training gap identified this period.${unconfiguredClause}${pendingClause}`;
   }
 
   const phrases = gaps.map(
@@ -54,7 +68,7 @@ export function summarizeGaps(record: IPCRRatingRecord): string {
   const list = phrases.length === 1 ? phrases[0] : `${phrases.slice(0, -1).join('; ')}; and ${phrases[phrases.length - 1]}`;
   const strongClause = strong > 0 ? ` ${strong} other competenc${strong === 1 ? 'y is' : 'ies are'} at or above standard.` : '';
 
-  return `${who}, ${record.position}, shows a development need in ${gaps.length} competenc${gaps.length === 1 ? 'y' : 'ies'}: ${list}.${strongClause}${pendingClause} Recommended action: targeted training on ${gaps.map((g) => g.name).join(', ')} to raise ${gaps.length === 1 ? 'it' : 'them'} to the required level.`;
+  return `${who}, ${record.position}, shows a development need in ${gaps.length} competenc${gaps.length === 1 ? 'y' : 'ies'}: ${list}.${strongClause}${unconfiguredClause}${pendingClause} Recommended action: targeted training on ${gaps.map((g) => g.name).join(', ')} to raise ${gaps.length === 1 ? 'it' : 'them'} to the required level.`;
 }
 
 export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => {
@@ -97,7 +111,12 @@ export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => 
   }, [record.id]);
 
   if (comps.length === 0) {
-    return <p className="text-xs text-slate-400">No competency breakdown available for this employee.</p>;
+    return (
+      <p className="text-xs text-slate-400">
+        No competency assessment has been recorded for this employee yet, so there is no
+        per-competency breakdown. The rating above is the average of the IPCR target scores.
+      </p>
+    );
   }
   const gapCount = comps.filter((c) => c.isGap).length;
 
@@ -151,6 +170,8 @@ export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => 
                     <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
                   ) : notAssessed ? (
                     <ChevronDown className={`h-4 w-4 shrink-0 text-amber-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+                  ) : comp.required == null ? (
+                    <MinusCircle className="h-4 w-4 shrink-0 text-slate-400" />
                   ) : (
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                   )}
@@ -158,7 +179,11 @@ export const CompetencyGapPanel = ({ record }: { record: IPCRRatingRecord }) => 
                 <div className="mt-2 flex items-center gap-4">
                   <div>
                     <span className="block text-[10px] uppercase tracking-wider text-slate-500">Required</span>
-                    <span className="text-sm font-semibold text-slate-700">{comp.required.toFixed(2)}</span>
+                    {comp.required == null ? (
+                      <span className="text-xs font-semibold text-slate-400">Not configured</span>
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-700">{comp.required.toFixed(2)}</span>
+                    )}
                   </div>
                   <div>
                     <span className="block text-[10px] uppercase tracking-wider text-slate-500">Possessed</span>
@@ -236,9 +261,11 @@ const TraceDetail = ({
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Required — from Competency Map</p>
         <p className="mt-0.5 text-sm text-slate-700">
           {trace?.position ? `${trace.position} — ` : ''}{competencyName} — Required:{' '}
-          {trace?.requiredLevel
-            ? `${trace.requiredLevel} (${card.required.toFixed(2)})`
-            : `${card.required.toFixed(2)}`}
+          {card.required == null
+            ? 'not configured for this position'
+            : trace?.requiredLevel
+              ? `${trace.requiredLevel} (${card.required.toFixed(2)})`
+              : card.required.toFixed(2)}
         </p>
       </div>
 

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, MinusCircle } from 'lucide-react';
 import { useState } from 'react';
 import { type IPCRRatingRecord, getAdjectival } from './SummaryOfRatings';
 
@@ -135,6 +135,8 @@ export const IPCRReportView = ({ records, department, period }: IPCRReportViewPr
                           <span className="text-xs font-bold text-slate-800 leading-tight pr-2">{comp.name}</span>
                           {comp.isGap ? (
                             <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
+                          ) : comp.required == null ? (
+                            <MinusCircle className="h-4 w-4 text-slate-400 shrink-0" />
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                           )}
@@ -142,7 +144,9 @@ export const IPCRReportView = ({ records, department, period }: IPCRReportViewPr
                         <div className="flex items-center gap-4 mt-2">
                           <div>
                             <span className="block text-[10px] text-slate-500 uppercase tracking-wider">Required</span>
-                            <span className="text-sm font-semibold text-slate-700">{comp.required}</span>
+                            <span className="text-sm font-semibold text-slate-700">
+                              {comp.required != null ? comp.required.toFixed(2) : 'Not configured'}
+                            </span>
                           </div>
                           <div>
                             <span className="block text-[10px] text-slate-500 uppercase tracking-wider">Possessed</span>

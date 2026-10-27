@@ -93,9 +93,16 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
     ratings_by_si = {r["success_indicator_id"]: r for r in (ratings_res.data or [])}
     
     # ── 4. Retrieve or generate competency matches ──────────────────────────
-    matches_res = client.table("ipcr_competency_matches").select(
+    # Scoped to this cycle: matches are stored per cycle (rating_period holds the
+    # cycle id as text), and another semester's matches point at success
+    # indicators this cycle's ratings map does not contain — reusing them would
+    # assess every competency as "Not Yet Assessed".
+    matches_query = client.table("ipcr_competency_matches").select(
         "competency, confidence, target_text, success_indicator_id"
-    ).eq("employee_id", req.employee_id).execute()
+    ).eq("employee_id", req.employee_id)
+    if cycle_id is not None:
+        matches_query = matches_query.eq("rating_period", str(cycle_id))
+    matches_res = matches_query.execute()
     
     matches = matches_res.data or []
     
@@ -429,10 +436,11 @@ async def assess_employee_competencies(req: CompetencyAssessmentRequest):
             "cycle_id": cycle_id
         }
         
-        # Upsert by (employee_id, competency_id)
+        # Upsert per cycle: the same competency is assessed once per semester, and
+        # the unique key includes cycle_id so history is never overwritten.
         client.table("employee_competencies").upsert(
             [emp_comp_row],
-            on_conflict="employee_id,competency_id"
+            on_conflict="employee_id,competency_id,cycle_id"
         ).execute()
 
     # Save to employee_competency_summaries

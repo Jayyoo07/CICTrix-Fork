@@ -140,24 +140,27 @@ export async function getIPCRRecordsFromGapView(period: string): Promise<IPCRRat
     const positionKey = String(firstRow.position ?? '').trim().toLowerCase();
 
     // Competency breakdown, reconciled against the Competency Map:
-    //   - Required comes from the Map (Basic/Intermediate/Advanced → 3/4/5), NOT
-    //     from the view's required_proficiency.
-    //   - A competency with no Map row for this position is DROPPED — the Map is
-    //     the single source of truth for what applies. (After the reconciliation
-    //     backfill nothing drops; this is the going-forward rule for when a PM
-    //     removes a competency from a position.)
-    //   - isGap is recomputed here so it always reflects the Map's bar.
+    //   - Required comes from the Map (Basic/Intermediate/Advanced → 3/4/5).
+    //   - A competency the Map has no row for is KEPT with `required: null`. The
+    //     Map covers only 7 of the 92 position titles in the gap view (employee
+    //     plantilla titles are not the generic titles the Map stores), so dropping
+    //     unmapped pairs blanked the panel for 85 positions. Possessed still comes
+    //     from the assessor's per-target scores, and no gap is claimed without a bar.
+    //   - Rows with no competency at all (finalized before the assessor tagged the
+    //     mirror) are dropped: there is nothing to name on a card.
     const competencies = empRows
       .map(r => {
+        const name = String(r.mapped_competency_standard ?? '').trim();
+        if (!name) return null;
         const level = requiredLevels.get(`${positionKey}|${Number(r.competency_id)}`);
-        if (!level) return null;
         const possessed = Number(r.possessed_proficiency) || 0;
-        const required = PROFICIENCY_NUMERIC[level];
+        const required = level ? PROFICIENCY_NUMERIC[level] ?? null : null;
         return {
-          name: r.mapped_competency_standard,
+          name,
           possessed,
           required,
-          isGap: possessed < required,
+          isGap: required != null && possessed < required,
+          requiredAvailable: required != null,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);

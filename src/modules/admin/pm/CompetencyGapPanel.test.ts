@@ -155,4 +155,30 @@ describe('CompetencyGapPanel 4 explicit states', () => {
     expect(screen.getByText('Required level not configured')).toBeInTheDocument();
     expect(screen.queryByText('Gap')).not.toBeInTheDocument();
   });
+
+  it('renders all four training stream blocks when competencies are present', async () => {
+    const fullRecord = record(
+      [
+        { name: 'Knowledge of Local Governance', possessed: 0, required: 3, isGap: false, possessedAvailable: false, stream: 'LEADERSHIP' },
+        { name: 'Fiscal Management/Budgeting for LGU', possessed: 0, required: 4, isGap: false, possessedAvailable: false, stream: 'TECHNICAL' },
+        { name: 'Community Engagement Skills', possessed: 0, required: 3, isGap: false, possessedAvailable: false, stream: 'EMPLOYEE DEVELOPMENT' },
+        { name: 'Transparency and Accountability Practices', possessed: 0, required: 3, isGap: false, possessedAvailable: false, stream: 'CULTURAL TRANSFORMATION' },
+      ],
+      { assessmentState: 'never_assessed' },
+    );
+
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: fullRecord }));
+    });
+
+    // Both the never-assessed banner and the 4 stream blocks must be rendered
+    expect(screen.getByTestId('never-assessed')).toBeInTheDocument();
+    expect(screen.getByTestId('stream-block-leadership')).toBeInTheDocument();
+    expect(screen.getByTestId('stream-block-technical')).toBeInTheDocument();
+    expect(screen.getByTestId('stream-block-employee-development')).toBeInTheDocument();
+    expect(screen.getByTestId('stream-block-cultural-transformation')).toBeInTheDocument();
+
+    // Check that cards show "Not yet assessed"
+    expect(screen.getAllByText('Not yet assessed')).toHaveLength(4);
+  });
 });

@@ -35,4 +35,12 @@ The original checkout switched to unrelated ratings work, so implementation stay
 
 Two GPT-6.1 Sol high-effort agents implemented and cross-reviewed separate pages. Quota and restart interrupted the final button-state follow-up. Both requested DeepSeek routes failed for funds; the user selected GPT Sol again to finish only the remaining work.
 
-No push, PR, deployment or live database write is authorized or performed.
+## PR publication and conflict resolution
+
+The user subsequently authorized publication: commit `7a94d19` was pushed to `Jayyoo07/CICTrix-Fork`, and upstream PR [#72](https://github.com/dehandenver/CICTrix/pull/72) targets `dehandenver/CICTrix:main`. The initial PR had one merge conflict in the generated plans dashboard.
+
+At the user's request, upstream `main` (`08b4452`) was merged into the feature branch without rewriting history. The only conflicted file, `docs/plans/index.html`, was regenerated from both sets of plan/summary inputs. Existing local template/generator copies matched upstream exactly and were preserved before upstream's tracked copies were incorporated. Existing untracked plan inputs referenced by the upstream dashboard remain untracked; no unrelated content was added to the PR.
+
+Post-merge verification: **119 files / 1,059 tests pass** with localhost-only placeholders; type-check, lint and build verification pass. Browser checks pass at all three widths and for the covered controls/states. Dashboard regeneration is deterministic and no conflict markers or unmerged paths remain. Task changes pass `git diff --cached --check upstream/main`; whitespace warnings against the pre-merge feature HEAD come solely from files already in upstream and were not swept into unrelated cleanup.
+
+The PR itself has not been merged. No deployment or live database write was performed.

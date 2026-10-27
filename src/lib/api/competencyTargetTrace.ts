@@ -92,12 +92,18 @@ export async function getCompetencyTargetTrace(q: TraceQuery): Promise<Competenc
     requiredLevelCode: null,
   };
 
-  // Resolve the employee: number → uuid + position.
-  const { data: emp } = await supabase
+  // Resolve the employee: number or UUID → uuid + position.
+  let empQuery = supabase
     .from('employees_with_department')
-    .select('id, current_position')
-    .eq('employee_id', q.employeeNumber)
-    .maybeSingle();
+    .select('id, current_position');
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q.employeeNumber);
+  if (isUuid) {
+    empQuery = empQuery.eq('id', q.employeeNumber);
+  } else {
+    empQuery = empQuery.eq('employee_id', q.employeeNumber);
+  }
+  const { data: emp } = await empQuery.maybeSingle();
   if (!emp?.id) return empty;
   const employeeUuid = String(emp.id);
   const position = emp.current_position ?? null;
@@ -173,12 +179,25 @@ export async function getCompetencyTargetTrace(q: TraceQuery): Promise<Competenc
       (s) => norm(s.competency_name) === norm(q.competencyName),
     )?.id;
     if (compId != null) {
-      const { data: reqRow } = await supabase
+      let { data: reqRow } = await supabase
         .from('position_competency_requirements')
         .select('proficiency_level')
         .eq('position_title', position)
         .eq('competency_id', compId)
         .maybeSingle();
+
+      if (!reqRow?.proficiency_level) {
+        const cleanedPos = position.replace(/\s*\([^)]*\)/g, '').trim();
+        if (cleanedPos && cleanedPos !== position) {
+          const { data: fallbackRow } = await supabase
+            .from('position_competency_requirements')
+            .select('proficiency_level')
+            .eq('position_title', cleanedPos)
+            .eq('competency_id', compId)
+            .maybeSingle();
+          reqRow = fallbackRow;
+        }
+      }
       if (reqRow?.proficiency_level) {
         requiredLevel = reqRow.proficiency_level as ProficiencyLevel;
         required = PROFICIENCY_NUMERIC[requiredLevel] ?? null;

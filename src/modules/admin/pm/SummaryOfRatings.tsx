@@ -169,17 +169,28 @@ export function buildDeptCompletionRows(
 
   return Array.from(rows.values())
     .map(row => {
-      const total = Math.max(row.total, row.completed);
       const sem = deptSemesters?.get(normDeptKey(row.department));
       const period = sem?.periodTitle ?? null;
       const status = sem?.status ?? (sem?.cycleId ? 'published' : 'none');
       const cycleId = sem?.cycleId ?? null;
       const isOlderSemester = Boolean(maxCycleId > 0 && cycleId && cycleId < maxCycleId);
 
+      // When a department has a published or correction_pending semester, its total and completed
+      // are scoped to that semester's frozen roster (sem.requiredCount & sem.approvedCount)
+      // so subsequent hires/transfers never dilute an old semester's completion requirement.
+      const hasPublishedCycle = Boolean(sem && sem.cycleId && sem.status !== 'none');
+      const total = hasPublishedCycle
+        ? Math.max(sem!.requiredCount, row.completed)
+        : Math.max(row.total, row.completed);
+      const completed = hasPublishedCycle
+        ? Math.max(sem!.approvedCount, row.completed)
+        : row.completed;
+
       return {
         ...row,
         total,
-        rate: total > 0 ? row.completed / total : null,
+        completed,
+        rate: total > 0 ? completed / total : null,
         period,
         status,
         cycleId,

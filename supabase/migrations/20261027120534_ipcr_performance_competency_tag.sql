@@ -39,7 +39,7 @@ declare
   v_updated integer := 0;
 begin
   with mapped as (
-    select m.employee_id,
+    select mat.employee_id,
            mat.success_indicator_id,
            mat.rating_period,
            si.description,
@@ -51,11 +51,10 @@ begin
            ) as rn
       from public.ipcr_competency_matches mat
       join public.success_indicators si on si.id = mat.success_indicator_id
-      join public.mfos m on m.id = si.mfo_id
       join public.competency_standards cs
         on lower(regexp_replace(cs.competency_name, '[^a-zA-Z0-9]', '', 'g'))
          = lower(regexp_replace(mat.competency, '[^a-zA-Z0-9]', '', 'g'))
-     where (p_employee_id is null or m.employee_id = p_employee_id)
+     where (p_employee_id is null or mat.employee_id = p_employee_id)
        and (p_success_indicator_id is null or mat.success_indicator_id = p_success_indicator_id)
   ),
   best as (

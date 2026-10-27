@@ -23,7 +23,7 @@ V2 has no external calls or imports and is referenced only by its test. Current 
 - `a29c494`: added the staged fixed-weight engine and initial 139 tests.
 - `7e03645`: fixed fractional training qualification and mutable audit snapshots; 159 V2 tests total.
 
-The isolated branch is `feat/succession-scoring-v2`. Its starting HEAD was `6720047`; the user's original checkout and unrelated work were not rewritten. This branch has not been published.
+The isolated branch is `feat/succession-scoring-v2`. Its starting HEAD was `6720047`; the user's original checkout and unrelated work were not rewritten. At the user's later explicit publication request, pushed the branch and opened [draft fork PR #6](https://github.com/Jayyoo07/CICTrix-Fork/pull/6) against `Jayyoo07/CICTrix-Fork:main`. No upstream PR, merge, force-push, deployment or activation occurred. Independent fix review and security prerequisites remain open. GitHub reports merge conflicts against newer fork-main changes; the draft is not merge-ready and no conflict resolution is claimed.
 
 ## Independent review and fixes
 
@@ -50,7 +50,7 @@ Controller checks on code commit `7e03645`:
 
 Worker post-fix checks additionally passed 287 succession tests, standalone type-check and lint. Initial RED tests demonstrated missing/stub implementation; review-fix RED recorded seven failures before the fixes. The full-suite baseline was 767 tests; the final total is 767 + 159.
 
-The fresh worktree initially lacked environment values and failed imports. An ignored `.env.test.local` with localhost and a noncredential placeholder resolved the test environment without using a live project's credentials. Existing test warnings include React act warnings, expected failure logs and refused localhost calls; build warnings include Vite CJS deprecation and stale Browserslist data. Dependency installation reported 29 audit vulnerabilities (1 low, 6 moderate, 19 high, 3 critical); no dependency upgrades were made under this scope.
+The fresh worktree initially lacked environment values and failed imports. An ignored `.env.test.local` with localhost and a noncredential placeholder resolved the test environment without using a live project's credentials. Existing test warnings include React act warnings, expected failure logs and refused localhost calls; build warnings include Vite CJS deprecation and stale Browserslist data. Dependency installation reported 29 audit vulnerabilities (1 low, 6 moderate, 19 high, 3 critical); no dependency upgrades were made under this scope. A fresh prepublication full-suite run at `6a56bd4` also passed all 926 tests across 106 files.
 
 ## Implementation decisions and deviations
 

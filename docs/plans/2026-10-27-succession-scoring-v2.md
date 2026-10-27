@@ -59,7 +59,7 @@ Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon S
 - Fixed maximums: performance 30, experience 20, training 20, education 15, eligibility 15.
 - No changes to recruitment scoring, shared IPCR arithmetic, or unrelated training recommendations.
 - All external calls live in `src/lib/`; components never call Supabase directly.
-- No live DB mutations, hand-applied migrations, pushes, or deployment during this execution.
+- No live DB mutations, hand-applied migrations, pushes, or deployment during implementation. The user's later explicit fork-publication request authorizes only a branch push and draft PR, not merge, deployment or activation.
 - Create any future migration with `npx supabase migration new <name>`; apply only through the normal PR migration workflow.
 - Use `DESIGN_IDENTITY.md` and token classes for UI; preview new review/configuration surfaces before implementation.
 - Preserve user changes and the legacy active scoring path during staged preparation.
@@ -149,3 +149,4 @@ Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon S
 - On 2026-10-28 the user explicitly deferred security Phase 4A. Tasks 2–4 and V2 activation remain gated; deferral does not authorize insecure review writes or a live cutover. The existing application scoring remains unchanged.
 - Next: resume the same reviewer after its provider limit resets or after the user approves another review arrangement. Once the independent check is complete, retain the engine staged while the separate security prerequisite remains deferred.
 - Delivered-versus-planned details: [session summary](../session-summaries/2026-10-27-succession-scoring-v2-summary.md).
+- Later publication instruction: the user explicitly requested a fork PR. Pushed the staged branch and opened [draft PR #6](https://github.com/Jayyoo07/CICTrix-Fork/pull/6) against `Jayyoo07/CICTrix-Fork:main` after another 926-test passing run. No merge/deployment/activation; review and security gates remain unchanged.

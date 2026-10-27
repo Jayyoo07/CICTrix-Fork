@@ -50,7 +50,7 @@ Use fixed maximums of performance 30, experience 20, training 20, education 15, 
 
 ### Observed release blockers
 
-Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon SELECT/INSERT/UPDATE are granted on `critical_positions`, `succession_candidates`, `employee_work_experience`, `employee_training`, and `employee_eligibility`. `office_role_assignments` has RLS and no anon read/write grants. Its inspected columns have no `auth_user_id` link. The existing security remediation plan is Draft; do not execute that unrelated system-wide rebuild under this request.
+Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon SELECT/INSERT/UPDATE are granted on `critical_positions`, `succession_candidates`, `employee_work_experience`, `employee_training`, and `employee_eligibility`. `office_role_assignments` has RLS and no anon read/write grants. Its inspected columns have no `auth_user_id` link. [Security remediation Phase 4A](2026-10-16-security-remediation.md#phase-4a-succession-scoring-trust-boundary) now owns the focused identity, office authorization, source protection and audit/invalidation prerequisite. That plan remains Draft; adding this dependency does not authorize the system-wide security rebuild or live permission changes.
 
 **Gate:** Do not persist or activate supposedly authorized Office Account relevance reviews while verified identity and server-side office-scoped permissions cannot be demonstrated. Build/test the independent engine now; hold integration requiring that trust boundary. Do not solve this by opening anon policies, trusting a browser-provided actor/office, or exposing a service-role key. A migration alone cannot secure the source evidence while leaving it anonymously editable.
 

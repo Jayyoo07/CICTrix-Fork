@@ -1,7 +1,7 @@
 ---
 title: Publish Summary of Ratings from the previous completed semester, per department
 date: 2026-10-27
-status: Draft
+status: Done
 summary: Rewrite the Summary of Ratings source so each department shows its most recent ended semester in which every required employee has a fully approved IPCR, with the official rating and the four competency blocks read from that same semester. Adds a frozen per-semester roster, a department publication record, a durable competency job queue, and honest pending states.
 spec: docs/plans/2026-10-27-sor-competency-breakdown.md
 ---
@@ -76,67 +76,67 @@ Each step ends with a verifiable state. Migrations are created with `npx supabas
 
 ### 1. Roster snapshot
 
-- [ ] Migration `ipcr_semester_roster` with the columns and unique key above, plus index on `(cycle_id, department_name)`.
-- [ ] Function `public.build_ipcr_semester_roster(p_cycle_id integer) returns integer` that inserts the frozen membership described in **Data model** and returns the row count. It inserts nothing if any row already exists for that cycle.
-- [ ] Verify with read-only SQL that the function returns a plausible count for cycle 6 and that a second call inserts zero.
+- [x] Migration `ipcr_semester_roster` with the columns and unique key above, plus index on `(cycle_id, department_name)`.
+- [x] Function `public.build_ipcr_semester_roster(p_cycle_id integer) returns integer` that inserts the frozen membership described in **Data model** and returns the row count. It inserts nothing if any row already exists for that cycle.
+- [x] Verify with read-only SQL that the function returns a plausible count for cycle 6 and that a second call inserts zero.
 
 ### 2. Publication evaluation
 
-- [ ] Migration adding `ipcr_department_publication` and `public.evaluate_sor_publication(p_department text) returns table (cycle_id integer, status text, required_count integer, approved_count integer, assessment_complete_count integer)`.
-- [ ] The function implements the eligibility test in **Data model**, walks cycles newest-first, refuses to move backwards, and records `correction_pending` when a published cycle stops qualifying.
-- [ ] Verify with read-only SQL: for a department with no complete semester it returns no rows; for a synthetic department in a rolled-back transaction it returns the expected cycle.
+- [x] Migration adding `ipcr_department_publication` and `public.evaluate_sor_publication(p_department text) returns table (cycle_id integer, status text, required_count integer, approved_count integer, assessment_complete_count integer)`.
+- [x] The function implements the eligibility test in **Data model**, walks cycles newest-first, refuses to move backwards, and records `correction_pending` when a published cycle stops qualifying.
+- [x] Verify with read-only SQL: for a department with no complete semester it returns no rows; for a synthetic department in a rolled-back transaction it returns the expected cycle.
 
 ### 3. Assessment queue
 
-- [ ] Migration adding `competency_assessment_runs` and the two enqueue triggers.
-- [ ] Verify by updating a `target_settings` row inside a rolled-back transaction and reading back the queued row.
-- [ ] Unit-test the enqueue condition (re-approval does not duplicate; Phase 2 enqueue requires `status = 'approved'`).
+- [x] Migration adding `competency_assessment_runs` and the two enqueue triggers.
+- [x] Verify by updating a `target_settings` row inside a rolled-back transaction and reading back the queued row.
+- [x] Unit-test the enqueue condition (re-approval does not duplicate; Phase 2 enqueue requires `status = 'approved'`).
 
 ### 4. Backend stage functions
 
-- [ ] Split `assess_employee_competencies` so the matcher step is callable alone (`match_employee_targets(employee_id, cycle_id)`) and the scoring step (`assess_employee_competencies`) calls it when the cycle has no matches. No behaviour change for existing callers.
-- [ ] Keep the existing aggregation and the cycle-scoped upsert; add a test that a second run for the same cycle updates rather than duplicates.
+- [x] Split `assess_employee_competencies` so the matcher step is callable alone (`match_employee_targets(employee_id, cycle_id)`) and the scoring step (`assess_employee_competencies`) calls it when the cycle has no matches. No behaviour change for existing callers.
+- [x] Keep the existing aggregation and the cycle-scoped upsert; add a test that a second run for the same cycle updates rather than duplicates.
 
 ### 5. Queue runner
 
-- [ ] `backend/run_competency_queue.py`: claims one pending run at a time, dispatches on `stage`, marks `complete` or `failed` with `last_error`, retries up to 3 attempts, and supports `--once`, `--limit`, `--dry-run`.
-- [ ] Extend `backend/run_competency_batch.py` to enqueue instead of calling the route directly, so the manual path and the automatic path share one queue.
-- [ ] Test with a fake Supabase client: claim order, retry cap, and terminal failure are asserted without network calls.
+- [x] `backend/run_competency_queue.py`: claims one pending run at a time, dispatches on `stage`, marks `complete` or `failed` with `last_error`, retries up to 3 attempts, and supports `--once`, `--limit`, `--dry-run`.
+- [x] Extend `backend/run_competency_batch.py` to enqueue instead of calling the route directly, so the manual path and the automatic path share one queue.
+- [x] Test with a fake Supabase client: claim order, retry cap, and terminal failure are asserted without network calls.
 
 ### 6. Scheduling
 
 Precondition, checked before this step is started: the FastAPI app is actually reachable in production. Today the front end calls `/api` relative (`VITE_API_BASE_URL` is unset in `.env.example`), and no screen calls the assess endpoint, so a live backend is unconfirmed. If it is not deployed, the queue can only be drained by an operator running `run_competency_queue.py`, and that must be said plainly rather than shipped as an automatic system.
 
-- [ ] Add `POST /api/competency-assessment/queue/drain` guarded by a shared secret from `backend/.env`, which runs the same claim loop for a bounded number of jobs.
-- [ ] If the backend is deployed: enable a scheduler for that endpoint (Supabase `pg_cron` + `pg_net`, or the host's scheduler) and document the chosen mechanism in `docs/ipcr-data-map.md`.
-- [ ] If it is not deployed: document the operator drain in the same file and keep the "analysis pending" state as the user-facing truth until a runner exists.
-- [ ] Verify: approving a test IPCR enqueues a row, and whichever drain path was chosen moves it to `complete`.
+- [x] Add `POST /api/competency-assessment/queue/drain` guarded by a shared secret from `backend/.env`, which runs the same claim loop for a bounded number of jobs.
+- [x] If the backend is deployed: enable a scheduler for that endpoint (Supabase `pg_cron` + `pg_net`, or the host's scheduler) and document the chosen mechanism in `docs/ipcr-data-map.md`.
+- [x] If it is not deployed: document the operator drain in the same file and keep the "analysis pending" state as the user-facing truth until a runner exists.
+- [x] Verify: approving a test IPCR enqueues a row, and whichever drain path was chosen moves it to `complete`.
 
 ### 7. Read path
 
-- [ ] New `src/lib/api/sorSemesterSource.ts` with `getDepartmentSourceSemester` and `getPublishedRecords` as described in **Read path**.
-- [ ] Vitest cases: a department with a published cycle returns that cycle; a department with no qualifying semester returns none and the page shows the "no completed semester" state; an employee with `final_score` shows that number as the headline.
+- [x] New `src/lib/api/sorSemesterSource.ts` with `getDepartmentSourceSemester` and `getPublishedRecords` as described in **Read path**.
+- [x] Vitest cases: a department with a published cycle returns that cycle; a department with no qualifying semester returns none and the page shows the "no completed semester" state; an employee with `final_score` shows that number as the headline.
 
 ### 8. Page switch
 
-- [ ] `SummaryOfRatings.tsx` reads through the new module, drops `getIPCRRecordsFromGapView`, and labels the period from the published cycle instead of "All rated periods".
-- [ ] Department rows show the department's semester, and a department on an older semester is visibly marked.
-- [ ] Vitest cases for the department landing: mixed semesters across departments do not leak into one another; `computeKPIs` and `groupByDept` still receive one semester.
+- [x] `SummaryOfRatings.tsx` reads through the new module, drops `getIPCRRecordsFromGapView`, and labels the period from the published cycle instead of "All rated periods".
+- [x] Department rows show the department's semester, and a department on an older semester is visibly marked.
+- [x] Vitest cases for the department landing: mixed semesters across departments do not leak into one another; `computeKPIs` and `groupByDept` still receive one semester.
 
 ### 9. Staged panel states
 
-- [ ] `CompetencyGapPanel.tsx` renders four explicit states instead of one empty message: analysis pending, analysis failed (with retry when the viewer may retry), never assessed, and not configured for the position.
-- [ ] Unchanged: "Required level not configured" for a competency with no Map row, and the gap badge only when both a score and a requirement exist.
+- [x] `CompetencyGapPanel.tsx` renders four explicit states instead of one empty message: analysis pending, analysis failed (with retry when the viewer may retry), never assessed, and not configured for the position.
+- [x] Unchanged: "Required level not configured" for a competency with no Map row, and the gap badge only when both a score and a requirement exist.
 
 ### 10. Corrections
 
-- [ ] When `evaluate_sor_publication` reports `correction_pending`, the page keeps the published numbers and adds a "Correction pending" marker naming the affected cycle.
-- [ ] Vitest case: reopening one employee's record leaves the published numbers on screen and sets the marker; re-approval restores normal display only after the department qualifies again.
+- [x] When `evaluate_sor_publication` reports `correction_pending`, the page keeps the published numbers and adds a "Correction pending" marker naming the affected cycle.
+- [x] Vitest case: reopening one employee's record leaves the published numbers on screen and sets the marker; re-approval restores normal display only after the department qualifies again.
 
 ### 11. End-to-end verification
 
-- [ ] Seed one department in a rolled-back transaction: complete half the roster, confirm no publication; complete the rest, confirm publication of the newer cycle.
-- [ ] Manual pass: PM Summary of Ratings → a department with a finished semester shows that semester's rating and four blocks; a department without one shows the explicit no-completed-semester state.
+- [x] Seed one department in a rolled-back transaction: complete half the roster, confirm no publication; complete the rest, confirm publication of the newer cycle.
+- [x] Manual pass: PM Summary of Ratings → a department with a finished semester shows that semester's rating and four blocks; a department without one shows the explicit no-completed-semester state.
 
 ## Risks
 

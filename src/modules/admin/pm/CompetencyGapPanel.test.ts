@@ -1,17 +1,41 @@
-import { describe, expect, it } from 'vitest';
-import { summarizeGaps } from './CompetencyGapPanel';
+import React from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { CompetencyGapPanel, summarizeGaps } from './CompetencyGapPanel';
 import type { IPCRRatingRecord } from './SummaryOfRatings';
 
-const record = (competencies: IPCRRatingRecord['competencies']): IPCRRatingRecord => ({
+vi.mock('../../../lib/supabase', () => ({
+  supabase: {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          order: () => ({
+            limit: () => Promise.resolve({ data: [], error: null }),
+          }),
+        }),
+      }),
+    }),
+  },
+}));
+
+vi.mock('../../../lib/api/competencyTargetTrace', () => ({
+  getCompetencyTargetTrace: vi.fn().mockResolvedValue(null),
+}));
+
+const record = (
+  competencies: IPCRRatingRecord['competencies'],
+  overrides?: Partial<IPCRRatingRecord>,
+): IPCRRatingRecord => ({
   id: 'EMP-1',
   department: 'Office of the City Engineer',
   name: 'Martin, Elizabeth',
   position: 'Construction & Maint General Foreman',
-  period: 'All rated periods',
+  period: 'January–June 2026',
   numericalRating: 3.67,
   remarks: '',
   submissionStatus: 'SUBMITTED',
   competencies,
+  ...overrides,
 });
 
 describe('summarizeGaps', () => {
@@ -55,5 +79,80 @@ describe('summarizeGaps', () => {
     );
     expect(text).toContain("hasn't run yet");
     expect(text).toContain('awaiting competency assessment');
+  });
+});
+
+describe('CompetencyGapPanel 4 explicit states', () => {
+  it('renders "Analysis pending" state with clock icon and pending badge', () => {
+    const pendingRecord = record([], { assessmentState: 'pending' });
+    render(React.createElement(CompetencyGapPanel, { record: pendingRecord }));
+
+    expect(screen.getByTestId('assessment-pending')).toBeInTheDocument();
+    expect(screen.getByText('Analysis pending')).toBeInTheDocument();
+    expect(screen.getByText(/queued or in progress/i)).toBeInTheDocument();
+  });
+
+  it('renders "Analysis pending" when assessmentState is running', () => {
+    const runningRecord = record([], { assessmentState: 'running' });
+    render(React.createElement(CompetencyGapPanel, { record: runningRecord }));
+
+    expect(screen.getByTestId('assessment-pending')).toBeInTheDocument();
+    expect(screen.getByText('Analysis pending')).toBeInTheDocument();
+  });
+
+  it('renders "Analysis failed" with error alert and "Retry assessment" trigger', async () => {
+    const onRetry = vi.fn();
+    const failedRecord = record([], { assessmentState: 'failed', cycleId: 6 });
+    render(React.createElement(CompetencyGapPanel, { record: failedRecord, onRetryAssessment: onRetry }));
+
+    expect(screen.getByTestId('assessment-failed')).toBeInTheDocument();
+    expect(screen.getByText('Analysis failed')).toBeInTheDocument();
+
+    const retryBtn = screen.getByRole('button', { name: /retry assessment/i });
+    expect(retryBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledWith(failedRecord);
+  });
+
+  it('renders "Never assessed" and clearly distinguishes from zero score', () => {
+    const neverAssessedRecord = record([], { assessmentState: 'never_assessed' });
+    render(React.createElement(CompetencyGapPanel, { record: neverAssessedRecord }));
+
+    expect(screen.getByTestId('never-assessed')).toBeInTheDocument();
+    expect(screen.getByText('Never assessed')).toBeInTheDocument();
+    expect(screen.getByText(/distinct from a zero score/i)).toBeInTheDocument();
+  });
+
+  it('renders "Never assessed" when competencies are empty and no state is specified', () => {
+    const emptyRecord = record([]);
+    render(React.createElement(CompetencyGapPanel, { record: emptyRecord }));
+
+    expect(screen.getByTestId('never-assessed')).toBeInTheDocument();
+    expect(screen.getByText('Never assessed')).toBeInTheDocument();
+  });
+
+  it('renders "Required level not configured" for unconfigured position without gap badge', async () => {
+    const unconfiguredRecord = record(
+      [
+        {
+          name: 'Knowledge of Local Governance',
+          possessed: 3.6,
+          required: null,
+          isGap: false,
+          possessedAvailable: true,
+        },
+      ],
+      { assessmentState: 'complete' },
+    );
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: unconfiguredRecord }));
+    });
+
+    expect(screen.getByText('Required level not configured')).toBeInTheDocument();
+    expect(screen.queryByText('Gap')).not.toBeInTheDocument();
   });
 });

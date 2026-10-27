@@ -86,6 +86,11 @@
       </tr>
       <tr>
         <td class="date">2026-10-27</td>
+        <td><a href="2026-10-27-succession-scoring-v2.md">Implement reviewed position-specific succession scoring</a><p class="summary">Build and verify the agreed fixed-weight scoring model separately from current results, then integrate position-specific relevance reviews and qualification visibility after the authorization release gate is satisfied.</p></td>
+        <td class="status"><span class="badge badge-danger">Blocked</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
         <td><a href="2026-10-27-sor-previous-semester-competency.md">Publish Summary of Ratings from the previous completed semester, per department</a><p class="summary">Rewrite the Summary of Ratings source so each department shows its most recent ended semester in which every required employee has a fully approved IPCR, with the official rating and the four competency blocks read from that same semester. Adds a frozen per-semester roster, a department publication record, a durable competency job queue, and honest pending states.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
@@ -158,11 +163,6 @@
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-performance-followups.md">Reduce remaining Supabase fetch fan-out and polling</a><p class="summary">Batch dashboard succession counts, remove duplicate recruitment reads, scope refreshes to active sections, and reduce redundant polling without changing displayed results.</p></td>
         <td class="status"><span class="badge badge-danger">Blocked</span></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="2026-10-26-opencode-handoff.md">Retarget the agent handoff to OpenCode</a><p class="summary">Rewrite docs/handoff/agent-handoff.md for OpenCode instead of Claude Code, and add the two missing slash commands so /grill-me and /grill-with-docs work as AGENTS.md describes.</p></td>
-        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -421,7 +421,7 @@
       </tr>
       <tr>
         <td class="date">2026-10-16</td>
-        <td><a href="2026-10-16-security-remediation.md">Security remediation (credentials, document encryption, authorization and public applicant flows)</a><p class="summary">Expanded by the October 27 evidence-based review. Contain leaked service-role and document keys, replace browser-only credentials, enforce role and record authorization, and secure applicant identity, document validation, audit history and resource limits.</p></td>
+        <td><a href="2026-10-16-security-remediation.md">Security remediation (credentials, document encryption, authorization and public applicant flows)</a><p class="summary">Expanded by the October 27 evidence-based review and succession scoring dependency. Contain leaked keys, replace browser-only credentials, enforce role and office authorization, and protect applicant flows, qualification evidence, review decisions and audit history.</p></td>
         <td class="status"><span class="badge badge-neutral">Draft</span></td>
       </tr>
       <tr>
@@ -565,6 +565,7 @@
         <tbody>
       <tr>
         <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-27-succession-scoring-v2-summary.md">Stage succession V2 engine; defer integration and final review</a><p class="summary">Added the fixed-weight evaluator and 159 tests, corrected two review findings, and passed 926 full-suite tests. Independent fix re-review hit a provider limit; security Phase 4A and application integration remain deferred.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-publication-roster-summary.md">Session Summary: Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a></td>
       </tr>
       <tr>
@@ -577,6 +578,7 @@
       </tr>
       <tr>
         <td class="date">2026-10-27</td>
+        <td><a href="../session-summaries/2026-10-27-succession-security-scope-summary.md">Add succession access controls to security remediation</a><p class="summary">Documented the focused security prerequisite for reviewed succession scoring, without executing remediation or changing live permissions.</p><p class="meta">Plan: <a href="2026-10-16-security-remediation.md">2026-10-16-security-remediation.md</a></p></td>
         <td><a href="../session-summaries/2026-10-27-sor-previous-semester-competency-summary.md">Session Summary: Publish Summary of Ratings from Previous Completed Semester</a></td>
       </tr>
       <tr>
@@ -630,10 +632,6 @@
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-performance-followups-summary.md">Performance follow-ups: planning session summary</a></td>
-      </tr>
-      <tr>
-        <td class="date">2026-10-26</td>
-        <td><a href="../session-summaries/2026-10-26-opencode-handoff-summary.md">Session Summary: Retarget the Agent Handoff to OpenCode</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>

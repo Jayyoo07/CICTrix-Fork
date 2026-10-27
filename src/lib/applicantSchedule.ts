@@ -22,6 +22,19 @@ const writeScheduleCache = (cache: ScheduleCache) => {
   try { localStorage.setItem(SCHEDULE_CACHE_KEY, JSON.stringify(cache)); } catch { /* best-effort */ }
 };
 
+/**
+ * Whether an interview has been scheduled for this applicant.
+ *
+ * The date, not the status. An applicant moves to `Interview/Exam Scheduled`
+ * when RSP sets the date, but moves on to `For Evaluation` or `Qualified`
+ * afterwards while the date stays on the row — and the interviewer still has
+ * to evaluate someone whose interview has already happened. Keying on the
+ * status would drop them off the list the moment they were evaluated.
+ */
+export const isScheduledForInterview = (
+  applicant: { interview_date?: string | null } | null | undefined,
+): boolean => String(applicant?.interview_date ?? '').trim() !== '';
+
 /** Returns the locally cached schedule for a given applicant id, or null. */
 export const getLocalSchedule = (applicantId: string): ApplicantAssignmentFields | null =>
   loadScheduleCache()[applicantId] ?? null;

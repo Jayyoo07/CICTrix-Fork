@@ -52,6 +52,7 @@ import {
   type KpiKey,
   type StatusFilter,
 } from './interviewerDashboardModel';
+import { isScheduledForInterview } from '../../lib/applicantSchedule';
 
 // Team-provided hero photo (public/assets/hero). If it fails to load, the
 // hero falls back to the plain gradient.
@@ -162,8 +163,13 @@ const buildJobsFromPostings = (
     return position && activeTitleSet.has(position);
   });
 
+  // An interviewer is asked to evaluate the people who were scheduled, not
+  // everyone who applied. Counting applications made a posting read 6 while
+  // the list behind it held one scheduled candidate.
+  const scheduledApplicants = visibleApplicants.filter(isScheduledForInterview);
+
   const applicantCountByTitle = new Map<string, number>();
-  visibleApplicants.forEach((applicant) => {
+  scheduledApplicants.forEach((applicant) => {
     const key = normalizeText(String(applicant?.position || ''));
     if (!key) return;
     applicantCountByTitle.set(key, (applicantCountByTitle.get(key) || 0) + 1);
@@ -178,7 +184,7 @@ const buildJobsFromPostings = (
   );
 
   const evaluatedCountByTitle = new Map<string, number>();
-  visibleApplicants.forEach((applicant) => {
+  scheduledApplicants.forEach((applicant) => {
     const applicantId = String(applicant?.id ?? '').trim();
     if (!applicantId || !evaluatedApplicantIds.has(applicantId)) return;
     const key = normalizeText(String(applicant?.position || ''));
@@ -189,7 +195,7 @@ const buildJobsFromPostings = (
   // Pick the earliest applicant.interview_date per job — that's what RSP
   // published via the Pending Assignment workflow.
   const interviewDateByTitle = new Map<string, string>();
-  visibleApplicants.forEach((applicant) => {
+  scheduledApplicants.forEach((applicant) => {
     const raw = String(applicant?.interview_date ?? '').trim();
     if (!raw) return;
     const key = normalizeText(String(applicant?.position || ''));
@@ -227,7 +233,9 @@ const buildJobsFromPostings = (
 
   return {
     jobs,
-    visibleApplicants,
+    // Only the scheduled ones leave this function: the KPI cards and the
+    // candidate list speak for the same people the counts do.
+    visibleApplicants: scheduledApplicants,
   };
 };
 

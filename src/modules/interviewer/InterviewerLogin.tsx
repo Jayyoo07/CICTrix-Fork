@@ -1,7 +1,8 @@
-import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ActionFeedback } from '../../components/action-feedback';
+import { Button } from '../../components/Button';
 import { describeActionFailure } from '../../lib/friendlyErrors';
 import { mockDatabase } from '../../lib/mockDatabase';
 import { isMockModeEnabled, supabase } from '../../lib/supabase';
@@ -54,6 +55,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const loginPending = useRef(false);
   const [failure, setFailure] = useState<LoginFailure | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -71,6 +73,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (loginPending.current) return;
     setFailure(null);
 
     if (!email || !password) {
@@ -81,6 +84,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       return;
     }
 
+    loginPending.current = true;
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
@@ -184,38 +188,94 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
       const described = describeActionFailure('sign you in', err);
       setFailure({ message: described.message, nextStep: described.nextStep });
     } finally {
+      loginPending.current = false;
       setLoading(false);
     }
   };
 
   return (
     <div
-      className="min-h-screen w-full bg-slate-50 text-slate-900"
-      style={{ fontFamily: "'Poppins', system-ui, -apple-system, sans-serif" }}
+      className="abyan-ds interviewer-login min-h-screen w-full bg-[var(--bg-page)]"
     >
+      <style>{`
+        /* Outrank legacy global input selectors without changing other pages. */
+        .abyan-ds.interviewer-login .interviewer-login-input[type] {
+          height: var(--control-h);
+          border: 1px solid var(--neutral-200);
+          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          color: var(--neutral-800);
+          caret-color: var(--color-primary);
+          font: 500 14px/18px var(--font-sans);
+          transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        .abyan-ds.interviewer-login .interviewer-login-input[type]::placeholder {
+          color: var(--neutral-600);
+          opacity: 1;
+        }
+        .abyan-ds.interviewer-login .interviewer-login-input[type]:hover:not(:focus):not(:disabled) {
+          border-color: var(--color-primary-200);
+        }
+        .abyan-ds.interviewer-login .interviewer-login-input[type]:focus:not(:disabled) {
+          outline: none;
+          border: 2px solid var(--color-primary);
+          box-shadow: var(--ring-input);
+        }
+        .abyan-ds.interviewer-login .interviewer-login-input[type]:disabled {
+          background: var(--bg-page);
+          color: var(--neutral-400);
+          cursor: not-allowed;
+        }
+        .abyan-ds.interviewer-login .interviewer-login-toggle {
+          border-radius: var(--radius-pill);
+          background: transparent;
+          color: var(--neutral-600);
+          cursor: pointer;
+        }
+        .abyan-ds.interviewer-login .interviewer-login-toggle:hover:not(:disabled) {
+          background: var(--bg-page);
+          color: var(--color-primary);
+        }
+        .abyan-ds.interviewer-login .interviewer-login-toggle:focus-visible {
+          outline: 2px solid var(--color-primary);
+          outline-offset: 2px;
+          box-shadow: var(--ring-input);
+        }
+        .abyan-ds.interviewer-login .interviewer-login-toggle:disabled {
+          color: var(--neutral-400);
+          cursor: not-allowed;
+        }
+        .abyan-ds.interviewer-login .btn-primary:hover:not(:disabled) {
+          background: var(--color-primary-700);
+        }
+        .abyan-ds.interviewer-login .btn-primary.is-loading {
+          background: var(--gradient-button);
+          color: var(--color-white);
+        }
+      `}</style>
       <div className="flex min-h-screen w-full">
         {/* LEFT — brand panel */}
         <aside
           className="relative hidden w-1/2 overflow-hidden lg:flex"
-          style={{ background: 'linear-gradient(135deg, #363EE8 0%, #050D65 100%)', color: '#FFFFFF' }}
+          style={{ background: 'var(--gradient-hero)', color: 'var(--color-white)' }}
         >
           {/* Decorative orbs */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full blur-3xl"
-            style={{ backgroundColor: 'rgba(200,209,255,0.18)' }}
+            className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-[var(--radius-pill)] blur-3xl"
+            style={{ backgroundColor: 'var(--on-blue-active)' }}
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -bottom-40 -right-24 h-[28rem] w-[28rem] rounded-full blur-3xl"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+            className="pointer-events-none absolute -bottom-40 -right-24 h-[28rem] w-[28rem] rounded-[var(--radius-pill)] blur-3xl"
+            style={{ backgroundColor: 'var(--on-blue-hover)' }}
           />
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
             style={{
               backgroundImage:
-                'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)',
+                'radial-gradient(circle at 1px 1px, var(--on-blue-active) 1px, transparent 0)',
               backgroundSize: '24px 24px',
               opacity: 0.35,
             }}
@@ -223,7 +283,7 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
           <div className="relative z-10 flex w-full flex-col p-12">
             {/* Top wordmark with logo */}
-            <a href="/" className="flex items-center gap-3">
+            <a href="/" className="flex items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-white)]">
               <img
                 src={abyanLogo}
                 alt="Abyan Logo"
@@ -231,8 +291,8 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                 style={{ mixBlendMode: 'screen' }}
               />
               <div className="flex flex-col leading-tight">
-                <span className="text-base font-bold tracking-wide text-white">ABYAN HRIS</span>
-                <span className="text-xs font-medium" style={{ color: 'rgba(200,209,255,0.85)' }}>
+                <span className="text-title-s" style={{ color: 'var(--color-white)' }}>ABYAN HRIS</span>
+                <span className="text-body-s" style={{ color: 'var(--on-blue-muted)' }}>
                   Human Resource Information System
                 </span>
               </div>
@@ -240,10 +300,10 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
             {/* Center hero — OCHRMO seal */}
             <div className="m-auto w-full max-w-md text-center">
-              <div className="mx-auto mb-8 flex h-32 w-32 items-center justify-center rounded-full"
+              <div className="mx-auto mb-8 flex h-32 w-32 items-center justify-center rounded-[var(--radius-pill)]"
                 style={{
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.25)',
+                  backgroundColor: 'var(--on-blue-hover)',
+                  boxShadow: 'inset 0 0 0 2px var(--on-blue-active)',
                   padding: '12px',
                 }}
               >
@@ -254,25 +314,25 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                 />
               </div>
               <h1
-                className="text-4xl font-bold tracking-tight text-white"
-                style={{ lineHeight: 1.1 }}
+                className="text-title-l"
+                style={{ color: 'var(--color-white)' }}
               >
                 Interviewer Portal
               </h1>
               <p
-                className="mt-3 text-base font-medium"
-                style={{ color: 'rgba(200,209,255,0.90)' }}
+                className="text-body-l mt-3"
+                style={{ color: 'var(--on-blue-text)' }}
               >
                 Evaluation &amp; Assessment
               </p>
-              <ul className="mt-10 space-y-3 text-center text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <ul className="text-body-l mt-10 space-y-3 text-center" style={{ color: 'var(--on-blue-muted)' }}>
                 {['View Assigned Applicants', 'Conduct Evaluations', 'Submit Recommendations'].map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             </div>
 
-            <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            <p className="text-body-s" style={{ color: 'var(--on-blue-muted)' }}>
               &copy; {new Date().getFullYear()} Abyan HRIS. All rights reserved.
             </p>
           </div>
@@ -283,14 +343,14 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
           <div className="w-full max-w-md">
             {/* Mobile-only brand */}
             <div className="mb-8 flex items-center gap-2 lg:hidden">
-              <img src={abyanLogo} alt="Abyan" className="h-8 w-auto object-contain" />
-              <span className="text-sm font-semibold text-slate-900">Abyan HRIS</span>
+              <img src={abyanLogo} alt="Abyan" className="h-8 w-8 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-primary)] object-contain p-1" />
+              <span className="text-headline-m" style={{ color: 'var(--color-primary-900)' }}>Abyan HRIS</span>
             </div>
 
             <div className="mb-8">
               <h1
-                className="text-3xl font-bold tracking-tight"
-                style={{ color: '#040E6B', lineHeight: 1.15 }}
+                className="text-title-l"
+                style={{ color: 'var(--color-primary-900)' }}
               >
                 Welcome back
               </h1>
@@ -298,23 +358,26 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
 
             <form onSubmit={handleLogin} className="space-y-5">
               {failure && (
-                <ActionFeedback
-                  title="We couldn't sign you in."
-                  message={failure.message}
-                  nextStep={failure.nextStep}
-                  onDismiss={() => setFailure(null)}
-                />
+                <div id="int-login-failure">
+                  <ActionFeedback
+                    title="We couldn't sign you in."
+                    message={failure.message}
+                    nextStep={failure.nextStep}
+                    onDismiss={() => setFailure(null)}
+                  />
+                </div>
               )}
 
               {/* Email */}
               <div>
-                <label htmlFor="int-email" className="mb-2 block text-sm font-semibold" style={{ color: '#040E6B' }}>
+                <label htmlFor="int-email" className="text-body-m mb-2 block" style={{ color: 'var(--neutral-800)' }}>
                   Email Address
                 </label>
                 <div className="relative">
                   <Mail
-                    className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.8}
+                    className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--neutral-400)]"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
                   />
                   <input
                     id="int-email"
@@ -322,22 +385,24 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setFailure(null); }}
-                    autoComplete="email"
+                    autoComplete="username"
+                    aria-describedby={failure ? 'int-login-failure' : undefined}
                     disabled={loading}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
+                    className="interviewer-login-input w-full pl-10 pr-3"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label htmlFor="int-password" className="mb-2 block text-sm font-semibold" style={{ color: '#040E6B' }}>
+                <label htmlFor="int-password" className="text-body-m mb-2 block" style={{ color: 'var(--neutral-800)' }}>
                   Password
                 </label>
                 <div className="relative">
                   <Lock
-                    className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.8}
+                    className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--neutral-400)]"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
                   />
                   <input
                     id="int-password"
@@ -346,57 +411,38 @@ export function InterviewerLogin({ onLogin }: InterviewerLoginProps) {
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setFailure(null); }}
                     autoComplete="current-password"
+                    aria-describedby={failure ? 'int-login-failure' : undefined}
                     disabled={loading}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
+                    className="interviewer-login-input w-full pl-10 pr-11"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     disabled={loading}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed"
+                    className="interviewer-login-toggle absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center"
                   >
-                    {showPassword ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
+                    {showPassword ? <EyeOff size={20} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={20} strokeWidth={1.75} aria-hidden="true" />}
                   </button>
                 </div>
               </div>
 
-              {/* Remember + forgot */}
-              <div className="flex items-center justify-between pt-1">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 cursor-pointer rounded border-gray-300 focus:ring-2 focus:ring-[#EEF2FF]"
-                  />
-                  Remember me
-                </label>
-                <button
-                  type="button"
-                  className="text-sm font-medium transition"
-                  style={{ color: '#363EE8' }}
-                >
-                  Forgot password?
-                </button>
-              </div>
+              <p className="text-body-s pt-1" style={{ color: 'var(--neutral-600)' }}>
+                Contact HR for access or password help.
+              </p>
 
               {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading}
-                aria-busy={loading || undefined}
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ backgroundColor: '#363EE8' }}
-                onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = '#2830c5'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#363EE8'; }}
-              >
-                {loading
-                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sign in</>
-                  : 'Sign in'}
-              </button>
+              <div className="mt-2">
+                <Button type="submit" size="lg" variant="primary" loading={loading} className="w-full">
+                  Sign in
+                </Button>
+              </div>
             </form>
 
             {isMockModeEnabled && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <div className="text-body-s mt-4 rounded-[var(--radius-md)] border border-[var(--warning-300)] bg-[var(--warning-100)] px-3 py-2 text-[var(--warning-700)]">
                 <span className="font-semibold">Demo Mode:</span> Use any active rater email with any non-empty password.
               </div>
             )}

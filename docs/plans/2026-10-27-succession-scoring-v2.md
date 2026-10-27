@@ -1,7 +1,7 @@
 ---
 title: Implement reviewed position-specific succession scoring
 date: 2026-10-27
-status: In Progress
+status: Blocked
 summary: Build and verify the agreed fixed-weight scoring model separately from current results, then integrate position-specific relevance reviews and qualification visibility after the authorization release gate is satisfied.
 ---
 
@@ -81,12 +81,12 @@ Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon S
 
 **Interfaces:** Export typed position requirements, reviewed evidence inputs, `evaluateSuccessionV2(input): SuccessionV2Result`, and `rankSuccessionV2(results): RankedSuccessionV2Result[]`. Input must include candidate identity/name, scoring date, explicit review decisions for each evidence category, IPCR, and competency coverage. Results distinguish the four states above, with reason codes and audit-friendly component inputs. Signature details may use a cohesive options object; avoid loose `any`, silent numeric coercion, and unsafe non-null assertions.
 
-- [ ] Write failing tests for the exact agreed examples: 4 relevant years vs 2 required = 20; vs 4 required = 10; 40 relevant hours vs 40 required = 10; 80+ vs 40 = 20; bachelor's 3/master's 9/PhD 15; master meets master's minimum for 9; bachelor fails master's minimum; eligibility 0/7.5/15 with two-or-more cap; IPCR 5 = 30 and missing = 0.
-- [ ] Add tests for irrelevant/external work exclusion, internal/external training equality, overlaps, duplicates including inconsistent renewals/certificates, missing/invalid/negative/NaN/infinite values, ISO date validation, future evidence, expiry today/yesterday, unsupported professional degrees, and zero/missing requirements.
-- [ ] Add tests for all result states, precedence of known failure over unknown evidence, manual nominations never bypassing failure, no final totals/ranks/readiness on pending states, competency readiness versus score readiness, deterministic ties, stable batch rankings, and two-decimal rounding.
-- [ ] Run the focused new test file; record expected RED output before implementation.
-- [ ] Implement the smallest pure engine satisfying these cases; no Supabase, UI, feature flags, or invented equivalence mappings.
-- [ ] Run focused tests, all current succession tests, type-check, lint, and full test suite once before commit. Keep pure engine disconnected from live application imports.
+- [x] Write failing tests for the exact agreed examples: 4 relevant years vs 2 required = 20; vs 4 required = 10; 40 relevant hours vs 40 required = 10; 80+ vs 40 = 20; bachelor's 3/master's 9/PhD 15; master meets master's minimum for 9; bachelor fails master's minimum; eligibility 0/7.5/15 with two-or-more cap; IPCR 5 = 30 and missing = 0.
+- [x] Add tests for irrelevant/external work exclusion, internal/external training equality, overlaps, duplicates including inconsistent renewals/certificates, missing/invalid/negative/NaN/infinite values, ISO date validation, future evidence, expiry today/yesterday, unsupported professional degrees, and zero/missing requirements.
+- [x] Add tests for all result states, precedence of known failure over unknown evidence, manual nominations never bypassing failure, no final totals/ranks/readiness on pending states, competency readiness versus score readiness, deterministic ties, stable batch rankings, and two-decimal rounding.
+- [x] Run the focused new test file; record expected RED output before implementation.
+- [x] Implement the smallest pure engine satisfying these cases; no Supabase, UI, feature flags, or invented equivalence mappings.
+- [x] Run focused tests, all current succession tests, type-check, lint, and full test suite once before commit. Keep pure engine disconnected from live application imports.
 - [ ] Self-review, commit as `feat(succession): add staged fixed-weight scoring engine`, and report exact evidence. Controller dispatches the authorized reviewer; fix Important/Critical findings using the same worker/reviewer sessions.
 
 ### Task 2: Establish authorized evidence and review persistence (gated)
@@ -140,3 +140,12 @@ Read-only live catalog checks on 2026-10-27 confirmed RLS is disabled and anon S
 - `npm run check:migrations` when migrations exist; local/preview authorization and atomic-audit tests before persistence integration.
 - `git diff --check`, whole-branch review, DESIGN_IDENTITY.md section 16 for changed UI, and no secrets/PII in new files or test reports.
 - Prove V1 remains the active path throughout preparation; do not claim this staged engine changes current live scores.
+
+## Progress and remaining gates (2026-10-28)
+
+- Implemented Task 1 in `a29c494`, with review-driven fixes in `7e03645`. New pure engine and tests only; application references still include only the new test importing V2. No page integration, migrations, live writes, push, or activation.
+- The authorized GPT Sol High reviewer found one Important training summation/order defect and one Minor mutable audit-reference issue. The same worker added exact decimal aggregation/comparison and detached audit snapshots with RED-to-GREEN regressions. Independent fix re-review is **not complete**: resuming the same reviewer failed with `subscription_sharing_usage_limit_exceeded`. Do not mark the original findings independently cleared or the branch review approved.
+- Controller verification at `7e03645`: `npm test` passed **926 tests across 106 files**, `npm run lint` passed with zero warnings, and `npm run build:verify` passed (includes `tsc --noEmit`). Branch whitespace check passed. Worker focused checks passed 159 V2 and 287 succession tests. Existing Vite/Browserslist/React-act/mock-error/localhost-refusal warnings remain documented, not silently fixed.
+- On 2026-10-28 the user explicitly deferred security Phase 4A. Tasks 2–4 and V2 activation remain gated; deferral does not authorize insecure review writes or a live cutover. The existing application scoring remains unchanged.
+- Next: resume the same reviewer after its provider limit resets or after the user approves another review arrangement. Once the independent check is complete, retain the engine staged while the separate security prerequisite remains deferred.
+- Delivered-versus-planned details: [session summary](../session-summaries/2026-10-27-succession-scoring-v2-summary.md).

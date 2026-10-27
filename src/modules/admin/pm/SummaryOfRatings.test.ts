@@ -227,6 +227,31 @@ describe('buildDeptCompletionRows with mixed semester publication', () => {
     expect(legal.isOlderSemester).toBe(false);
   });
 
+  it('scopes completion total to the published semester required count rather than post-semester headcount', () => {
+    // Engineer has 20 active employees today, but 18 required in the published semester
+    const engineerSem: DepartmentSourceSemester = {
+      department: 'Office of the City Engineer',
+      cycleId: 6,
+      periodTitle: 'January–June 2026',
+      status: 'published',
+      requiredCount: 18,
+      approvedCount: 18,
+      assessmentCompleteCount: 18,
+    };
+    const testHeadcount = new Map([
+      ['office of the city engineer', { name: 'Office of the City Engineer', count: 20 }],
+    ]);
+    const deptSemesters = new Map<string, DepartmentSourceSemester>([
+      ['office of the city engineer', engineerSem],
+    ]);
+
+    const rows = buildDeptCompletionRows([], testHeadcount, true, deptSemesters);
+    const engineer = rows.find(r => r.department === 'Office of the City Engineer')!;
+    expect(engineer.total).toBe(18);
+    expect(engineer.completed).toBe(18);
+    expect(engineer.rate).toBe(1.0);
+  });
+
   it('keeps KPIs and group averages independent without leaking across departments', () => {
     const records = [
       record('1', 'Office of the City Engineer', 4.5),

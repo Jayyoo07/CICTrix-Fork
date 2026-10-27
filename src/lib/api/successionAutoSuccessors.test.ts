@@ -59,6 +59,7 @@ const context = (overrides: Partial<AutoSuccessorContext> = {}): AutoSuccessorCo
   employees: [],
   employeeById: new Map(),
   eligibilityByEmployee: new Map(),
+  educationByEmployee: new Map(),
   eligibilityTypes: [{ name: 'CS Professional', points: 15, isActive: true }],
   pointsForFullMarks: 15,
   scores: new Map(),
@@ -102,6 +103,87 @@ describe('evaluateAutoSuccessors', () => {
     expect(result.qualified[0].isManuallyAdded).toBe(false);
     expect(result.qualified[0].readiness.total).toBeGreaterThan(0);
     expect(result.notQualified).toEqual([]);
+  });
+
+  it('qualifies on the bachelor\u2019s field after an unrelated master\u2019s is added', () => {
+    const emp = employee('emp-grad', 'Engineer I', 'Master in Public Administration');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-grad', emp]]),
+      eligibilityByEmployee: new Map([
+        ['emp-grad', [{ type: 'CS Professional', validUntil: null }]],
+      ]),
+      educationByEmployee: new Map([
+        ['emp-grad', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2015 },
+          { level: 'Graduate Studies', course: 'Master in Public Administration', year_graduated: 2026 },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.notQualified).toEqual([]);
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Master in Public Administration');
+    // One level above the required bachelor's, relevant by title keyword: 60% of 15.
+    expect(result.qualified[0].readiness.education).toBeCloseTo(9, 5);
+  });
+
+  it('reads a graduate degree from the PDS even when the legacy column is blank', () => {
+    const emp = employee('emp-pds', 'Engineer I', '');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-pds', emp]]),
+      educationByEmployee: new Map([
+        ['emp-pds', [
+          { level: 'College', course: 'Bachelor of Science in Civil Engineering', year_graduated: 2020 },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.notQualified).toEqual([]);
+    expect(result.qualified).toHaveLength(1);
+    expect(result.qualified[0].readiness.educationLabel).toBe('Bachelor of Science in Civil Engineering');
+    expect(result.qualified[0].readiness.education).toBe(0);
+  });
+
+  it('uses the legacy column when a PDS row names no course', () => {
+    const emp = employee('emp-partial', 'Engineer I', 'Bachelor of Science in Civil Engineering');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-partial', emp]]),
+      educationByEmployee: new Map([
+        ['emp-partial', [{ level: 'College', course: null, year_graduated: 2015 }]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.notQualified).toEqual([]);
+    expect(result.qualified).toHaveLength(1);
+  });
+
+  it('prefers the PDS rows over a mismatched legacy column', () => {
+    const emp = employee('emp-mismatch', 'Engineer I', 'Bachelor of Science in Civil Engineering');
+    const ctx = context({
+      employees: [emp],
+      employeeById: new Map([['emp-mismatch', emp]]),
+      educationByEmployee: new Map([
+        ['emp-mismatch', [
+          { level: 'Graduate Studies', course: 'Master in Public Administration', year_graduated: 2026 },
+        ]],
+      ]),
+    });
+
+    const result = evaluateAutoSuccessors(position(), ctx);
+
+    expect(result.qualified).toHaveLength(0);
+    expect(result.notQualified).toHaveLength(1);
+    expect(result.notQualified[0].gates.education).toBe(false);
+    expect(result.notQualified[0].failedGates.join(' ')).toContain('Master in Public Administration');
   });
 
   it('reports a gate failure instead of ranking the candidate', () => {

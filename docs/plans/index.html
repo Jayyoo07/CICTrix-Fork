@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">99 plans &middot; 80 done</p>
+    <p class="counts">103 plans &middot; 82 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -71,8 +71,23 @@
         <tbody>
       <tr>
         <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-succession-v2-auto-fallback.md">Succession Planning V2 Automated Fallbacks &amp; Review Bypass</a><p class="summary">Bypass manual evidence review gating in Succession V2 and add multi-tier database fallbacks (department name resolution, date_hired tenure, profile education and eligibility) so qualified successors load and rank immediately.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-succession-v2-auto-and-reconnection-plan.md">Succession V2 Candidate Unblocking &amp; Evidence Review Reconnection Roadmap</a><p class="summary">Fix candidate discovery in Succession V2 using department text lookup and multi-tier PDS fallbacks to populate successors immediately, and outline the future roadmap for reconnecting manual reviews and Security Phase 4A.</p></td>
         <td class="status"><span class="badge badge-neutral">Draft</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-interviewer-scheduled-applicants-only.md">The interviewer portal shows only applicants who were scheduled</a><p class="summary">The Assigned job postings table counted every applicant whose position matched, not the ones scheduled for an interview, so a posting read 6 while the list behind it held 1. Count and list both filter on an interview schedule now, and the applicant dedupe stops merging distinct people who share a plantilla item number. The oral assessment table's SCORE column no longer stretches to its longest option label and squeeze REMARKS off the row.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-for-hiring-scored-only.md">For Hiring lists only applicants who were scored</a><p class="summary">The ranked list showed anyone merely Qualified, so applicants with no interview or exam score sat in a table ordered by interview score. Visibility now requires both scores, with applicants already past selection kept regardless, and the page refreshes from Supabase realtime instead of two same-tab events.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
@@ -92,6 +107,11 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-configure-competency-framework.md">Configure PM Competency Framework for All Positions</a><p class="summary">Map all active employee and plantilla/job posting positions into the PM Competency Framework across the 12 LGU competency standards using base-title inheritance and Philippine Civil Service functional archetypes.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
+        <td><a href="2026-10-27-succession-scoring-v2.md">Implement reviewed position-specific succession scoring</a><p class="summary">Build and verify the agreed fixed-weight scoring model separately from current results, then integrate position-specific relevance reviews and qualification visibility with security Phase 4A maintained as a production release gate.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -431,7 +451,7 @@
       </tr>
       <tr>
         <td class="date">2026-10-16</td>
-        <td><a href="2026-10-16-security-remediation.md">Security remediation (credentials, document encryption, authorization and public applicant flows)</a><p class="summary">Expanded by the October 27 evidence-based review. Contain leaked service-role and document keys, replace browser-only credentials, enforce role and record authorization, and secure applicant identity, document validation, audit history and resource limits.</p></td>
+        <td><a href="2026-10-16-security-remediation.md">Security remediation (credentials, document encryption, authorization and public applicant flows)</a><p class="summary">Expanded by the October 27 evidence-based review and succession scoring dependency. Contain leaked keys, replace browser-only credentials, enforce role and office authorization, and protect applicant flows, qualification evidence, review decisions and audit history.</p></td>
         <td class="status"><span class="badge badge-neutral">Draft</span></td>
       </tr>
       <tr>
@@ -575,6 +595,14 @@
         <tbody>
       <tr>
         <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-succession-v2-auto-fallback-summary.md">Session Summary: Succession V2 Automated Fallbacks &amp; Review Bypass</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-succession-scoring-v2-integration-summary.md">Integrate Succession Scoring V2 and Evidence Review Workflow</a><p class="summary">Completed Tasks 2–4 of Succession Scoring V2. Added evidence reviews schema, review service layer with snapshot staleness detection, end-to-end V2 candidate evaluation and ranking pipeline, and candidate review modal integrated into SuccessionPlanningPage. All 989 tests, lint, and build verified locally.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-publication-roster-summary.md">Session Summary: Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a></td>
       </tr>
       <tr>
@@ -586,8 +614,16 @@
         <td><a href="../session-summaries/2026-10-28-configure-competency-framework-summary.md">Session Summary: Configure PM Competency Framework for All Positions</a></td>
       </tr>
       <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-27-succession-scoring-v2-summary.md">Stage succession V2 engine; defer integration and final review</a><p class="summary">Added the fixed-weight evaluator and 159 tests, corrected two review findings, and passed 926 full-suite tests. Independent fix re-review hit a provider limit; security Phase 4A and application integration remain deferred.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
+      </tr>
+      <tr>
         <td class="date">2026-10-27</td>
         <td><a href="../session-summaries/2026-10-27-tracker-polling-summary.md">Applicant tracker fallback polling - session summary</a><p class="summary">Implement the approved 15-second visible tracker fallback and scoped refreshes; leave interviewer polling unchanged because realtime and server-side revocation gates fail.</p><p class="meta">Plan: <a href="2026-10-26-performance-followups.md">2026-10-26-performance-followups.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
+        <td><a href="../session-summaries/2026-10-27-succession-security-scope-summary.md">Add succession access controls to security remediation</a><p class="summary">Documented the focused security prerequisite for reviewed succession scoring, without executing remediation or changing live permissions.</p><p class="meta">Plan: <a href="2026-10-16-security-remediation.md">2026-10-16-security-remediation.md</a></p></td>
       </tr>
       <tr>
         <td class="date">2026-10-27</td>

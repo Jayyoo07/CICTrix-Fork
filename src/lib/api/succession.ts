@@ -2622,3 +2622,7 @@ export async function listAutoSuccessors(
   const results = await listAutoSuccessorsForPositions([criticalPositionId]);
   return results.get(criticalPositionId) ?? { ok: false, error: 'Critical position not found.' };
 }
+
+// ── V2 Succession Pipeline (staged, fixed-weight 30/20/20/15/15 model) ─────
+export { fetchSuccessionPoolV2 } from './successionPipelineV2';
+export type { SuccessionPoolV2 } from './successionPipelineV2';

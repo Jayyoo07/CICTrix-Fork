@@ -32,6 +32,7 @@ import '../../styles/interviewer-dashboard.css';
 import { EvalStatusBadge, Pager, SearchField, SelectField } from './InterviewerDashboardParts';
 import { InterviewerNavBar, type InterviewerNavSession } from './InterviewerNavBar';
 import { formatDate as formatDateDI, paginate, toLocalKey } from './interviewerDashboardModel';
+import { getLocalSchedule, isScheduledForInterview } from '../../lib/applicantSchedule';
 
 const APPLICANTS_PAGE_SIZE = 8;
 const TYPE_OPTIONS = [
@@ -281,7 +282,12 @@ const fetchApplicantsByPosition = async (client: any, position: string): Promise
     .order('created_at', { ascending: false });
 
   const rows = Array.isArray(data) ? data : [];
-  return rows.filter((row: any) => normalizeText(String(row?.position ?? '')) === normalizedTarget);
+  // Everyone who applied is not everyone the interviewer evaluates: only the
+  // scheduled ones belong here, and the dashboard counts the same set.
+  return rows.filter(
+    (row: any) =>
+      normalizeText(String(row?.position ?? '')) === normalizedTarget && isScheduledForInterview(row),
+  );
 };
 
 const fetchEvaluations = async (client: any): Promise<any[]> => {
@@ -361,24 +367,40 @@ const buildFallbackApplicantsFromRecruitmentStore = (jobTitle: string): any[] =>
       contact_number: String(row?.personalInfo?.phone ?? ''),
       status: String(row?.status ?? 'Pending'),
       created_at: String(row?.applicationDate ?? new Date().toISOString()),
+      // The local store has no schedule of its own; getLocalSchedule holds
+      // what RSP set while offline. Without this the fallback would hand back
+      // unscheduled applicants and undo the filter above it.
+      interview_date:
+        row?.interview_date ?? getLocalSchedule(String(row?.id ?? ''))?.interview_date ?? null,
       evaluation_status: 'Not Yet Rated',
-    }));
+    }))
+    .filter(isScheduledForInterview);
 };
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
 
-const dedupeApplicants = (rows: Applicant[]): Applicant[] => {
+/**
+ * Merge the same applicant arriving from two sources, without merging two
+ * people.
+ *
+ * `item_number` used to be the first identity key, but it names the plantilla
+ * the applicant is competing for, not the applicant — `EvaluationForm` reads
+ * it as `plantillaNameFor(applicant.item_number)`. Six candidates for one
+ * plantilla therefore collapsed into a single row, which is why a posting
+ * counting 6 opened onto a list of 1.
+ */
+export const dedupeApplicants = (rows: Applicant[]): Applicant[] => {
   const unique = new Map<string, Applicant>();
 
   rows.forEach((row) => {
+    const id = String(row.id || '').trim();
     const email = normalizeText(String(row.email || ''));
-    const itemNumber = normalizeText(String(row.item_number || ''));
     const position = normalizeText(String(row.position || ''));
     const fullName = normalizeText(`${row.first_name || ''} ${row.middle_name || ''} ${row.last_name || ''}`);
 
-    // Prefer explicit IDs/item numbers; otherwise fall back to email+position identity.
-    const identityKey = itemNumber
-      ? `item:${itemNumber}`
+    // The row's own id first; then the person, never the plantilla.
+    const identityKey = id
+      ? `id:${id}`
       : email
         ? `email:${email}|pos:${position}`
         : `name:${fullName}|pos:${position}`;

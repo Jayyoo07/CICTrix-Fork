@@ -2699,13 +2699,23 @@
 /* Score: just a 1-5 select. */
 .oral-table th:nth-child(3),
 .oral-table td:nth-child(3) {
-  width: 15%;
+  width: 12%;
 }
 
 /* Remarks: the widest column — it takes free-text input. */
 .oral-table th:nth-child(4),
 .oral-table td:nth-child(4) {
-  width: 45%;
+  width: 48%;
+}
+
+/* A native select sizes itself to its widest option, and these read
+   "4 – Very Satisfactory". That stretched the SCORE cell to roughly 220px and
+   pushed REMARKS — the only column anyone types into — off the row. Bound it
+   to its cell instead; the open menu still shows the full labels, and the
+   rating scale is printed directly above the table. */
+.oral-table .pcpt-score-select {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Fixed layout clips rather than expands, so wrap long content instead of

@@ -29,7 +29,7 @@ import {
 import { formatDisplayDate, localIsoDate } from '../lib/scheduleSelection';
 import { supabase } from '../lib/supabase';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
-import { buildEvaluationSnapshotMap, subscribeToEvaluationChanges, type EvaluationSnapshot } from '../lib/evaluationScores';
+import { buildEvaluationSnapshotMap, type EvaluationSnapshot } from '../lib/evaluationScores';
 import { fetchWrittenExamTotals } from '../lib/api/examTotalPoints';
 import { TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 import { convertExamScore, totalForPosition } from '../lib/examTotalPoints';
@@ -43,6 +43,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Modal } from './modal';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 interface HiringRow {
   id: string;
@@ -85,6 +86,16 @@ const isForHiring = (status: string) => {
   const s = status.toLowerCase().trim();
   if (isRejected(status)) return false;
   return QUALIFY_STATUSES.some(q => s.includes(q));
+};
+
+// Already chosen for the plantilla, or past it. These stay on the list even
+// without a readable score: hiding somebody mid-flow would lose the selection
+// the page exists to show. Plain "qualified" is not one of these — it only
+// means they passed screening.
+const SELECTED_STATUSES = ['recommended for hiring', 'accepted', 'for hiring', 'for contract signing', 'hired'];
+const isPastSelection = (status: string) => {
+  const s = String(status ?? '').toLowerCase().trim();
+  return SELECTED_STATUSES.some(q => s.includes(q));
 };
 
 const CAT_SCORES_KEY = 'cictrix_category_scores';
@@ -144,6 +155,17 @@ export const ForHiringPage = () => {
     void fetchWrittenExamTotals().then((result) => { if (!cancelled) setExamTotals(result.totals); });
     return () => { cancelled = true; };
   }, []);
+
+  // Bumped by realtime so the loader below re-runs. The page used to watch
+  // only `evaluations` plus two same-tab window events, so a status change or
+  // a hire made anywhere else — another tab, another admin — left this list
+  // showing the old ranking until it was reopened.
+  const [reloadKey, setReloadKey] = useState(0);
+  useRealtimeRefresh({
+    channel: 'for-hiring-applicants',
+    tables: ['applicants', 'evaluations', 'plantilla_slots', 'newly_hired'],
+    onChange: () => setReloadKey(key => key + 1),
+  });
 
   // ── Data loading ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -313,7 +335,10 @@ export const ForHiringPage = () => {
           try {
             const { data, error } = await (supabase as any)
               .from('applicants')
-              .select('id,first_name,last_name,middle_name,full_name,email,position,office,department,status,qualification_score,total_score');
+              // Only columns public.applicants has: naming a missing one makes
+              // PostgREST reject the whole query. The row mapping below already
+              // treats full_name, department and the scores as optional.
+              .select('id,first_name,last_name,middle_name,email,position,office,status');
             if (error) throw error;
             if (Array.isArray(data)) remoteData.push(...data);
           } catch (error) {
@@ -430,6 +455,11 @@ export const ForHiringPage = () => {
           // A filled plantilla's hire happens on the Generate Employee
           // Credentials tab; nobody else can be selected for it.
           .filter(r => !r.slot || r.slot.status !== 'filled')
+          // Ranked by interview score, so an applicant with no interview and
+          // no exam score has nothing to rank and cannot be compared with the
+          // rest. Qualifying for the list is not the same as having sat the
+          // assessments.
+          .filter(r => (r.interviewScore != null && r.examScore != null) || isPastSelection(r.status))
           .sort((a, b) =>
           (a.department || 'zzz').localeCompare(b.department || 'zzz') ||
           (a.position   || 'zzz').localeCompare(b.position   || 'zzz')
@@ -444,15 +474,15 @@ export const ForHiringPage = () => {
       }
     };
     void load();
-    const unsubscribeEvals = subscribeToEvaluationChanges(load);
+    // Exam and category scores are still written to localStorage, which no
+    // subscription can see, so these same-tab events stay.
     window.addEventListener('cictrix:applicants-updated', load);
     window.addEventListener('cictrix:category-scores-updated', load);
     return () => {
-      unsubscribeEvals();
       window.removeEventListener('cictrix:applicants-updated', load);
       window.removeEventListener('cictrix:category-scores-updated', load);
     };
-  }, []);
+  }, [reloadKey]);
 
   // ── Department folder list ────────────────────────────────────────────────
   const rowsLoad = useTableLoading(loading, rows.length > 0);

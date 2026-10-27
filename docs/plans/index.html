@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">91 plans &middot; 76 done</p>
+    <p class="counts">93 plans &middot; 76 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -71,8 +71,18 @@
         <tbody>
       <tr>
         <td class="date">2026-10-27</td>
+        <td><a href="2026-10-27-sor-previous-semester-competency.md">Publish Summary of Ratings from the previous completed semester, per department</a><p class="summary">Rewrite the Summary of Ratings source so each department shows its most recent ended semester in which every required employee has a fully approved IPCR, with the official rating and the four competency blocks read from that same semester. Adds a frozen per-semester roster, a department publication record, a durable competency job queue, and honest pending states.</p></td>
+        <td class="status"><span class="badge badge-neutral">Draft</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
         <td><a href="2026-10-27-sor-competency-breakdown.md">Populate the Summary of Ratings competency breakdown</a><p class="summary">Run the AI competency matcher/assessor into the mirror so Summary of Ratings shows a real per-competency breakdown, and render assessed competencies with a nullable required level so an unconfigured Competency Map no longer blanks the whole panel.</p></td>
         <td class="status"><span class="badge badge-info">In Progress</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
+        <td><a href="2026-10-27-open-vacancy-with-no-vacant-plantilla.md">A vacancy with no vacant plantilla must say so</a><p class="summary">Job Vacancies called a position Open while its only plantilla was filled, so the public vacancy table — which lists one row per open plantilla — showed nothing. Give both surfaces the same predicate, label a fully filled vacancy as such instead of Open, and make open_vacancy refuse a position with no plantilla left to fill.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>

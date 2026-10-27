@@ -62,13 +62,23 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">93 plans &middot; 77 done</p>
+    <p class="counts">96 plans &middot; 78 done</p>
 
     <section>
       <h2>Plans</h2>
       <table>
         <thead><tr><th>Date</th><th>Plan</th><th>Status</th></tr></thead>
         <tbody>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-sor-publication-roster.md">Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a><p class="summary">Fix PostgreSQL ambiguous column error in evaluate_sor_publication, align roster snapshot eligibility with semester start date, and update UI completion denominator so Summary of Ratings accurately displays completed IPCRs for each department.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-employee-interviewer-login-ui.md">Align Employee and Interviewer login pages</a><p class="summary">Match the HRIS shared sign-in button and apply the design identity to both login pages without changing authentication or layouts.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
+      </tr>
       <tr>
         <td class="date">2026-10-27</td>
         <td><a href="2026-10-27-sor-previous-semester-competency.md">Publish Summary of Ratings from the previous completed semester, per department</a><p class="summary">Rewrite the Summary of Ratings source so each department shows its most recent ended semester in which every required employee has a fully approved IPCR, with the official rating and the four competency blocks read from that same semester. Adds a frozen per-semester roster, a department publication record, a durable competency job queue, and honest pending states.</p></td>
@@ -83,6 +93,9 @@
         <td class="date">2026-10-27</td>
         <td><a href="2026-10-27-pds-education-succession.md">Feed PDS education into succession readiness</a><p class="summary">Succession reads `employee_education` directly, the way it already reads `employee_eligibility`, so an employee's PDS education edit changes their succession gate and education score. No migration, no backfill, no writes.</p></td>
         <td class="status"><span class="badge badge-info">In Progress</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-27</td>
         <td><a href="2026-10-27-open-vacancy-with-no-vacant-plantilla.md">A vacancy with no vacant plantilla must say so</a><p class="summary">Job Vacancies called a position Open while its only plantilla was filled, so the public vacancy table — which lists one row per open plantilla — showed nothing. Give both surfaces the same predicate, label a fully filled vacancy as such instead of Open, and make open_vacancy refuse a position with no plantilla left to fill.</p></td>
         <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
@@ -545,6 +558,10 @@
       <table>
         <thead><tr><th>Date</th><th>Summary</th></tr></thead>
         <tbody>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-sor-publication-roster-summary.md">Session Summary: Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a></td>
+      </tr>
       <tr>
         <td class="date">2026-10-27</td>
         <td><a href="../session-summaries/2026-10-27-tracker-polling-summary.md">Applicant tracker fallback polling - session summary</a><p class="summary">Implement the approved 15-second visible tracker fallback and scoped refreshes; leave interviewer polling unchanged because realtime and server-side revocation gates fail.</p><p class="meta">Plan: <a href="2026-10-26-performance-followups.md">2026-10-26-performance-followups.md</a></p></td>

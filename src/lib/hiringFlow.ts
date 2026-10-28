@@ -21,6 +21,9 @@ import type { NewlyHired, PlantillaSlot } from '../types/recruitment.types';
 
 const client = supabase as any;
 
+export const isUuid = (id: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export const RESERVED_STATUS = 'For Contract Signing';
 
 /** Default time an applicant gets to report for contract signing. */
@@ -99,23 +102,33 @@ export const fetchOtherOpenApplications = async (
 // ─── For Hiring: which plantilla each application is for ───────────────────
 
 export interface HiringContext {
+  ok: boolean;
   /** The plantilla each application is for, by applicant id. */
   slotByApplicant: Map<string, PlantillaSlot>;
   /** When RSP last revoked this applicant's selection ("did not report"). */
   revokedAt: Map<string, string>;
+  error?: unknown;
 }
 
 export const fetchHiringContext = async (applicantIds: string[]): Promise<HiringContext> => {
   const slotByApplicant = new Map<string, PlantillaSlot>();
   const revokedAt = new Map<string, string>();
-  if (applicantIds.length === 0) return { slotByApplicant, revokedAt };
+  if (applicantIds.length === 0) return { ok: true, slotByApplicant, revokedAt };
   try {
-    const [slots, links, { data }] = await Promise.all([
+    const validUuids = applicantIds.filter(isUuid);
+    const applicantQuery = validUuids.length > 0
+      ? client.from('applicants').select('id, plantilla_slot_id, selection_revoked_at').in('id', validUuids)
+      : Promise.resolve({ data: [], error: null });
+
+    const [slots, links, applicantsRes] = await Promise.all([
       slotIndex(),
-      fetchApplicantSlotLinks(applicantIds),
-      client.from('applicants').select('id, plantilla_slot_id, selection_revoked_at').in('id', applicantIds),
+      fetchApplicantSlotLinks(validUuids),
+      applicantQuery,
     ]);
-    (data ?? []).forEach((row: any) => {
+
+    if (applicantsRes.error) throw applicantsRes.error;
+
+    (applicantsRes.data ?? []).forEach((row: any) => {
       const id = String(row.id);
       if (row.selection_revoked_at) revokedAt.set(id, String(row.selection_revoked_at));
       const own = row.plantilla_slot_id ? slots.get(String(row.plantilla_slot_id)) : undefined;
@@ -124,10 +137,11 @@ export const fetchHiringContext = async (applicantIds: string[]): Promise<Hiring
       const slot = own ?? linked;
       if (slot) slotByApplicant.set(id, slot);
     });
+    return { ok: true, slotByApplicant, revokedAt };
   } catch (err) {
     console.warn('[hiringFlow] hiring context lookup failed:', err);
+    return { ok: false, slotByApplicant, revokedAt, error: err };
   }
-  return { slotByApplicant, revokedAt };
 };
 
 // ─── Reserved: waiting for contract signing ────────────────────────────────

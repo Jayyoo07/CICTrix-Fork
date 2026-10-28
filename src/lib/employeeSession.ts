@@ -18,6 +18,24 @@
 import type { EmployeeSession } from '../types/employee.types';
 
 const EMPLOYEE_SESSION_KEY = 'cictrix_employee_session';
+const SETUP_DISMISSED_KEY = 'cictrix_employee_setup_dismissed';
+
+/** Setup reminders are dismissed only for this employee in this tab's session. */
+export const isEmployeeSetupDismissed = (employeeId: string): boolean => {
+  try {
+    return sessionStorage.getItem(SETUP_DISMISSED_KEY) === employeeId;
+  } catch {
+    return false;
+  }
+};
+
+export const dismissEmployeeSetup = (employeeId: string): void => {
+  try {
+    sessionStorage.setItem(SETUP_DISMISSED_KEY, employeeId);
+  } catch {
+    // Closing still works for this page when browser storage is unavailable.
+  }
+};
 
 /**
  * The session for this tab.
@@ -66,6 +84,7 @@ export const writeEmployeeSession = (session: EmployeeSession): void => {
 export const clearEmployeeSession = (): void => {
   try {
     sessionStorage.removeItem(EMPLOYEE_SESSION_KEY);
+    sessionStorage.removeItem(SETUP_DISMISSED_KEY);
   } catch {
     // ignore
   }

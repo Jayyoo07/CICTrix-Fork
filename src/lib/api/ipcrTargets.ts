@@ -78,6 +78,12 @@ export const hasSubmittableTarget = (targets: TargetsByFunction): boolean =>
     targets[fn].some((mfo) => mfo.indicators.some((si) => si.description.trim().length > 0)),
   );
 
+/** Draft recovery accepts partial MFOs before their indicators are entered. */
+export const hasTargetContent = (targets: TargetsByFunction): boolean =>
+  FUNCTION_TYPES.some((fn) =>
+    targets[fn].some((mfo) => mfo.title.trim() || mfo.indicators.some((si) => si.description.trim())),
+  );
+
 /**
  * Denormalise one category's MFOs into the legacy ipcr_workspace text column.
  * Kept deliberately simple and human-readable — it feeds the PDF.
@@ -199,27 +205,30 @@ export async function loadTargetSetting(
 }
 
 /** Load + group an MFO/SI tree for one target setting into TargetsByFunction. */
-async function hydrateTargets(settingId: string): Promise<TargetsByFunction> {
-  const { data: mfoRows, error: mfoErr } = await (supabase as any)
+async function hydrateTargets(settingId: string, mfoIdsToLoad?: string[]): Promise<TargetsByFunction> {
+  let mfoQuery = (supabase as any)
     .from('mfos')
     .select('id, function_type, title, sort_order')
-    .eq('target_setting_id', settingId)
-    .order('sort_order', { ascending: true });
+    .eq('target_setting_id', settingId);
+  if (mfoIdsToLoad) mfoQuery = mfoQuery.in('id', mfoIdsToLoad);
+  const { data: mfoRows, error: mfoErr } = await mfoQuery.order('sort_order', { ascending: true });
 
   const targets = emptyTargets();
   for (const fn of FUNCTION_TYPES) targets[fn] = [];
 
-  if (mfoErr || !mfoRows || !mfoRows.length) {
+  if (mfoErr) throw new Error(mfoErr.message ?? 'Failed to load saved MFOs.');
+  if (!mfoRows || !mfoRows.length) {
     for (const fn of FUNCTION_TYPES) targets[fn] = [blankMfo()];
     return targets;
   }
 
   const mfoIds = mfoRows.map((m: any) => m.id);
-  const { data: siRows } = await (supabase as any)
+  const { data: siRows, error: siErr } = await (supabase as any)
     .from('success_indicators')
     .select('id, mfo_id, description, sort_order')
     .in('mfo_id', mfoIds)
     .order('sort_order', { ascending: true });
+  if (siErr) throw new Error(siErr.message ?? 'Failed to load saved success indicators.');
 
   const siByMfo = new Map<string, Array<{ id: string; description: string }>>();
   for (const si of (siRows ?? []) as any[]) {
@@ -277,7 +286,7 @@ export async function loadLatestTargetSetting(
     );
     for (const candidate of activeWorkflowRows) {
       const t = await hydrateTargets(candidate.id);
-      if (hasSubmittableTarget(t)) {
+      if (hasTargetContent(t)) {
         chosenSetting = candidate;
         chosenTargets = t;
         break;
@@ -288,7 +297,7 @@ export async function loadLatestTargetSetting(
     if (!chosenSetting) {
       for (const candidate of rows) {
         const t = await hydrateTargets(candidate.id);
-        if (hasSubmittableTarget(t)) {
+        if (hasTargetContent(t)) {
           chosenSetting = candidate;
           chosenTargets = t;
           break;
@@ -309,9 +318,8 @@ export async function loadLatestTargetSetting(
 }
 
 /**
- * Persist the whole target setting. MFOs are replaced wholesale (delete + insert)
- * rather than diffed: Phase 1 rows carry no downstream data until Phase 2 begins,
- * and the row counts here are small.
+ * Replace draft MFOs only after their replacements and indicators are written.
+ * This preserves the previous draft if a replacement insert fails.
  */
 export async function saveTargetSetting(params: {
   employeeId: string;
@@ -376,19 +384,13 @@ export async function saveTargetSetting(params: {
       return { ok: false, error: 'Targets are locked and can no longer be edited.' };
     }
 
-    // Upsert the parent row. Resubmitting after a return-for-revision clears the review.
+    // Keep submission editable until all target writes and read-back checks pass.
     const settingPayload: Record<string, unknown> = {
       employee_id: employeeId,
       cycle_id: cycleId,
-      status: submit ? 'submitted_for_approval' : 'draft',
+      status: submit ? current?.status ?? 'draft' : 'draft',
       updated_at: nowIso,
     };
-    if (submit) {
-      settingPayload.submitted_at = nowIso;
-      settingPayload.review_comment = null;
-      settingPayload.reviewed_by = null;
-      settingPayload.reviewed_at = null;
-    }
 
     const { data: saved, error: upErr } = await (supabase as any)
       .from('target_settings')
@@ -399,12 +401,16 @@ export async function saveTargetSetting(params: {
 
     const settingId = (saved as TargetSettingRow).id;
 
-    // Replace children. success_indicators cascade off mfos.
-    const { error: delErr } = await (supabase as any)
-      .from('mfos')
-      .delete()
-      .eq('target_setting_id', settingId);
-    if (delErr) return { ok: false, error: delErr.message };
+    // Keep the previous children until all replacements are written successfully.
+    // Deleting first loses the saved draft if either insert fails.
+    const previousMfoIds = FUNCTION_TYPES.flatMap((fn) => existing.data.targets[fn])
+      .map((mfo) => mfo.id).filter((id): id is string => Boolean(id));
+    let replacementMfoIds: string[] = [];
+    const discardReplacement = async () => {
+      if (replacementMfoIds.length) {
+        await (supabase as any).from('mfos').delete().in('id', replacementMfoIds);
+      }
+    };
 
     const mfoPayload: any[] = [];
     for (const fn of FUNCTION_TYPES) {
@@ -421,6 +427,11 @@ export async function saveTargetSetting(params: {
         .insert(mfoPayload)
         .select('id, function_type, sort_order');
       if (mErr) return { ok: false, error: mErr.message };
+      replacementMfoIds = (insertedMfos ?? []).map((row: any) => row.id);
+      if (replacementMfoIds.length !== mfoPayload.length) {
+        await discardReplacement();
+        return { ok: false, error: 'The replacement targets could not be verified. Please try saving again.' };
+      }
 
       // Match inserted ids back to the drafts by (function_type, sort_order).
       const byKey = new Map<string, string>();
@@ -439,8 +450,48 @@ export async function saveTargetSetting(params: {
 
       if (siPayload.length) {
         const { error: siErr } = await (supabase as any).from('success_indicators').insert(siPayload);
-        if (siErr) return { ok: false, error: siErr.message };
+        if (siErr) {
+          await discardReplacement();
+          return { ok: false, error: siErr.message };
+        }
       }
+    }
+
+    // Verify only the replacements while the previous draft is still intact.
+    try {
+      const replacement = replacementMfoIds.length ? await hydrateTargets(settingId, replacementMfoIds) : emptyTargets();
+      if (FUNCTION_TYPES.some((fn) => flattenForWorkspace(replacement[fn]) !== flattenForWorkspace(targets[fn]))) {
+        await discardReplacement();
+        return { ok: false, error: 'The saved targets could not be verified. Keep your entries open and try saving again.' };
+      }
+    } catch (err) {
+      await discardReplacement();
+      throw err;
+    }
+
+    if (previousMfoIds.length) {
+      const { error: delErr } = await (supabase as any).from('mfos').delete().in('id', previousMfoIds);
+      if (delErr) {
+        await discardReplacement();
+        return { ok: false, error: delErr.message };
+      }
+    }
+
+    // Confirm the relational record can actually be restored before reporting success.
+    const persisted = await hydrateTargets(settingId);
+    if (FUNCTION_TYPES.some((fn) => flattenForWorkspace(persisted[fn]) !== flattenForWorkspace(targets[fn]))) {
+      return { ok: false, error: 'The saved targets could not be verified. Keep your entries open and try saving again.' };
+    }
+
+    if (submit) {
+      const { data: submitted, error: submitErr } = await (supabase as any)
+        .from('target_settings')
+        .update({ status: 'submitted_for_approval', submitted_at: nowIso, review_comment: null, reviewed_by: null, reviewed_at: null })
+        .eq('id', settingId)
+        .select('*')
+        .single();
+      if (submitErr) return { ok: false, error: submitErr.message };
+      return { ok: true, data: submitted as TargetSettingRow };
     }
 
     return { ok: true, data: saved as TargetSettingRow };

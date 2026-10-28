@@ -55,6 +55,7 @@ import {
   flattenForWorkspace,
   getActiveCycle,
   hasSubmittableTarget,
+  hasTargetContent,
   loadTargetSetting,
   loadLatestTargetSetting,
   saveTargetSetting,
@@ -67,6 +68,8 @@ import {
 import { loadEffectiveSchedules } from '../../lib/api/phaseSchedules';
 import { generateIpcrPdf } from '../../lib/ipcrPdf';
 import { IPCR_LIMITS } from '../../lib/ipcrLimits';
+import { dismissEmployeeSetup, isEmployeeSetupDismissed } from '../../lib/employeeSession';
+import { updateSavedTargets, updateSavedAccomplishments, type IpcrSavedSnapshot } from '../../lib/ipcrSavedSnapshot';
 import { CharacterCount } from '../../components/CharacterCount';
 import { EmployeePhase2 } from './EmployeePhase2';
 import { supabase as supabaseClient } from '../../lib/supabase';
@@ -194,7 +197,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [employeeRawDetails, setEmployeeRawDetails] = useState<any | null>(null);
   const [ipcrRows, setIpcrRows] = useState<IPCRRowDraft[]>([]);
   const [, setIpcrEvaluation] = useState<any | null>(null);
-  const [, setIpcrLoading] = useState(false);
+  const [ipcrLoading, setIpcrLoading] = useState(true);
+  const [ipcrHydrated, setIpcrHydrated] = useState(false);
+  const [targetSettingId, setTargetSettingId] = useState<string | null>(null);
   const [ipcrError, setIpcrError] = useState<string | null>(null);
   const [ipcrRatingPeriod, setIpcrRatingPeriod] = useState<string>('');
   const [, setEmployeeEvaluations] = useState<any[]>([]);
@@ -272,7 +277,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const isTargetApproved = targetStatus === 'approved' || ipcrApproved;
   const isPendingApproval = targetStatus === 'submitted_for_approval' || workspaceRow?.status === 'Targets Submitted';
   const targetsLocked = isPendingApproval || isTargetApproved;
-  const readOnly = targetsLocked || !isTargetSettingActive;
+  const readOnly = !ipcrHydrated || ipcrLoading || targetsLocked || !isTargetSettingActive;
 
   // Auto-switch to Phase 2 on first load ONLY when accomplishment rating is active
   // AND the employee's Phase 1 targets have already been approved for this cycle.
@@ -297,13 +302,13 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   );
   const phase1CacheTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!currentUser.supabaseId || !activeCycleId) return;
+    if (!ipcrHydrated || ipcrLoading || !currentUser.supabaseId || !activeCycleId) return;
     if (targetStatus !== 'draft' || isTargetApproved || isPendingApproval) return;
     if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     phase1CacheTimerRef.current = setTimeout(() => {
       try {
         const key = phase1DraftKey(activeCycleId);
-        if (key && hasSubmittableTarget(targetRows)) {
+        if (key && hasTargetContent(targetRows)) {
           sessionStorage.setItem(key, JSON.stringify(targetRows));
         }
       } catch { /* storage full / unavailable */ }
@@ -311,7 +316,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     return () => {
       if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     };
-  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey]);
+  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey, ipcrLoading, ipcrHydrated]);
   // Per-category Phase 2 accomplishments + Q/E/T self-ratings + % weight.
   const [accomplishments, setAccomplishments] = useState({ core: '', strategic: '', support: '' });
   type CatRating = {
@@ -367,13 +372,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       });
   }, [currentUser.supabaseId]);
 
-  const lastLoadedSnapshot = useRef<null | {
-    targetRowsJson: string;
-    employeeTargets: { core: string; strategic: string; support: string };
-    accomplishmentsJson: string;
-    selfRatingsJson: string;
-    ipcrRowsJson: string;
-  }>(null);
+  const lastLoadedSnapshot = useRef<IpcrSavedSnapshot | null>(null);
 
   const isIpcrFormDirty = useCallback(() => {
     const snap = lastLoadedSnapshot.current;
@@ -419,6 +418,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     const loadId = ++latestEmployeeIpcrLoadId.current;
     if (!isSilent) {
       setIpcrLoading(true);
+      setIpcrHydrated(false);
     }
     setIpcrError(null);
     try {
@@ -513,7 +513,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       const activeCycleRes = await getActiveCycle();
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
       let tsRes: { ok: true; data: { setting: TargetSettingRow | null; targets: TargetsByFunction } } | { ok: false; error: string } | null = null;
-      const targetSettingCycleId = activeCycleRes.ok && activeCycleRes.data ? activeCycleRes.data.id : null;
+      let targetSettingCycleId = activeCycleRes.ok && activeCycleRes.data ? activeCycleRes.data.id : null;
 
       if (targetSettingCycleId) {
         setActiveCycleId(targetSettingCycleId);
@@ -522,21 +522,26 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         // Fallback: only if getActiveCycle() returned no cycle (e.g. RLS on performance_cycles failed)
         const latestRes = await loadLatestTargetSetting(currentUser.supabaseId);
         if (loadId !== latestEmployeeIpcrLoadId.current) return;
+        if (latestRes.ok === false) throw new Error(latestRes.error);
         if (latestRes.ok && latestRes.data.setting) {
           tsRes = latestRes;
           if (latestRes.data.setting.cycle_id) {
-            setActiveCycleId(latestRes.data.setting.cycle_id);
+            targetSettingCycleId = latestRes.data.setting.cycle_id;
+            setActiveCycleId(targetSettingCycleId);
           }
         }
       }
 
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
+      if (tsRes && tsRes.ok === false) throw new Error(tsRes.error);
       const targetIsApproved = Boolean(tsRes?.ok && tsRes.data?.setting?.status === 'approved');
       if (tsRes && tsRes.ok && tsRes.data.setting) {
+        setTargetSettingId(tsRes.data.setting.id);
         setTargetRows(tsRes.data.targets);
         setTargetStatus(tsRes.data.setting.status);
         setTargetReviewComment(tsRes.data.setting.review_comment ?? null);
       } else {
+        setTargetSettingId(null);
         setTargetRows(emptyTargets());
         setTargetStatus('draft');
         setTargetReviewComment(null);
@@ -552,7 +557,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       // but ws has persisted target text in ipcr_workspace, unflatten ws into targetRows
       // so MFOs and indicators never vanish on refresh!
       let resolvedTargets = tsRes?.ok ? tsRes.data.targets : emptyTargets();
-      if (!hasSubmittableTarget(resolvedTargets) && ws) {
+      if (!hasTargetContent(resolvedTargets) && ws) {
         const wsHasTargets = Boolean(
           ws.core_target?.trim() || ws.strategic_target?.trim() || ws.support_target?.trim()
         );
@@ -562,7 +567,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             strategic: unflattenFromWorkspace(ws.strategic_target),
             support: unflattenFromWorkspace(ws.support_target),
           };
-          if (hasSubmittableTarget(parsedFromWs)) {
+          if (hasTargetContent(parsedFromWs)) {
             resolvedTargets = parsedFromWs;
             setTargetRows(parsedFromWs);
             if (targetIsApproved || ws.status === 'Accomplishments Submitted' || ws.status === 'Completed') {
@@ -577,15 +582,15 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
 
       // Phase 1 draft cache recovery: if targets in DB are draft or empty,
       // restore any unsubmitted draft from sessionStorage for this employee & cycle.
-      const currentResolvedCycle = targetSettingCycleId ?? activeCycleId;
+      const currentResolvedCycle = targetSettingCycleId;
       const isDbDraftOrEmpty = !tsRes || !tsRes.ok || !tsRes.data.setting || tsRes.data.setting.status === 'draft';
-      if (currentResolvedCycle && isDbDraftOrEmpty && !hasSubmittableTarget(resolvedTargets)) {
+      if (currentResolvedCycle && isDbDraftOrEmpty && !hasTargetContent(resolvedTargets)) {
         try {
           const draftKey = `cictrix_phase1_draft_${currentUser.supabaseId}_${currentResolvedCycle}`;
           const cached = sessionStorage.getItem(draftKey);
           if (cached) {
             const parsed = JSON.parse(cached) as TargetsByFunction;
-            if (hasSubmittableTarget(parsed)) {
+            if (hasTargetContent(parsed)) {
               resolvedTargets = parsed;
               setTargetRows(parsed);
             }
@@ -678,9 +683,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           ipcrRes.success && ipcrRes.data ? ipcrRes.data.rows : []
         );
       }
+      setIpcrHydrated(true);
     } catch (err) {
+      if (loadId !== latestEmployeeIpcrLoadId.current) return;
+      setIpcrHydrated(false);
       console.error('Failed to load IPCR data:', err);
-      setIpcrError('Failed to load IPCR performance data. Please try again.');
+      setIpcrError(err instanceof Error ? `Failed to load IPCR performance data: ${err.message}` : 'Failed to load IPCR performance data. Please try again.');
     } finally {
       if (loadId === latestEmployeeIpcrLoadId.current) {
         setIpcrLoading(false);
@@ -701,6 +709,11 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     setDeferredRefresh(false);
     void loadIPCRData(isSilent);
   }, [isIpcrFormDirty, loadIPCRData]);
+
+  const reloadIpcrIfSafeRef = useRef(reloadIpcrIfSafe);
+  useEffect(() => {
+    reloadIpcrIfSafeRef.current = reloadIpcrIfSafe;
+  }, [reloadIpcrIfSafe]);
 
   /**
    * Lightweight phase-gate refresh: re-resolves the two phase windows (office
@@ -761,6 +774,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   });
 
   const handleSaveWorkspaceTargets = async (submit: boolean) => {
+    if (!ipcrHydrated || ipcrLoading) return;
     if (!currentUser.supabaseId) {
       setIpcrError(
         'Your account isn’t linked to an employee record in the database, so targets can’t be saved. Please contact your PM / administrator.',
@@ -813,6 +827,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     }
 
     // Update Phase 1 UI state immediately to prevent double-submit if Phase 2 save fails
+    setTargetSettingId(targetRes.data.id);
     setTargetStatus(targetRes.data.status);
     if (submit) setTargetReviewComment(null);
 
@@ -839,13 +854,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     
     setWorkspaceRow(res.row);
     setIpcrApproved(targetRes.data.status === 'approved');
-    snapshotLoaded(
-      targetRows,
-      flattened,
-      accomplishments,
-      selfRatings,
-      ipcrRows
-    );
+    lastLoadedSnapshot.current = updateSavedTargets(lastLoadedSnapshot.current, targetRows, flattened);
     if (pendingIpcrRefresh.current) {
       reloadIpcrIfSafe(true);
     }
@@ -985,13 +994,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     } else {
       setSaveSuccess('Accomplishments saved as draft.');
     }
-    snapshotLoaded(
-      targetRows,
-      employeeTargets,
-      accomplishments,
-      selfRatings,
-      ipcrRows
-    );
+    lastLoadedSnapshot.current = updateSavedAccomplishments(lastLoadedSnapshot.current, accomplishments, selfRatings);
     if (pendingIpcrRefresh.current) {
       reloadIpcrIfSafe(true);
     }
@@ -1126,12 +1129,17 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [profileLoading, setProfileLoading] = useState(false);
   // Setup wizard
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const closeSetupWizard = () => {
+    dismissEmployeeSetup(currentUser.employeeId);
+    setShowSetupWizard(false);
+  };
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [wizardTryNext, setWizardTryNext] = useState(false);
   const [wContact, setWContact] = useState<ContactDraft>({ email: '', mobileNumber: '', homeAddress: '' });
   const [wEmergency, setWEmergency] = useState<EmergencyDraft>({ emergencyContactName: '', emergencyRelationship: '', emergencyContactNumber: '' });
   const [wGovt, setWGovt] = useState<GovernmentDraft>({ sssNumber: '', philhealthNumber: '', pagibigNumber: '', tinNumber: '' });
   // Save feedback banners for profile edits.
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   // Track whether the initial DB fetch has completed, to suppress the
@@ -1178,7 +1186,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       !profile.mobileNumber?.trim() ||
       !profile.emergencyContactName?.trim() ||
       !profile.sssNumber?.trim();
-    if (missing) { setWizardStep(getWizardStartStep(profile)); setWizardTryNext(false); setShowSetupWizard(true); }
+    if (missing && !isEmployeeSetupDismissed(currentUser.employeeId)) {
+      setWizardStep(getWizardStartStep(profile)); setWizardTryNext(false); setShowSetupWizard(true);
+    }
     // Only fire once on mount after loading resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileLoading]);
@@ -1233,9 +1243,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
 
   useEffect(() => {
     if (activeTab === 'ipcr-workspace') {
-      reloadIpcrIfSafe(false);
+      reloadIpcrIfSafeRef.current(false);
     }
-  }, [activeTab, currentUser?.supabaseId, reloadIpcrIfSafe]);
+  }, [activeTab, currentUser?.supabaseId, loadIPCRData]);
 
   const [bellNotifications, setBellNotifications] = useState<EmployeeNotification[]>([]);
   const [showBellDropdown, setShowBellDropdown] = useState(false);
@@ -1309,7 +1319,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     const nextProfile = { ...profile, ...patch, updatedAt: nowIso };
     setProfile(nextProfile);
     setSaveError(null);
-    setSaveSuccess(null);
+    setProfileSaveSuccess(null);
 
     if (currentUser.supabaseId) {
       // Write to Supabase.
@@ -1320,7 +1330,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         setProfile(profile);
         return;
       }
-      setSaveSuccess('Changes saved successfully.');
+      setProfileSaveSuccess('Changes saved successfully.');
     } else {
       // Fallback: demo account — persist to localStorage only.
       updateEmployeePortalEmployee(profile.employeeId, patch);
@@ -1432,9 +1442,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                 {saveError}
               </p>
             )}
-            {saveSuccess && (
+            {profileSaveSuccess && (
               <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                {saveSuccess}
+                {profileSaveSuccess}
               </p>
             )}
 
@@ -1836,6 +1846,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             {ipcrError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs font-semibold">
                 {ipcrError}
+                {!ipcrHydrated && <span className="abyan-ds"><button className="btn btn-sm btn-secondary" disabled={ipcrLoading} onClick={() => void loadIPCRData()}>Retry loading workspace</button></span>}
               </div>
             )}
             {saveSuccess && (
@@ -1864,7 +1875,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     <p className="text-xs text-slate-500 mt-0.5">Encode your targets for Core, Strategic, and Support Functions.</p>
                   </div>
                   <div>
-                    {isTargetApproved ? (
+                    {!ipcrHydrated || ipcrLoading ? (
+                      <span role="status">{ipcrLoading ? 'Loading saved status?' : 'Status unavailable'}</span>
+                    ) : isTargetApproved ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Approved & Locked
                       </span>
@@ -2036,7 +2049,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                   </div>
                 )}
 
-                {!targetsLocked && isTargetSettingActive && (
+                {!readOnly && (
                   <div className="flex justify-end gap-2 pt-3">
                     <button
                       onClick={() => void handleSaveWorkspaceTargets(false)}
@@ -2071,10 +2084,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               </div>
             )}
 
-            {ipcrSubtab === 'phase2' && (
+            {ipcrSubtab === 'phase2' && !ipcrLoading && ipcrHydrated && (
               <EmployeePhase2
+                key={targetSettingId ?? `cycle-${activeCycleId}`}
                 employeeId={currentUser.supabaseId ?? null}
                 cycleId={activeCycleId}
+                targetSettingId={targetSettingId}
                 phaseOpen={isAccomplishmentRatingActive}
               />
             )}
@@ -2457,14 +2472,14 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           } else {
             // Step 3 — soft: save whatever is filled, close regardless of empty fields
             saveStep3Partial();
-            setShowSetupWizard(false);
+            closeSetupWizard();
           }
         };
 
         const handleSkip = () => {
           // Explicit escape: save partial, close without showing validation red
           saveStep3Partial();
-          setShowSetupWizard(false);
+          closeSetupWizard();
         };
 
         const StepColumn = ({ n }: { n: number }) => {
@@ -2562,7 +2577,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             `}</style>
             <div
               style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(4,14,107,0.6)', padding: '1rem', fontFamily: "'Poppins', sans-serif" }}
-              onClick={e => { if (e.target === e.currentTarget) setShowSetupWizard(false); }}
+              onClick={e => { if (e.target === e.currentTarget) closeSetupWizard(); }}
             >
               <div className="wizard-panel" style={{ background: '#ffffff', borderRadius: 20, boxShadow: '0 28px 80px rgba(54,62,232,0.28)', width: '100%', maxWidth: 520, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
@@ -2573,7 +2588,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                       <p style={{ margin: 0, fontSize: '0.72rem', color: '#C8D1FF', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Step {wizardStep} of {totalSteps}</p>
                       <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#ffffff' }}>{STEPS[wizardStep - 1]}</h2>
                     </div>
-                    <button type="button" onClick={() => setShowSetupWizard(false)} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, cursor: 'pointer', color: '#ffffff', padding: '0.3rem', display: 'flex' }}>
+                    <button type="button" onClick={closeSetupWizard} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, cursor: 'pointer', color: '#ffffff', padding: '0.3rem', display: 'flex' }}>
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -2652,7 +2667,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                 <div style={{ padding: '1rem 1.5rem', borderTop: '1.5px solid #EEF0FD', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
                   <button
                     type="button"
-                    onClick={() => { if (wizardStep > 1) { setWizardStep((wizardStep - 1) as 1 | 2 | 3); setWizardTryNext(false); } else setShowSetupWizard(false); }}
+                    onClick={() => { if (wizardStep > 1) { setWizardStep((wizardStep - 1) as 1 | 2 | 3); setWizardTryNext(false); } else closeSetupWizard(); }}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: 8, border: '1.5px solid #C8D1FF', background: '#fff', padding: '0.6rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: '#040E6B', cursor: 'pointer' }}
                   >
                     {wizardStep > 1 ? '← Previous' : 'Remind me later'}

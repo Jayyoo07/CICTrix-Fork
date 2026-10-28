@@ -801,14 +801,16 @@ export async function listPendingRatingApprovals(
         .eq('status', 'approved')
         .eq('phase2_status', 'completed');
 
+    let hasApprovalCol = true;
     let { data: settings, error } = await pending().is('phase2_approved_at', null);
     if (error && isMissingApprovalColumn(error)) {
+      hasApprovalCol = false;
       ({ data: settings, error } = await pending());
     }
     if (error) return { ok: false, error: error.message };
     if (!settings?.length) return { ok: true, data: [] };
 
-    // 2. Fetch submission pipeline stage to filter only those in 'Submitted to Office' or missing
+    // 2. Fetch submission pipeline stage (used as fallback filter if approval column does not exist)
     const { data: pipeline } = await supabase
       .from('ipcr_submissions')
       .select('employee_id, period, stage')
@@ -822,15 +824,19 @@ export async function listPendingRatingApprovals(
     ]);
     const empMap = new Map<string, any>((emps.data ?? []).map((e: any) => [e.id, e]));
 
-    // Filter and map
+    // Filter and map: phase2_approved_at IS NULL is authoritative. If target_settings has
+    // status = 'approved', phase2_status = 'completed', and phase2_approved_at IS NULL,
+    // include it even if ipcr_submissions has stage = 'Forwarded to PM'.
     const settingIdsToLoad: string[] = [];
     for (const s of settings as any[]) {
-      const periodLabel = titles.get(s.cycle_id) ?? '—';
-      const submissionStage = pipelineMap.get(`${s.employee_id}::${periodLabel}`);
-
-      // Self-healing: if stage is 'Submitted to Office' OR if the stage row is missing/not 'Forwarded to PM' (but setting has phase2_status = completed)
-      if (submissionStage === 'Submitted to Office' || (!submissionStage || submissionStage !== 'Forwarded to PM')) {
+      if (hasApprovalCol) {
         settingIdsToLoad.push(s.id);
+      } else {
+        const periodLabel = titles.get(s.cycle_id) ?? '—';
+        const submissionStage = pipelineMap.get(`${s.employee_id}::${periodLabel}`);
+        if (submissionStage === 'Submitted to Office' || (!submissionStage || submissionStage !== 'Forwarded to PM')) {
+          settingIdsToLoad.push(s.id);
+        }
       }
     }
 

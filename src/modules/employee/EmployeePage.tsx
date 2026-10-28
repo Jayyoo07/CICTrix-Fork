@@ -197,6 +197,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [ipcrRows, setIpcrRows] = useState<IPCRRowDraft[]>([]);
   const [, setIpcrEvaluation] = useState<any | null>(null);
   const [ipcrLoading, setIpcrLoading] = useState(true);
+  const [ipcrHydrated, setIpcrHydrated] = useState(false);
+  const [targetSettingId, setTargetSettingId] = useState<string | null>(null);
   const [ipcrError, setIpcrError] = useState<string | null>(null);
   const [ipcrRatingPeriod, setIpcrRatingPeriod] = useState<string>('');
   const [, setEmployeeEvaluations] = useState<any[]>([]);
@@ -274,7 +276,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const isTargetApproved = targetStatus === 'approved' || ipcrApproved;
   const isPendingApproval = targetStatus === 'submitted_for_approval' || workspaceRow?.status === 'Targets Submitted';
   const targetsLocked = isPendingApproval || isTargetApproved;
-  const readOnly = targetsLocked || !isTargetSettingActive;
+  const readOnly = !ipcrHydrated || ipcrLoading || targetsLocked || !isTargetSettingActive;
 
   // Auto-switch to Phase 2 on first load ONLY when accomplishment rating is active
   // AND the employee's Phase 1 targets have already been approved for this cycle.
@@ -299,7 +301,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   );
   const phase1CacheTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (ipcrLoading || !currentUser.supabaseId || !activeCycleId) return;
+    if (!ipcrHydrated || ipcrLoading || !currentUser.supabaseId || !activeCycleId) return;
     if (targetStatus !== 'draft' || isTargetApproved || isPendingApproval) return;
     if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     phase1CacheTimerRef.current = setTimeout(() => {
@@ -313,7 +315,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     return () => {
       if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     };
-  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey, ipcrLoading]);
+  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey, ipcrLoading, ipcrHydrated]);
   // Per-category Phase 2 accomplishments + Q/E/T self-ratings + % weight.
   const [accomplishments, setAccomplishments] = useState({ core: '', strategic: '', support: '' });
   type CatRating = {
@@ -415,6 +417,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     const loadId = ++latestEmployeeIpcrLoadId.current;
     if (!isSilent) {
       setIpcrLoading(true);
+      setIpcrHydrated(false);
     }
     setIpcrError(null);
     try {
@@ -532,10 +535,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       if (tsRes && tsRes.ok === false) throw new Error(tsRes.error);
       const targetIsApproved = Boolean(tsRes?.ok && tsRes.data?.setting?.status === 'approved');
       if (tsRes && tsRes.ok && tsRes.data.setting) {
+        setTargetSettingId(tsRes.data.setting.id);
         setTargetRows(tsRes.data.targets);
         setTargetStatus(tsRes.data.setting.status);
         setTargetReviewComment(tsRes.data.setting.review_comment ?? null);
       } else {
+        setTargetSettingId(null);
         setTargetRows(emptyTargets());
         setTargetStatus('draft');
         setTargetReviewComment(null);
@@ -677,9 +682,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           ipcrRes.success && ipcrRes.data ? ipcrRes.data.rows : []
         );
       }
+      setIpcrHydrated(true);
     } catch (err) {
+      if (loadId !== latestEmployeeIpcrLoadId.current) return;
+      setIpcrHydrated(false);
       console.error('Failed to load IPCR data:', err);
-      setIpcrError('Failed to load IPCR performance data. Please try again.');
+      setIpcrError(err instanceof Error ? `Failed to load IPCR performance data: ${err.message}` : 'Failed to load IPCR performance data. Please try again.');
     } finally {
       if (loadId === latestEmployeeIpcrLoadId.current) {
         setIpcrLoading(false);
@@ -760,6 +768,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   });
 
   const handleSaveWorkspaceTargets = async (submit: boolean) => {
+    if (!ipcrHydrated || ipcrLoading) return;
     if (!currentUser.supabaseId) {
       setIpcrError(
         'Your account isn’t linked to an employee record in the database, so targets can’t be saved. Please contact your PM / administrator.',
@@ -812,6 +821,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     }
 
     // Update Phase 1 UI state immediately to prevent double-submit if Phase 2 save fails
+    setTargetSettingId(targetRes.data.id);
     setTargetStatus(targetRes.data.status);
     if (submit) setTargetReviewComment(null);
 
@@ -1823,6 +1833,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             {ipcrError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs font-semibold">
                 {ipcrError}
+                {!ipcrHydrated && <span className="abyan-ds"><button className="btn btn-sm btn-secondary" disabled={ipcrLoading} onClick={() => void loadIPCRData()}>Retry loading workspace</button></span>}
               </div>
             )}
             {saveSuccess && (
@@ -1851,7 +1862,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     <p className="text-xs text-slate-500 mt-0.5">Encode your targets for Core, Strategic, and Support Functions.</p>
                   </div>
                   <div>
-                    {isTargetApproved ? (
+                    {!ipcrHydrated || ipcrLoading ? (
+                      <span role="status">{ipcrLoading ? 'Loading saved status?' : 'Status unavailable'}</span>
+                    ) : isTargetApproved ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Approved & Locked
                       </span>
@@ -2023,7 +2036,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                   </div>
                 )}
 
-                {!targetsLocked && isTargetSettingActive && (
+                {!readOnly && (
                   <div className="flex justify-end gap-2 pt-3">
                     <button
                       onClick={() => void handleSaveWorkspaceTargets(false)}
@@ -2058,10 +2071,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               </div>
             )}
 
-            {ipcrSubtab === 'phase2' && !ipcrLoading && (
+            {ipcrSubtab === 'phase2' && !ipcrLoading && ipcrHydrated && (
               <EmployeePhase2
+                key={targetSettingId ?? `cycle-${activeCycleId}`}
                 employeeId={currentUser.supabaseId ?? null}
                 cycleId={activeCycleId}
+                targetSettingId={targetSettingId}
                 phaseOpen={isAccomplishmentRatingActive}
               />
             )}

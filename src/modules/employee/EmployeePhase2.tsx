@@ -59,9 +59,11 @@ const draftCacheKey = (empId: string) => `cictrix_phase2_draft_${empId}`;
 export const EmployeePhase2: React.FC<{
   employeeId: string | null;
   cycleId?: number | null;
+  targetSettingId?: string | null;
   phaseOpen?: boolean;
-}> = ({ employeeId, cycleId, phaseOpen }) => {
+}> = ({ employeeId, cycleId, targetSettingId, phaseOpen }) => {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const showLoader = useDelayedLoading(loading);
   const [sheet, setSheet] = useState<EmployeeRatingSheet | null>(null);
   const [status, setStatus] = useState<Phase2Status>('locked');
@@ -107,8 +109,9 @@ export const EmployeePhase2: React.FC<{
       setLoading(true);
     }
     try {
-      const res = await loadEmployeeRatingSheet(employeeId, cycleId);
-      if (res.ok === false) { setNotice({ tone: 'err', text: res.error }); return; }
+      setLoadError(null);
+      const res = await loadEmployeeRatingSheet(employeeId, cycleId, targetSettingId);
+      if (res.ok === false) { setLoadError(res.error); return; }
       const s = res.data;
       setSheet(s);
       if (s) {
@@ -121,7 +124,7 @@ export const EmployeePhase2: React.FC<{
         let merged = init;
         try {
           const cached = sessionStorage.getItem(draftCacheKey(employeeId));
-          if (cached) {
+          if (cached && s.phase2Status !== 'completed' && s.phase2Status !== 'closed') {
             const draft: Record<string, Entry> = JSON.parse(cached);
             // Only merge entries whose keys exist in the DB result (guards
             // against stale/orphaned keys from a previous rating period).
@@ -153,13 +156,13 @@ export const EmployeePhase2: React.FC<{
       void markEmployeeNotificationsRead(employeeId);
     } catch (err) {
       const described = describeActionFailure('load your rating sheet', err);
-      setNotice({ tone: 'err', text: `${described.message} ${described.nextStep}` });
+      setLoadError(`${described.message} ${described.nextStep}`);
     } finally {
       if (!isSilent) {
         setLoading(false);
       }
     }
-  }, [employeeId, cycleId]);
+  }, [employeeId, cycleId, targetSettingId]);
 
   useEffect(() => {
     void loadSheet();
@@ -196,11 +199,11 @@ export const EmployeePhase2: React.FC<{
     [sheet],
   );
   const isLocked = status === 'locked' || status === 'not_started';
-  const readOnly = status === 'completed' || status === 'closed' || phaseOpen === false;
+  const readOnly = Boolean(loadError) || status === 'completed' || status === 'closed' || phaseOpen === false;
   // Locked, open and in_progress can all be typed into (prepared). Only open /
   // in_progress can SUBMIT — submission is gated to the rating period.
   const editable = !readOnly;
-  const canSubmit = (status === 'open' || status === 'in_progress') && phaseOpen !== false;
+  const canSubmit = !loadError && (status === 'open' || status === 'in_progress') && phaseOpen !== false;
   const expectedOpen = sheet?.phase2OpenTargetDate
     ? new Date(sheet.phase2OpenTargetDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : null;
@@ -268,6 +271,15 @@ export const EmployeePhase2: React.FC<{
     return (
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-busy="true">
         <SkeletonList show={showLoader} label="Loading your rating sheet…" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="abyan-ds space-y-3 rounded-xl border p-6" role="alert" style={{ background: 'var(--bg-surface)', borderColor: 'var(--error-300)', color: 'var(--error-700)' }}>
+        <p>Could not load your Phase 2 details: {loadError}</p>
+        <button className="btn btn-sm btn-secondary" onClick={() => void loadSheet()}>Retry loading Phase 2</button>
       </div>
     );
   }
@@ -503,7 +515,9 @@ export const EmployeePhase2: React.FC<{
           <CheckCircle className="h-4 w-4" />
           {status === 'closed'
             ? `Rating period closed — overall ${overall != null ? overall.toFixed(2) : '—'} from your saved ratings.`
-            : `Submitted — overall rating ${overall != null ? overall.toFixed(2) : '—'}.`}
+            : status === 'completed'
+            ? `Submitted — overall rating ${overall != null ? overall.toFixed(2) : '—'}.`
+            : 'The rating window is closed. Your saved details are read-only.'}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2">

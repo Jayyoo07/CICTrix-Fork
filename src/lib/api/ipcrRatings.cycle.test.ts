@@ -14,7 +14,23 @@ describe('ipcrRatings - loadEmployeeRatingSheet cycle scoping', () => {
     vi.clearAllMocks();
   });
 
-  it('filters by cycle_id when cycleId is provided', async () => {
+  it('looks up the resolved approved record by employee and ID without selecting another cycle', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const order = vi.fn();
+    mockFrom.mockReturnValue({
+      select: vi.fn().mockReturnThis(), eq, order,
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    });
+    const result = await loadEmployeeRatingSheet('emp-1', 99, 'approved-1');
+    expect(eq).toHaveBeenCalledWith('employee_id', 'emp-1');
+    expect(eq).toHaveBeenCalledWith('status', 'approved');
+    expect(eq).toHaveBeenCalledWith('id', 'approved-1');
+    expect(eq).not.toHaveBeenCalledWith('cycle_id', 99);
+    expect(order).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+  });
+
+  it.each([undefined, 'setting-cycle-2'])('loads the approved sheet with record ID %s', async (targetSettingId) => {
     const mockEq = vi.fn();
     const mockOrder = vi.fn();
     const mockLimit = vi.fn();
@@ -128,14 +144,15 @@ describe('ipcrRatings - loadEmployeeRatingSheet cycle scoping', () => {
       return { select: vi.fn() };
     });
 
-    const res = await loadEmployeeRatingSheet('emp-1', 2);
+    const res = await loadEmployeeRatingSheet('emp-1', 2, targetSettingId);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data?.targetSettingId).toBe('setting-cycle-2');
     }
     expect(mockEq).toHaveBeenCalledWith('employee_id', 'emp-1');
     expect(mockEq).toHaveBeenCalledWith('status', 'approved');
-    expect(mockEq).toHaveBeenCalledWith('cycle_id', 2);
+    if (targetSettingId) expect(mockEq).toHaveBeenCalledWith('id', targetSettingId);
+    else expect(mockEq).toHaveBeenCalledWith('cycle_id', 2);
   });
 
   it('returns null when no approved setting exists for the specified cycleId', async () => {

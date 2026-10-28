@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isUuid } from './hiringFlow';
 import type {
   ApplicationSlotStatus,
   PlantillaSlot,
@@ -83,12 +84,17 @@ export const fetchSlotsByJobPosting = async (): Promise<Map<string, PlantillaSlo
 export const fetchSlotsByJobPostingChecked = async (slotIds?: string[]): Promise<SlotResult<Map<string, PlantillaSlot[]>>> => {
   const grouped = new Map<string, PlantillaSlot[]>();
   if (slotIds?.length === 0) return { ok: true, data: grouped };
+  let validSlotIds: string[] | undefined;
+  if (slotIds) {
+    validSlotIds = slotIds.filter(isUuid);
+    if (validSlotIds.length === 0) return { ok: true, data: grouped };
+  }
   try {
     let query = client
       .from('plantilla_slots')
       .select('*')
       .order('slot_number', { ascending: true });
-    if (slotIds) query = query.in('id', slotIds);
+    if (validSlotIds) query = query.in('id', validSlotIds);
     const { data, error } = await query;
 
     if (error) {
@@ -149,10 +155,17 @@ export const fetchApplicantSlotLinksChecked = async (
   applicantIds?: string[],
 ): Promise<SlotResult<Map<string, ApplicantSlotLink[]>>> => {
   const grouped = new Map<string, ApplicantSlotLink[]>();
+  let validUuids: string[] | undefined;
+  if (applicantIds && applicantIds.length > 0) {
+    validUuids = applicantIds.filter(isUuid);
+    if (validUuids.length === 0) {
+      return { ok: true, data: grouped };
+    }
+  }
   try {
     let query = client.from('application_plantilla_slots').select('applicant_id, plantilla_slot_id, status');
-    if (applicantIds && applicantIds.length > 0) {
-      query = query.in('applicant_id', applicantIds);
+    if (validUuids && validUuids.length > 0) {
+      query = query.in('applicant_id', validUuids);
     }
     const { data, error } = await query;
     if (error) {

@@ -446,6 +446,9 @@ export const ForHiringPage = () => {
         // Which plantilla each application is for, its reservation, and any
         // revoked selection.
         const context = await fetchHiringContext(Array.from(mergedMap.keys()));
+        if (!context.ok) {
+          setLoadError(context.error ?? new Error('Failed to load plantilla slots for applicants'));
+        }
         mergedMap.forEach((row, id) => {
           row.slot = context.slotByApplicant.get(id) ?? null;
           row.selectionRevokedAt = context.revokedAt.get(id) ?? null;
@@ -465,7 +468,9 @@ export const ForHiringPage = () => {
           (a.position   || 'zzz').localeCompare(b.position   || 'zzz')
         );
         setRows(all);
-        setLoadError(applicantsError);
+        if (context.ok) {
+          setLoadError(applicantsError);
+        }
       } catch (error) {
         console.error('[ForHiringPage] load failed:', error);
         setLoadError(error);
@@ -550,7 +555,7 @@ export const ForHiringPage = () => {
   };
 
   const handleSelectClick = async () => {
-    if (!selectedRow || reservedRow) return;
+    if (!selectedRow || reservedRow || selectedRow.slot?.status === 'closed') return;
     setSelectTarget(selectedRow);
     setSelectStep('loading');
     setSelectError(null);
@@ -569,10 +574,10 @@ export const ForHiringPage = () => {
   };
 
   const today = localIsoDate();
-  const canConfirm = Boolean(selectTarget?.slot) && deadline >= today && acknowledged && !reserving;
+  const canConfirm = Boolean(selectTarget?.slot && selectTarget.slot.status === 'open') && deadline >= today && acknowledged && !reserving;
 
   const handleConfirmSelect = async () => {
-    if (!selectTarget || !selectTarget.slot || !canConfirm) return;
+    if (!selectTarget || !selectTarget.slot || selectTarget.slot.status !== 'open' || !canConfirm) return;
     setReserving(true);
     setSelectError(null);
     const result = await reserveSlotForApplicant(selectTarget.slot.id, selectTarget.id, deadline, instructions);
@@ -814,9 +819,11 @@ export const ForHiringPage = () => {
                   const reserved = isReserved(row.status);
                   const blockedReason = !row.slot
                     ? 'This application is not linked to a plantilla. Link it from the job post first.'
-                    : reservedRow
-                      ? `Plantilla reserved for ${reservedRow.fullName}.`
-                      : undefined;
+                    : row.slot.status === 'closed'
+                      ? 'This plantilla is closed. Reopen the vacancy from Job Vacancies to select this applicant.'
+                      : reservedRow
+                        ? `Plantilla reserved for ${reservedRow.fullName}.`
+                        : undefined;
                   return (
                     <tr
                       key={row.id}

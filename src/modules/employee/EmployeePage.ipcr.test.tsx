@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Employee } from '../../types/employee.types';
 import { EmployeePage } from './EmployeePage';
+import { clearEmployeeSession } from '../../lib/employeeSession';
 
 const mocks = vi.hoisted(() => ({ raw: vi.fn(), targets: vi.fn() }));
 vi.mock('../../lib/supabase', async () => {
@@ -64,5 +65,66 @@ describe('workspace hydration', () => {
     expect(screen.getByDisplayValue('Payroll')).toBeDisabled();
     expect(screen.getByDisplayValue('Process payroll')).toBeDisabled();
     expect(mocks.targets).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('profile setup reminder', () => {
+  const incomplete = { ...employee, emergencyRelationship: 'Mother', emergencyContactNumber: '09123456780', sssNumber: '' };
+  const mount = (path = '/employee/profile', current = incomplete) => render(
+    <MemoryRouter initialEntries={[path]}><EmployeePage currentUser={current} onLogout={() => {}} /></MemoryRouter>,
+  );
+
+  it('stays dismissed after a reload or page change and can still be opened manually', async () => {
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for Now' }));
+    expect(screen.queryByRole('heading', { name: 'Government Identification' })).not.toBeInTheDocument();
+    first.unmount();
+
+    const reloaded = mount();
+    await screen.findByRole('button', { name: /Complete Account Setup/ });
+    expect(screen.queryByRole('heading', { name: 'Government Identification' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Complete Account Setup/ }));
+    expect(await screen.findByRole('heading', { name: 'Government Identification' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for Now' }));
+    reloaded.unmount();
+
+    mount('/employee/ipcr-workspace');
+    await screen.findByDisplayValue('Payroll');
+    expect(screen.queryByRole('heading', { name: 'Government Identification' })).not.toBeInTheDocument();
+  });
+
+  it('shows the reminder again after logout clears the employee session', async () => {
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for Now' }));
+    first.unmount();
+    clearEmployeeSession();
+    mount();
+    expect(await screen.findByRole('button', { name: 'Skip for Now' })).toBeInTheDocument();
+  });
+
+  it('does not suppress a different employee’s setup reminder', async () => {
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for Now' }));
+    first.unmount();
+    mount('/employee/profile', { ...incomplete, employeeId: 'EMP-2', supabaseId: 'emp-2' });
+    expect(await screen.findByRole('button', { name: 'Skip for Now' })).toBeInTheDocument();
+  });
+
+  it.each(['close button', 'backdrop', 'remind later', 'finish'])('remembers dismissal using %s', async (action) => {
+    const current = action === 'remind later' ? { ...incomplete, email: '' } : incomplete;
+    const first = mount('/employee/profile', current);
+    const heading = await screen.findByRole('heading', {
+      name: action === 'remind later' ? 'Contact Information' : 'Government Identification',
+    });
+    const panel = heading.closest('.wizard-panel') as HTMLElement;
+    if (action === 'close button') fireEvent.click(within(panel).getByRole('button', { name: '' }));
+    else if (action === 'backdrop') fireEvent.click(panel.parentElement!);
+    else fireEvent.click(within(panel).getByRole('button', { name: action === 'finish' ? /Save Changes/ : 'Remind me later' }));
+    expect(heading).not.toBeInTheDocument();
+    first.unmount();
+    mount('/employee/profile', current);
+    await screen.findByText('Complete your profile');
+    expect(screen.queryByRole('heading', { name: 'Contact Information' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Government Identification' })).not.toBeInTheDocument();
   });
 });

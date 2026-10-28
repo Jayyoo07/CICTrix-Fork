@@ -68,6 +68,7 @@ import {
 import { loadEffectiveSchedules } from '../../lib/api/phaseSchedules';
 import { generateIpcrPdf } from '../../lib/ipcrPdf';
 import { IPCR_LIMITS } from '../../lib/ipcrLimits';
+import { dismissEmployeeSetup, isEmployeeSetupDismissed } from '../../lib/employeeSession';
 import { updateSavedTargets, updateSavedAccomplishments, type IpcrSavedSnapshot } from '../../lib/ipcrSavedSnapshot';
 import { CharacterCount } from '../../components/CharacterCount';
 import { EmployeePhase2 } from './EmployeePhase2';
@@ -1128,6 +1129,10 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [profileLoading, setProfileLoading] = useState(false);
   // Setup wizard
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const closeSetupWizard = () => {
+    dismissEmployeeSetup(currentUser.employeeId);
+    setShowSetupWizard(false);
+  };
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [wizardTryNext, setWizardTryNext] = useState(false);
   const [wContact, setWContact] = useState<ContactDraft>({ email: '', mobileNumber: '', homeAddress: '' });
@@ -1181,7 +1186,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       !profile.mobileNumber?.trim() ||
       !profile.emergencyContactName?.trim() ||
       !profile.sssNumber?.trim();
-    if (missing) { setWizardStep(getWizardStartStep(profile)); setWizardTryNext(false); setShowSetupWizard(true); }
+    if (missing && !isEmployeeSetupDismissed(currentUser.employeeId)) {
+      setWizardStep(getWizardStartStep(profile)); setWizardTryNext(false); setShowSetupWizard(true);
+    }
     // Only fire once on mount after loading resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileLoading]);
@@ -2465,14 +2472,14 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           } else {
             // Step 3 — soft: save whatever is filled, close regardless of empty fields
             saveStep3Partial();
-            setShowSetupWizard(false);
+            closeSetupWizard();
           }
         };
 
         const handleSkip = () => {
           // Explicit escape: save partial, close without showing validation red
           saveStep3Partial();
-          setShowSetupWizard(false);
+          closeSetupWizard();
         };
 
         const StepColumn = ({ n }: { n: number }) => {
@@ -2570,7 +2577,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             `}</style>
             <div
               style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(4,14,107,0.6)', padding: '1rem', fontFamily: "'Poppins', sans-serif" }}
-              onClick={e => { if (e.target === e.currentTarget) setShowSetupWizard(false); }}
+              onClick={e => { if (e.target === e.currentTarget) closeSetupWizard(); }}
             >
               <div className="wizard-panel" style={{ background: '#ffffff', borderRadius: 20, boxShadow: '0 28px 80px rgba(54,62,232,0.28)', width: '100%', maxWidth: 520, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
@@ -2581,7 +2588,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                       <p style={{ margin: 0, fontSize: '0.72rem', color: '#C8D1FF', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Step {wizardStep} of {totalSteps}</p>
                       <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#ffffff' }}>{STEPS[wizardStep - 1]}</h2>
                     </div>
-                    <button type="button" onClick={() => setShowSetupWizard(false)} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, cursor: 'pointer', color: '#ffffff', padding: '0.3rem', display: 'flex' }}>
+                    <button type="button" onClick={closeSetupWizard} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, cursor: 'pointer', color: '#ffffff', padding: '0.3rem', display: 'flex' }}>
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -2660,7 +2667,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                 <div style={{ padding: '1rem 1.5rem', borderTop: '1.5px solid #EEF0FD', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
                   <button
                     type="button"
-                    onClick={() => { if (wizardStep > 1) { setWizardStep((wizardStep - 1) as 1 | 2 | 3); setWizardTryNext(false); } else setShowSetupWizard(false); }}
+                    onClick={() => { if (wizardStep > 1) { setWizardStep((wizardStep - 1) as 1 | 2 | 3); setWizardTryNext(false); } else closeSetupWizard(); }}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: 8, border: '1.5px solid #C8D1FF', background: '#fff', padding: '0.6rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: '#040E6B', cursor: 'pointer' }}
                   >
                     {wizardStep > 1 ? '← Previous' : 'Remind me later'}

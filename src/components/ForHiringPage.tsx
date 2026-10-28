@@ -30,6 +30,7 @@ import { formatDisplayDate, localIsoDate } from '../lib/scheduleSelection';
 import { supabase } from '../lib/supabase';
 import { TableRefreshBar, TableSkeletonRows, tableBodyClass, useTableLoading } from './table-loading';
 import { buildEvaluationSnapshotMap, type EvaluationSnapshot } from '../lib/evaluationScores';
+import { fetchApplicantCategoryScores, type ApplicantCategoryScores } from '../lib/api/applicantScores';
 import { fetchWrittenExamTotals } from '../lib/api/examTotalPoints';
 import { TopScorerBadge, topScorerIds, topScorerRowClass } from './data-table';
 import { convertExamScore, totalForPosition } from '../lib/examTotalPoints';
@@ -104,11 +105,14 @@ const EXAM_SCORES_KEY = 'cictrix_exam_scores';
 const oralRawToConvertedScore = (raw: number) => +Math.min(20, Math.max(0, (raw / 5) * 20)).toFixed(2);
 
 // Mirrors the "Finalized" flag on the Applicant Score tab: an applicant is
-// considered completed once RSP has saved their category scores (localStorage)
+// considered completed once RSP has saved their category scores (remote or cache)
 // or an interviewer evaluation is marked completed. Every completed applicant
 // should appear in the For Hiring list even before being manually marked.
-const buildCompletedSet = async (): Promise<Set<string>> => {
+const buildCompletedSet = async (categoryScoresMap?: Map<string, ApplicantCategoryScores>): Promise<Set<string>> => {
   const completed = new Set<string>();
+  if (categoryScoresMap && categoryScoresMap.size > 0) {
+    categoryScoresMap.forEach((_, id) => completed.add(String(id)));
+  }
   try {
     const catScores = JSON.parse(localStorage.getItem(CAT_SCORES_KEY) ?? '{}');
     Object.keys(catScores).forEach(id => completed.add(String(id)));
@@ -216,6 +220,10 @@ export const ForHiringPage = () => {
           evalSnapshotMap = buildEvaluationSnapshotMap([]);
         }
 
+        // Fetch remote category scores alongside hiring context
+        const remoteScoresRes = await fetchApplicantCategoryScores();
+        const categoryScoresMap = remoteScoresRes.data ?? new Map<string, ApplicantCategoryScores>();
+
         // Load local category and exam scores
         let catScores: Record<string, any> = {};
         try {
@@ -243,7 +251,9 @@ export const ForHiringPage = () => {
             || (semail ? evalSnapshotMap.get(`email:${semail}`) : null)
             || (sname ? evalSnapshotMap.get(`name:${sname}`) : null);
 
-          const savedCat = catScores[sid]
+          const savedCat = categoryScoresMap.get(sid)
+            || (semail ? categoryScoresMap.get(`email:${semail}`) : null)
+            || catScores[sid]
             || (semail ? catScores[`email:${semail}`] : null);
 
           const posExamScoreStr = position && examScores[position]?.[sid] ? examScores[position][sid] : null;
@@ -283,7 +293,7 @@ export const ForHiringPage = () => {
         // Applicant qualifies for this list if it is already flagged for hiring
         // OR it is "completed" (Finalized) on the Applicant Score tab — but never
         // if it has been disqualified/rejected or if credentials have already been generated.
-        const completedIds = await buildCompletedSet();
+        const completedIds = await buildCompletedSet(categoryScoresMap);
         const generatedApplicantIds = new Set<string>();
         const generatedEmails = new Set<string>();
 

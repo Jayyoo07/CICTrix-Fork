@@ -35,6 +35,10 @@ import { funnelBucket, normalizeStatus, type FunnelBucket } from '../../lib/api/
 import { dashboardPostingStatus } from '../../lib/vacancySearch';
 import { RspArchives, type ArchiveRecord } from './rsp-archives';
 import { fetchWrittenExamTotals } from '../../lib/api/examTotalPoints';
+import {
+  fetchApplicantCategoryScores,
+  hasFinalizedCategoryScores,
+} from '../../lib/api/applicantScores';
 import { failureText } from '../../lib/friendlyErrors';
 import { useFeedback } from '../../components/action-feedback';
 import { TopScorerBadge, topScorerIds, topScorerRowClass } from '../../components/data-table';
@@ -659,24 +663,7 @@ const loadStoredCategoryScores = (): Record<string, StoredApplicantCategoryScore
 
 
 
-const hasFinalizedCategoryScores = (entry?: StoredApplicantCategoryScores): boolean => {
-  if (!entry) return false;
 
-  const categories: Array<StoredScoringCategory | undefined> = [
-    entry.education,
-    entry.experience,
-    entry.performance,
-    entry.pcpt,
-    entry.potential,
-    entry.writtenExam,
-  ];
-
-  const hasAnyFinalScore = categories.some((category) => typeof category?.finalScore === 'number');
-  if (hasAnyFinalScore) return true;
-
-  // Backward compatibility: older saves may rely on metadata without explicit final scores.
-  return Boolean(entry.appointmentType || entry.positionType);
-};
 
 const getSavedScoredApplicantIdSet = (): Set<string> => {
   const scores = loadStoredCategoryScores();
@@ -1103,6 +1090,7 @@ export const RSPDashboard = () => {
 
     const load = async () => {
       ensureRecruitmentSeedData();
+      void fetchApplicantCategoryScores();
       setDeletedJobReports(getDeletedJobReports());
 
       // Assignments load from Supabase below (raters.assigned_positions).

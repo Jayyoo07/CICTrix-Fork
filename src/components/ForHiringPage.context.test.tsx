@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForHiringPage } from './ForHiringPage';
 import type { PlantillaSlot } from '../types/recruitment.types';
 
-const { ROWS, mockFetchHiringContext, mockGetApplicants } = vi.hoisted(() => ({
+const { ROWS, SCORE_ROWS, mockFetchHiringContext, mockGetApplicants } = vi.hoisted(() => ({
   ROWS: [
     {
       id: 'a1',
@@ -16,13 +16,29 @@ const { ROWS, mockFetchHiringContext, mockGetApplicants } = vi.hoisted(() => ({
       status: 'Qualified',
     },
   ],
+  SCORE_ROWS: [
+    {
+      applicant_id: 'a1',
+      written_exam: { initialScore: 89, finalScore: 89, remarks: '' },
+      oral_exam: { initialScore: 19.33, finalScore: 19.33, remarks: '' },
+      appointment_type: 'original',
+      position_type: 'rank-and-file',
+      is_finalized: true,
+    },
+  ],
   mockFetchHiringContext: vi.fn(),
   mockGetApplicants: vi.fn(),
 }));
 
 vi.mock('../lib/supabase', async () => {
   const { supabaseStub } = await import('../test/supabaseStub');
-  return { supabase: supabaseStub((table) => (table === 'applicants' ? ROWS : [])) };
+  return {
+    supabase: supabaseStub((table) => {
+      if (table === 'applicants') return ROWS;
+      if (table === 'applicant_category_scores') return SCORE_ROWS;
+      return [];
+    }),
+  };
 });
 vi.mock('./AdminHeader', () => ({ AdminHeader: () => null }));
 vi.mock('./Sidebar', () => ({ Sidebar: () => null }));
@@ -159,5 +175,24 @@ describe('ForHiringPage plantilla context & selection handling', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/couldn't load the applicants for hiring/i)).toBeInTheDocument();
+  });
+
+  it('loads applicant category scores remotely from Supabase even without localStorage cache', async () => {
+    localStorage.clear();
+
+    mockFetchHiringContext.mockResolvedValue({
+      ok: true,
+      slotByApplicant: new Map(),
+      revokedAt: new Map(),
+    });
+
+    render(
+      <MemoryRouter>
+        <ForHiringPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Engineering Office')).toBeInTheDocument();
+    expect(screen.getByText('1 applicant')).toBeInTheDocument();
   });
 });

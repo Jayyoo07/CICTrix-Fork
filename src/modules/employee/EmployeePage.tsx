@@ -60,6 +60,7 @@ import {
   saveTargetSetting,
   type FunctionType,
   type TargetsByFunction,
+  type TargetSettingRow,
   type TargetStatus,
 } from '../../lib/api/ipcrTargets';
 import { loadEffectiveSchedules } from '../../lib/api/phaseSchedules';
@@ -475,25 +476,40 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         setSystemSchedules(gate);
       }
 
-      // Phase 1 relational targets. If the active cycle resolves, load by cycle;
-      // otherwise (e.g. performance_cycles not readable by the anon client due to
-      // RLS) fall back to loading the employee's frozen targets directly, so the
-      // "Frozen Targets" panel still renders instead of "No target configured".
+      // Phase 1 relational targets.
+      // Load by cycle if available; if no setting exists for that cycle, or if the cycle-specific
+      // load returned a blank draft while a populated/approved target setting exists in the latest records,
+      // fall back to loadLatestTargetSetting so submitted/approved MFOs are never lost.
       const activeCycleRes = await getActiveCycle();
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
-      let tsRes;
+      let tsRes: { ok: true; data: { setting: TargetSettingRow | null; targets: TargetsByFunction } } | { ok: false; error: string } | null = null;
       if (activeCycleRes.ok && activeCycleRes.data) {
         setActiveCycleId(activeCycleRes.data.id);
         tsRes = await loadTargetSetting(currentUser.supabaseId, activeCycleRes.data.id);
-      } else {
-        tsRes = await loadLatestTargetSetting(currentUser.supabaseId);
       }
+
+      if (!tsRes || !tsRes.ok || !tsRes.data.setting || (!hasSubmittableTarget(tsRes.data.targets) && tsRes.data.setting.status === 'draft')) {
+        const latestRes = await loadLatestTargetSetting(currentUser.supabaseId);
+        if (loadId !== latestEmployeeIpcrLoadId.current) return;
+        if (latestRes.ok && latestRes.data.setting) {
+          const prevHasSetting = Boolean(tsRes && tsRes.ok && tsRes.data.setting);
+          if (!prevHasSetting || hasSubmittableTarget(latestRes.data.targets) || latestRes.data.setting.status !== 'draft') {
+            tsRes = latestRes;
+            if (latestRes.data.setting.cycle_id) {
+              setActiveCycleId(latestRes.data.setting.cycle_id);
+            }
+          }
+        }
+      }
+
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
-      if (tsRes.ok) {
+      const targetIsApproved = Boolean(tsRes?.ok && tsRes.data?.setting?.status === 'approved');
+      if (tsRes && tsRes.ok) {
         setTargetRows(tsRes.data.targets);
         setTargetStatus(tsRes.data.setting?.status ?? 'draft');
         setTargetReviewComment(tsRes.data.setting?.review_comment ?? null);
       }
+      setIpcrApproved(targetIsApproved);
 
       // Load the "My IPCR Workspace" row for this period and hydrate the form.
       const ws = await getWorkspace(currentUser.supabaseId, resolvedPeriod);
@@ -530,9 +546,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             weight: ws.support_weight ?? null,
           },
         });
-        setIpcrApproved(Boolean(tsRes.ok && tsRes.data?.setting?.status === 'approved'));
         snapshotLoaded(
-          tsRes.ok ? tsRes.data.targets : emptyTargets(),
+          tsRes?.ok ? tsRes.data.targets : emptyTargets(),
           {
             core: ws.core_target ?? '',
             strategic: ws.strategic_target ?? '',
@@ -573,9 +588,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           strategic: emptyCatRating(),
           support: emptyCatRating(),
         });
-        setIpcrApproved(false);
         snapshotLoaded(
-          tsRes.ok ? tsRes.data.targets : emptyTargets(),
+          tsRes?.ok ? tsRes.data.targets : emptyTargets(),
           { core: '', strategic: '', support: '' },
           { core: '', strategic: '', support: '' },
           {

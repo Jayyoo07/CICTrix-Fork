@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">103 plans &middot; 84 done</p>
+    <p class="counts">104 plans &middot; 85 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -72,6 +72,11 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-succession-v2-auto-fallback.md">Succession Planning V2 Automated Fallbacks &amp; Review Bypass</a><p class="summary">Bypass manual evidence review gating in Succession V2 and add multi-tier database fallbacks (department name resolution, date_hired tenure, profile education and eligibility) so qualified successors load and rank immediately.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-remote-applicant-scores.md">Migrate applicant category and written exam scores from localStorage to remote Supabase tables</a><p class="summary">Transition applicant category scores and written exam scores from browser localStorage to a dedicated Supabase table (applicant_category_scores) with a centralized service layer, preserving scoring and ranking logic while retaining offline fallback.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -600,6 +605,10 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-succession-scoring-v2-integration-summary.md">Integrate Succession Scoring V2 and Evidence Review Workflow</a><p class="summary">Completed Tasks 2–4 of Succession Scoring V2. Added evidence reviews schema, review service layer with snapshot staleness detection, end-to-end V2 candidate evaluation and ranking pipeline, and candidate review modal integrated into SuccessionPlanningPage. All 989 tests, lint, and build verified locally.</p><p class="meta">Plan: <a href="2026-10-27-succession-scoring-v2.md">2026-10-27-succession-scoring-v2.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-remote-applicant-scores-summary.md">Remote Applicant Scores &amp; Exam Scoring Migration Summary</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>

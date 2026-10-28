@@ -67,6 +67,7 @@ import {
 import { loadEffectiveSchedules } from '../../lib/api/phaseSchedules';
 import { generateIpcrPdf } from '../../lib/ipcrPdf';
 import { IPCR_LIMITS } from '../../lib/ipcrLimits';
+import { updateSavedTargets, updateSavedAccomplishments, type IpcrSavedSnapshot } from '../../lib/ipcrSavedSnapshot';
 import { CharacterCount } from '../../components/CharacterCount';
 import { EmployeePhase2 } from './EmployeePhase2';
 import { supabase as supabaseClient } from '../../lib/supabase';
@@ -367,13 +368,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       });
   }, [currentUser.supabaseId]);
 
-  const lastLoadedSnapshot = useRef<null | {
-    targetRowsJson: string;
-    employeeTargets: { core: string; strategic: string; support: string };
-    accomplishmentsJson: string;
-    selfRatingsJson: string;
-    ipcrRowsJson: string;
-  }>(null);
+  const lastLoadedSnapshot = useRef<IpcrSavedSnapshot | null>(null);
 
   const isIpcrFormDirty = useCallback(() => {
     const snap = lastLoadedSnapshot.current;
@@ -522,6 +517,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         // Fallback: only if getActiveCycle() returned no cycle (e.g. RLS on performance_cycles failed)
         const latestRes = await loadLatestTargetSetting(currentUser.supabaseId);
         if (loadId !== latestEmployeeIpcrLoadId.current) return;
+        if (latestRes.ok === false) throw new Error(latestRes.error);
         if (latestRes.ok && latestRes.data.setting) {
           tsRes = latestRes;
           if (latestRes.data.setting.cycle_id) {
@@ -531,6 +527,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       }
 
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
+      if (tsRes && tsRes.ok === false) throw new Error(tsRes.error);
       const targetIsApproved = Boolean(tsRes?.ok && tsRes.data?.setting?.status === 'approved');
       if (tsRes && tsRes.ok && tsRes.data.setting) {
         setTargetRows(tsRes.data.targets);
@@ -839,13 +836,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     
     setWorkspaceRow(res.row);
     setIpcrApproved(targetRes.data.status === 'approved');
-    snapshotLoaded(
-      targetRows,
-      flattened,
-      accomplishments,
-      selfRatings,
-      ipcrRows
-    );
+    lastLoadedSnapshot.current = updateSavedTargets(lastLoadedSnapshot.current, targetRows, flattened);
     if (pendingIpcrRefresh.current) {
       reloadIpcrIfSafe(true);
     }
@@ -985,13 +976,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     } else {
       setSaveSuccess('Accomplishments saved as draft.');
     }
-    snapshotLoaded(
-      targetRows,
-      employeeTargets,
-      accomplishments,
-      selfRatings,
-      ipcrRows
-    );
+    lastLoadedSnapshot.current = updateSavedAccomplishments(lastLoadedSnapshot.current, accomplishments, selfRatings);
     if (pendingIpcrRefresh.current) {
       reloadIpcrIfSafe(true);
     }

@@ -1,21 +1,28 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 # Always resolve .env relative to this file, regardless of CWD at startup
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+_ROOT_ENV_PATH = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+
+if _ENV_PATH.exists():
+    load_dotenv(_ENV_PATH)
+if _ROOT_ENV_PATH.exists():
+    load_dotenv(_ROOT_ENV_PATH)
 
 
 class Settings(BaseSettings):
     """Application settings from environment variables"""
 
     # Supabase
-    SUPABASE_URL: str
-    SUPABASE_KEY: str
-    SUPABASE_SERVICE_ROLE_KEY: str
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL", "")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY", "")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
     # JWT
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "cictrix-default-jwt-secret-key")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
@@ -38,7 +45,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "CICTrix HRIS"
 
     class Config:
-        env_file = str(_ENV_PATH)
+        env_file = str(_ROOT_ENV_PATH) if _ROOT_ENV_PATH.exists() else str(_ENV_PATH)
         env_file_encoding = "utf-8"
         case_sensitive = True
         extra = "ignore"

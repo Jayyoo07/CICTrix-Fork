@@ -97,6 +97,47 @@ export const flattenForWorkspace = (mfos: MfoDraft[]): string =>
     .join('\n\n');
 
 /**
+ * Reconstitute an MFO list from the flattened text stored in ipcr_workspace.
+ * Acts as a resilient bridge so targets are never lost even if relational
+ * joins or foreign key lookups encounter temporary discrepancies.
+ */
+export function unflattenFromWorkspace(text: string | null | undefined): MfoDraft[] {
+  if (!text || !text.trim()) return [blankMfo()];
+
+  const blocks = text.trim().split(/\n\s*\n/);
+  const mfos: MfoDraft[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+
+    let title = '';
+    const indicators: Array<{ description: string }> = [];
+
+    if (lines[0].startsWith('-') || lines[0].startsWith('•') || lines[0].startsWith('*')) {
+      for (const line of lines) {
+        const desc = line.replace(/^[-•*]\s*/, '').trim();
+        if (desc) indicators.push({ description: desc });
+      }
+    } else {
+      title = lines[0] === '(untitled MFO)' ? '' : lines[0];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        const desc = line.replace(/^[-•*]\s*/, '').trim();
+        if (desc) indicators.push({ description: desc });
+      }
+    }
+
+    mfos.push({
+      title,
+      indicators: indicators.length > 0 ? indicators : [{ description: '' }],
+    });
+  }
+
+  return mfos.length > 0 ? mfos : [blankMfo()];
+}
+
+/**
  * The cycle Phase 1 is being set for.
  *
  * performance_cycles.status is constrained to ('Active','Completed','Planned').
@@ -159,24 +200,46 @@ export async function loadTargetSetting(
 
 /** Load + group an MFO/SI tree for one target setting into TargetsByFunction. */
 async function hydrateTargets(settingId: string): Promise<TargetsByFunction> {
-  const { data: mfoRows } = await (supabase as any)
+  const { data: mfoRows, error: mfoErr } = await (supabase as any)
     .from('mfos')
-    .select('id, function_type, title, sort_order, success_indicators(id, description, sort_order)')
+    .select('id, function_type, title, sort_order')
     .eq('target_setting_id', settingId)
     .order('sort_order', { ascending: true });
 
   const targets = emptyTargets();
   for (const fn of FUNCTION_TYPES) targets[fn] = [];
 
-  for (const row of (mfoRows ?? []) as any[]) {
-    const indicators = ((row.success_indicators ?? []) as any[])
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((si: any) => ({ id: si.id as string, description: (si.description ?? '') as string }));
-    targets[row.function_type as FunctionType].push({
-      id: row.id as string,
-      title: (row.title ?? '') as string,
-      indicators: indicators.length ? indicators : [{ description: '' }],
+  if (mfoErr || !mfoRows || !mfoRows.length) {
+    for (const fn of FUNCTION_TYPES) targets[fn] = [blankMfo()];
+    return targets;
+  }
+
+  const mfoIds = mfoRows.map((m: any) => m.id);
+  const { data: siRows } = await (supabase as any)
+    .from('success_indicators')
+    .select('id, mfo_id, description, sort_order')
+    .in('mfo_id', mfoIds)
+    .order('sort_order', { ascending: true });
+
+  const siByMfo = new Map<string, Array<{ id: string; description: string }>>();
+  for (const si of (siRows ?? []) as any[]) {
+    if (!siByMfo.has(si.mfo_id)) siByMfo.set(si.mfo_id, []);
+    siByMfo.get(si.mfo_id)!.push({
+      id: si.id as string,
+      description: (si.description ?? '') as string,
     });
+  }
+
+  for (const row of mfoRows as any[]) {
+    const indicators = siByMfo.get(row.id) ?? [];
+    const fn = row.function_type as FunctionType;
+    if (targets[fn]) {
+      targets[fn].push({
+        id: row.id as string,
+        title: (row.title ?? '') as string,
+        indicators: indicators.length ? indicators : [{ description: '' }],
+      });
+    }
   }
 
   // A category with no persisted rows still renders one blank MFO.

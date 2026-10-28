@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getActiveCycle, loadLatestTargetSetting } from './ipcrTargets';
+import { getActiveCycle, loadLatestTargetSetting, unflattenFromWorkspace } from './ipcrTargets';
 
 const mockFrom = vi.fn();
 
@@ -104,7 +104,6 @@ describe('ipcrTargets - getActiveCycle and loadLatestTargetSetting', () => {
                           function_type: 'core',
                           title: 'Procurement Management',
                           sort_order: 0,
-                          success_indicators: [{ id: 'si-1', description: 'Process PRs within 2 days', sort_order: 0 }],
                         },
                       ],
                       error: null,
@@ -115,6 +114,20 @@ describe('ipcrTargets - getActiveCycle and loadLatestTargetSetting', () => {
                 return {
                   order: vi.fn().mockResolvedValue({ data: [], error: null }),
                 };
+              }),
+            }),
+          };
+        }
+        if (table === 'success_indicators') {
+          return {
+            select: vi.fn().mockReturnValue({
+              in: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    { id: 'si-1', mfo_id: 'mfo-1', description: 'Process PRs within 2 days', sort_order: 0 },
+                  ],
+                  error: null,
+                }),
               }),
             }),
           };
@@ -161,7 +174,6 @@ describe('ipcrTargets - getActiveCycle and loadLatestTargetSetting', () => {
                           function_type: 'strategic',
                           title: 'Digital Transformation',
                           sort_order: 0,
-                          success_indicators: [{ id: 'si-sub', description: 'Deploy portal', sort_order: 0 }],
                         },
                       ],
                       error: null,
@@ -171,6 +183,20 @@ describe('ipcrTargets - getActiveCycle and loadLatestTargetSetting', () => {
                 return {
                   order: vi.fn().mockResolvedValue({ data: [], error: null }),
                 };
+              }),
+            }),
+          };
+        }
+        if (table === 'success_indicators') {
+          return {
+            select: vi.fn().mockReturnValue({
+              in: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    { id: 'si-sub', mfo_id: 'mfo-sub', description: 'Deploy portal', sort_order: 0 },
+                  ],
+                  error: null,
+                }),
               }),
             }),
           };
@@ -187,4 +213,60 @@ describe('ipcrTargets - getActiveCycle and loadLatestTargetSetting', () => {
       }
     });
   });
+
+  describe('unflattenFromWorkspace', () => {
+    it('returns a single blank MFO for null, undefined, or empty string', () => {
+      expect(unflattenFromWorkspace(null)).toEqual([{ title: '', indicators: [{ description: '' }] }]);
+      expect(unflattenFromWorkspace(undefined)).toEqual([{ title: '', indicators: [{ description: '' }] }]);
+      expect(unflattenFromWorkspace('')).toEqual([{ title: '', indicators: [{ description: '' }] }]);
+      expect(unflattenFromWorkspace('   \n  ')).toEqual([{ title: '', indicators: [{ description: '' }] }]);
+    });
+
+    it('parses title and bulleted success indicators', () => {
+      const text = 'Payroll Processing\n- Process monthly payroll on time\n• Reconcile deductions';
+      const result = unflattenFromWorkspace(text);
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Payroll Processing');
+      expect(result[0].indicators).toEqual([
+        { description: 'Process monthly payroll on time' },
+        { description: 'Reconcile deductions' },
+      ]);
+    });
+
+    it('parses multiple MFO blocks separated by blank lines', () => {
+      const text = [
+        'Payroll Processing\n- Process monthly payroll',
+        'Records Management\n* Archive physical files\n- Digitization scan',
+      ].join('\n\n');
+
+      const result = unflattenFromWorkspace(text);
+      expect(result).toHaveLength(2);
+      expect(result[0].title).toBe('Payroll Processing');
+      expect(result[0].indicators).toEqual([{ description: 'Process monthly payroll' }]);
+      expect(result[1].title).toBe('Records Management');
+      expect(result[1].indicators).toEqual([
+        { description: 'Archive physical files' },
+        { description: 'Digitization scan' },
+      ]);
+    });
+
+    it('handles (untitled MFO) placeholder properly by clearing title', () => {
+      const text = '(untitled MFO)\n- Lone indicator';
+      const result = unflattenFromWorkspace(text);
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('');
+      expect(result[0].indicators).toEqual([{ description: 'Lone indicator' }]);
+    });
+
+    it('handles bullet-only format without explicit title line', () => {
+      const text = '- Only bullet 1\n- Only bullet 2';
+      const result = unflattenFromWorkspace(text);
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('');
+      expect(result[0].indicators).toEqual([
+        { description: 'Only bullet 1' },
+        { description: 'Only bullet 2' },
+      ]);
+    });
+});
 });

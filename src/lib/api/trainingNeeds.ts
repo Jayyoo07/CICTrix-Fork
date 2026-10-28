@@ -173,6 +173,24 @@ export async function computeNeedsAssessment(): Promise<CompetencyNeed[]> {
   const totalLgu = officeByEmp.size;
   if (!totalLgu) return [];
 
+  // Competency -> training stream, straight from the framework.
+  const { data: standards } = await supabase
+    .from('competency_standards')
+    .select('competency_name, training_stream');
+  const titleCase = (s: string) =>
+    String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // Canonical name map for normalization (e.g. handles slashes with/without spaces)
+  const normKey = (s: string) => s.trim().toLowerCase().replace(/\s*\/\s*/g, '/');
+  const canonicalMap = new Map<string, string>();
+  const categoryOf = new Map<string, string>();
+  for (const s of (standards ?? []) as any[]) {
+    const raw = String(s.competency_name);
+    canonicalMap.set(normKey(raw), raw);
+    categoryOf.set(raw, titleCase(s.training_stream));
+  }
+  const resolveCompetency = (name: string) => canonicalMap.get(normKey(name)) ?? name;
+
   const [{ data: matches, error: mErr }, lndPeriodKey] = await Promise.all([
     supabase
       .from('ipcr_competency_matches')
@@ -201,7 +219,7 @@ export async function computeNeedsAssessment(): Promise<CompetencyNeed[]> {
   const byComp = new Map<string, Map<string, Set<string>>>();
   const affectedByComp = new Map<string, Set<string>>();
   for (const m of matchesInScope) {
-    const comp = String(m.competency);
+    const comp = resolveCompetency(String(m.competency));
     const emp = String(m.employee_id);
     const office = officeByEmp.get(emp);
     if (!office) continue; // employee not Active / not resolvable
@@ -212,16 +230,6 @@ export async function computeNeedsAssessment(): Promise<CompetencyNeed[]> {
     if (!affectedByComp.has(comp)) affectedByComp.set(comp, new Set());
     affectedByComp.get(comp)!.add(emp);
   }
-
-  // Competency -> training stream, straight from the framework.
-  const { data: standards } = await supabase
-    .from('competency_standards')
-    .select('competency_name, training_stream');
-  const titleCase = (s: string) =>
-    String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
-  const categoryOf = new Map<string, string>(
-    (standards ?? []).map((s: any) => [String(s.competency_name), titleCase(s.training_stream)])
-  );
 
   const needs: CompetencyNeed[] = [];
   for (const [competency, officeMap] of byComp) {

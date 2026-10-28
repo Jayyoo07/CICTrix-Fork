@@ -20,8 +20,12 @@ describe('checked slot reads', () => {
   it('scopes tracker slot metadata to linked IDs and skips an empty link set', async () => {
     expect(await fetchSlotsByJobPostingChecked([])).toEqual({ ok: true, data: new Map() });
     expect(db.reads).toBe(0);
-    await fetchSlotsByJobPostingChecked(['s1', 's2']);
-    expect(db.filters).toEqual([['id', ['s1', 's2']]]);
+    const slotId1 = '11111111-1111-1111-1111-111111111111';
+    const slotId2 = '22222222-2222-2222-2222-222222222222';
+    await fetchSlotsByJobPostingChecked([slotId1, slotId2]);
+    expect(db.filters).toEqual([['id', [slotId1, slotId2]]]);
+    // Non-UUID IDs are skipped before query
+    expect(await fetchSlotsByJobPostingChecked(['s1', 's2'])).toEqual({ ok: true, data: new Map() });
     await fetchSlotsByJobPosting();
     expect(db.reads).toBe(2);
     expect(db.filters).toHaveLength(1);

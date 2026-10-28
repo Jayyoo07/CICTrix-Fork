@@ -14,11 +14,16 @@ When an employee submits their Phase 1 targets, the filled MFOs and success indi
 1. **Active Cycle and Latest Target Setting Harmonization**:
    - In `src/lib/api/ipcrTargets.ts`: Update `getActiveCycle()` to fall back to the latest cycle if no active or planned cycle is flagged, matching `getActivePerformanceCycle()`.
    - Update `loadLatestTargetSetting(employeeId)` to sort by `updated_at DESC, created_at DESC`, prioritize settings that are `approved` or `submitted_for_approval` with populated targets over empty draft shells, and avoid returning blank draft records when real targets exist.
-2. **Robust Fallback in `EmployeePage.tsx`**:
-   - When loading target settings in `loadIPCRData`, if the cycle-specific query returns `null` or a draft shell without targets, fall back to `loadLatestTargetSetting(currentUser.supabaseId)`.
+2. **Robust Fallback & Reconstitution Bridge in `EmployeePage.tsx`**:
+   - When loading target settings in `loadIPCRData`, if the cycle-specific query returns `null` or has no submittable targets, fall back unconditionally to `loadLatestTargetSetting(currentUser.supabaseId)`.
    - Synchronize `activeCycleId` with the resolved target setting's `cycle_id`.
    - Decouple `ipcrApproved` from `workspaceRow` presence; derive it directly from `target_settings.status === 'approved'`.
-3. **Audit and Timestamp Precision in `ipcrApproval.ts`**:
+   - Add Reconstitution Bridge: If relational `mfos`/`success_indicators` rows fail to populate, parse the persisted text representation from `ipcr_workspace` using `unflattenFromWorkspace` to guarantee targets never vanish on refresh.
+3. **Resilient Direct Hydration in `ipcrTargets.ts`**:
+   - Split PostgREST relational embed in `hydrateTargets` into a direct 2-step query (`mfos` then `success_indicators` by `mfo_id`) avoiding nested join drops.
+   - Implement `unflattenFromWorkspace` in `src/lib/api/ipcrTargets.ts` to deserialize text representations into structured `MfoDraft[]`.
+   - Add resilient fallback in `getWorkspace` (`src/lib/api/ipcrWorkspace.ts`) to fetch the most recent workspace row when exact period string differs.
+4. **Audit and Timestamp Precision in `ipcrApproval.ts`**:
    - Update `updated_at: now.toISOString()` during approval, return, and admin edits so timestamp-based sorting reflects recent workflow actions.
 
 ## Steps

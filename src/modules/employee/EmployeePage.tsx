@@ -58,6 +58,7 @@ import {
   loadTargetSetting,
   loadLatestTargetSetting,
   saveTargetSetting,
+  unflattenFromWorkspace,
   type FunctionType,
   type TargetsByFunction,
   type TargetSettingRow,
@@ -488,12 +489,12 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         tsRes = await loadTargetSetting(currentUser.supabaseId, activeCycleRes.data.id);
       }
 
-      if (!tsRes || !tsRes.ok || !tsRes.data.setting || (!hasSubmittableTarget(tsRes.data.targets) && tsRes.data.setting.status === 'draft')) {
+      if (!tsRes || !tsRes.ok || !tsRes.data.setting || !hasSubmittableTarget(tsRes.data.targets)) {
         const latestRes = await loadLatestTargetSetting(currentUser.supabaseId);
         if (loadId !== latestEmployeeIpcrLoadId.current) return;
         if (latestRes.ok && latestRes.data.setting) {
-          const prevHasSetting = Boolean(tsRes && tsRes.ok && tsRes.data.setting);
-          if (!prevHasSetting || hasSubmittableTarget(latestRes.data.targets) || latestRes.data.setting.status !== 'draft') {
+          const prevHasTargets = Boolean(tsRes && tsRes.ok && hasSubmittableTarget(tsRes.data.targets));
+          if (!prevHasTargets || hasSubmittableTarget(latestRes.data.targets)) {
             tsRes = latestRes;
             if (latestRes.data.setting.cycle_id) {
               setActiveCycleId(latestRes.data.setting.cycle_id);
@@ -515,6 +516,34 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       const ws = await getWorkspace(currentUser.supabaseId, resolvedPeriod);
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
       setWorkspaceRow(ws);
+
+      // Reconstitution bridge: If targetRows does NOT have submittable targets,
+      // but ws has persisted target text in ipcr_workspace, unflatten ws into targetRows
+      // so MFOs and indicators never vanish on refresh!
+      let resolvedTargets = tsRes?.ok ? tsRes.data.targets : emptyTargets();
+      if (!hasSubmittableTarget(resolvedTargets) && ws) {
+        const wsHasTargets = Boolean(
+          ws.core_target?.trim() || ws.strategic_target?.trim() || ws.support_target?.trim()
+        );
+        if (wsHasTargets) {
+          const parsedFromWs: TargetsByFunction = {
+            core: unflattenFromWorkspace(ws.core_target),
+            strategic: unflattenFromWorkspace(ws.strategic_target),
+            support: unflattenFromWorkspace(ws.support_target),
+          };
+          if (hasSubmittableTarget(parsedFromWs)) {
+            resolvedTargets = parsedFromWs;
+            setTargetRows(parsedFromWs);
+            if (targetIsApproved || ws.status === 'Accomplishments Submitted' || ws.status === 'Completed') {
+              setTargetStatus('approved');
+              setIpcrApproved(true);
+            } else if (ws.status === 'Targets Submitted') {
+              setTargetStatus('submitted_for_approval');
+            }
+          }
+        }
+      }
+
       if (ws) {
         setEmployeeTargets({
           core: ws.core_target ?? '',
@@ -547,7 +576,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           },
         });
         snapshotLoaded(
-          tsRes?.ok ? tsRes.data.targets : emptyTargets(),
+          resolvedTargets,
           {
             core: ws.core_target ?? '',
             strategic: ws.strategic_target ?? '',
@@ -589,7 +618,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
           support: emptyCatRating(),
         });
         snapshotLoaded(
-          tsRes?.ok ? tsRes.data.targets : emptyTargets(),
+          resolvedTargets,
           { core: '', strategic: '', support: '' },
           { core: '', strategic: '', support: '' },
           {

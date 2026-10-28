@@ -28,6 +28,72 @@ import { listAttendance } from './trainingAttendance';
 
 const supabase = supabaseClient as any;
 
+const TRAINING_COUNT_EMPLOYEE_BATCH_SIZE = 150;
+const TRAINING_COUNT_PAGE_SIZE = 1000;
+
+type TrainingCompletionRow = {
+  id: string;
+  employee_id: string;
+  from_date: string | null;
+  to_date: string | null;
+  enrollment_id: string | null;
+};
+
+/** Recorded Archive completions, not enrollment or attendance-derived status. */
+export async function getCurrentYearTrainingCounts(
+  employeeIds: string[],
+  now: Date = new Date(),
+): Promise<{ ok: boolean; counts: Map<string, number>; error?: string }> {
+  const ids = [...new Set(employeeIds)].filter(Boolean);
+  const counts = new Map(ids.map((id) => [id, 0]));
+  if (!ids.length) return { ok: true, counts };
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(now);
+    const part = (type: string) => parts.find((p) => p.type === type)!.value;
+    const today = `${part('year')}-${part('month')}-${part('day')}`;
+    const yearStart = `${part('year')}-01-01`;
+    const seenByEmployee = new Map<string, Set<string>>();
+
+    for (let batchStart = 0; batchStart < ids.length; batchStart += TRAINING_COUNT_EMPLOYEE_BATCH_SIZE) {
+      const batchIds = ids.slice(batchStart, batchStart + TRAINING_COUNT_EMPLOYEE_BATCH_SIZE);
+      for (let offset = 0; ; ) {
+        const { data, error } = await supabase
+          .from('employee_training')
+          .select('id, employee_id, from_date, to_date, enrollment_id')
+          .in('employee_id', batchIds)
+          .order('id', { ascending: true })
+          .range(offset, offset + TRAINING_COUNT_PAGE_SIZE - 1);
+        if (error) throw error;
+
+        const rows = (data ?? []) as TrainingCompletionRow[];
+        if (!rows.length) break;
+        for (const row of rows) {
+          const date = row.to_date ?? row.from_date;
+          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date < yearStart || date > today) continue;
+          const parsed = new Date(`${date}T00:00:00Z`);
+          if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) continue;
+
+          const seen = seenByEmployee.get(row.employee_id) ?? new Set<string>();
+          const key = row.enrollment_id ? `enrollment:${row.enrollment_id}` : `archive:${row.id}`;
+          if (seen.has(key) || !counts.has(row.employee_id)) continue;
+          seen.add(key);
+          seenByEmployee.set(row.employee_id, seen);
+          counts.set(row.employee_id, counts.get(row.employee_id)! + 1);
+        }
+        // A project may cap responses below the requested range size.
+        offset += rows.length;
+      }
+    }
+    return { ok: true, counts };
+  } catch {
+    // Never present a partial read (or a failed read) as a confirmed zero.
+    return { ok: false, counts: new Map(), error: 'Could not load recorded training completions.' };
+  }
+}
+
 export type ArchiveTraining = {
   id: string;
   title: string;

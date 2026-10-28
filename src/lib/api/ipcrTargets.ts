@@ -115,7 +115,19 @@ export async function getActiveCycle(): Promise<Result<PerformanceCycle | null>>
 
     const rows = (data ?? []) as PerformanceCycle[];
     const preferred = rows.find((c) => c.status === 'Active') ?? rows[0] ?? null;
-    return { ok: true, data: preferred };
+    if (preferred) return { ok: true, data: preferred };
+
+    // Fallback: If no cycle is explicitly flagged 'Active' or 'Planned', grab the latest
+    // cycle by start_date DESC (matches getActivePerformanceCycle in performanceEvaluations.ts).
+    const { data: latestData, error: latestErr } = await (supabase as any)
+      .from('performance_cycles')
+      .select('id, title, start_date, end_date, status')
+      .order('start_date', { ascending: false })
+      .limit(1);
+    if (latestErr) return { ok: false, error: latestErr.message };
+
+    const latest = ((latestData ?? []) as PerformanceCycle[])[0] ?? null;
+    return { ok: true, data: latest };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to load cycle.' };
   }
@@ -186,13 +198,48 @@ export async function loadLatestTargetSetting(
       .from('target_settings')
       .select('*')
       .eq('employee_id', employeeId)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
     if (error) return { ok: false, error: error.message };
     const rows = (settings ?? []) as TargetSettingRow[];
-    const setting = rows[0] ?? null;
-    if (!setting) return { ok: true, data: { setting: null, targets: emptyTargets() } };
-    const targets = await hydrateTargets(setting.id);
-    return { ok: true, data: { setting, targets } };
+    if (!rows.length) return { ok: true, data: { setting: null, targets: emptyTargets() } };
+
+    // Search for the best candidate:
+    // 1. First, check active workflow records (approved, submitted_for_approval, returned_for_revision)
+    //    that have actual hydrated targets.
+    let chosenSetting: TargetSettingRow | null = null;
+    let chosenTargets: TargetsByFunction = emptyTargets();
+
+    const activeWorkflowRows = rows.filter(
+      (r) => r.status === 'approved' || r.status === 'submitted_for_approval' || r.status === 'returned_for_revision'
+    );
+    for (const candidate of activeWorkflowRows) {
+      const t = await hydrateTargets(candidate.id);
+      if (hasSubmittableTarget(t)) {
+        chosenSetting = candidate;
+        chosenTargets = t;
+        break;
+      }
+    }
+
+    // 2. If no active workflow row has targets, check any other row that has targets.
+    if (!chosenSetting) {
+      for (const candidate of rows) {
+        const t = await hydrateTargets(candidate.id);
+        if (hasSubmittableTarget(t)) {
+          chosenSetting = candidate;
+          chosenTargets = t;
+          break;
+        }
+      }
+    }
+
+    // 3. If no row has targets at all, prioritize an approved/submitted record, else the most recent row.
+    if (!chosenSetting) {
+      chosenSetting = activeWorkflowRows[0] ?? rows[0];
+      chosenTargets = await hydrateTargets(chosenSetting.id);
+    }
+
+    return { ok: true, data: { setting: chosenSetting, targets: chosenTargets } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to load targets.' };
   }

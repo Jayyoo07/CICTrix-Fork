@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">98 plans &middot; 80 done</p>
+    <p class="counts">105 plans &middot; 84 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -76,7 +76,27 @@
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-succession-v2-auto-and-reconnection-plan.md">Succession V2 Candidate Unblocking &amp; Evidence Review Reconnection Roadmap</a><p class="summary">Fix candidate discovery in Succession V2 using department text lookup and multi-tier PDS fallbacks to populate successors immediately, and outline the future roadmap for reconnecting manual reviews and Security Phase 4A.</p></td>
+        <td class="status"><span class="badge badge-neutral">Draft</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-lnd-tna-data-population.md">Populate TNA and L&amp;D Dashboard Data Across Active Offices</a><p class="summary">Seed employee competency matches from IPCR ratings and position framework requirements, and calibrate training enrollment records so all L&amp;D dashboard cards reflect realistic data across all 5 active offices.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-lnd-annual-training-indicator.md">Show annual training progress on recommended employees</a><p class="summary">Show each recommended employee's recorded current-year training completions against the requirement of two, without changing recommendations or admin selection.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-interviewer-scheduled-applicants-only.md">The interviewer portal shows only applicants who were scheduled</a><p class="summary">The Assigned job postings table counted every applicant whose position matched, not the ones scheduled for an interview, so a posting read 6 while the list behind it held 1. Count and list both filter on an interview schedule now, and the applicant dedupe stops merging distinct people who share a plantilla item number. The oral assessment table's SCORE column no longer stretches to its longest option label and squeeze REMARKS off the row.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-for-hiring-scored-only.md">For Hiring lists only applicants who were scored</a><p class="summary">The ranked list showed anyone merely Qualified, so applicants with no interview or exam score sat in a table ordered by interview score. Visibility now requires both scores, with applicants already past selection kept regardless, and the page refreshes from Supabase realtime instead of two same-tab events.</p></td>
         <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
       <tr>
@@ -87,6 +107,16 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-fix-sor-competency-blocks-and-ratings.md">Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a><p class="summary">Fix PostgreSQL schema error omitting final scores, correct department casing and position title mapping to resolve official ratings, and render all four competency stream blocks instead of collapsing into a dead-end unassessed card.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-employee-interviewer-login-ui.md">Align Employee and Interviewer login pages</a><p class="summary">Match the HRIS shared sign-in button and apply the design identity to both login pages without changing authentication or layouts.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-configure-competency-framework.md">Configure PM Competency Framework for All Positions</a><p class="summary">Map all active employee and plantilla/job posting positions into the PM Competency Framework across the 12 LGU competency standards using base-title inheritance and Philippine Civil Service functional archetypes.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -168,6 +198,11 @@
         <td class="date">2026-10-26</td>
         <td><a href="2026-10-26-performance-followups.md">Reduce remaining Supabase fetch fan-out and polling</a><p class="summary">Batch dashboard succession counts, remove duplicate recruitment reads, scope refreshes to active sections, and reduce redundant polling without changing displayed results.</p></td>
         <td class="status"><span class="badge badge-danger">Blocked</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="2026-10-26-opencode-handoff.md">Retarget the agent handoff to OpenCode</a><p class="summary">Rewrite docs/handoff/agent-handoff.md for OpenCode instead of Claude Code, and add the two missing slash commands so /grill-me and /grill-with-docs work as AGENTS.md describes.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>
@@ -578,11 +613,27 @@
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-lnd-tna-data-population-summary.md">Session Summary: 2026-10-28 Populate TNA and L&amp;D Dashboard Data</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-lnd-annual-training-indicator-summary.md">Annual training progress on recommended employees</a><p class="summary">Add current-year recorded training counts out of the annual requirement of two beside employee names in Seminar Enrollment recommendations.</p><p class="meta">Plan: <a href="2026-10-28-lnd-annual-training-indicator.md">2026-10-28-lnd-annual-training-indicator.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-publication-roster-summary.md">Session Summary: Fix Summary of Ratings Completed IPCR Display &amp; Roster Eligibility</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-competency-blocks-and-ratings-summary.md">Session Summary: Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-employee-interviewer-login-ui-summary.md">Employee and Interviewer login alignment</a><p class="meta">Plan: <a href="2026-10-28-employee-interviewer-login-ui.md">2026-10-28-employee-interviewer-login-ui.md</a></p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-configure-competency-framework-summary.md">Session Summary: Configure PM Competency Framework for All Positions</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
@@ -651,6 +702,10 @@
       <tr>
         <td class="date">2026-10-26</td>
         <td><a href="../session-summaries/2026-10-26-performance-followups-summary.md">Performance follow-ups: planning session summary</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-26</td>
+        <td><a href="../session-summaries/2026-10-26-opencode-handoff-summary.md">Session Summary: Retarget the Agent Handoff to OpenCode</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-26</td>

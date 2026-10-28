@@ -63,6 +63,7 @@ import {
   type RosterGroup,
 } from '../../lib/api/trainingRecommendations';
 import { computeNeedsAssessment } from '../../lib/api/trainingNeeds';
+import { getCurrentYearTrainingCounts } from '../../lib/api/lndArchive';
 import { isLocked, LOCK_LEAD_DAYS } from '../../lib/api/trainingLifecycle';
 import { categoryColor } from './trainingCategories';
 import { Modal } from '../../components/modal';
@@ -78,6 +79,7 @@ const SUBTABS: { id: Subtab; label: string }[] = [
 ];
 
 const LND_ACTOR = 'L&D Admin';
+const ANNUAL_TRAINING_REQUIREMENT = 2;
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -219,16 +221,32 @@ const CollapsibleCourse = ({
 const AttendeeRow = ({
   rec,
   trailing,
+  trainingProgress,
 }: {
   rec: PipelineRecFull;
   trailing?: React.ReactNode;
+  trainingProgress?: { loading: boolean; count: number | null };
 }) => {
   const manual = rec.source === 'lnd_manual';
   return (
-    <li className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+    <li className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${trainingProgress ? 'flex-wrap' : ''}`}>
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900">{rec.employeeName}</span>
+        <div className={`flex items-center gap-2 ${trainingProgress ? 'flex-wrap' : ''}`}>
+          <span className={`font-semibold text-gray-900 ${trainingProgress ? 'max-w-full break-words' : ''}`}>{rec.employeeName}</span>
+          {trainingProgress && (
+            <span
+              className="abyan-tokens inline-flex shrink-0 rounded-full px-2 py-1 text-xs font-medium tabular-nums"
+              style={{ backgroundColor: 'var(--neutral-100)', color: 'var(--neutral-800)' }}
+              aria-live="polite"
+              title={`Recorded L&D Archive completions this calendar year; annual requirement: ${ANNUAL_TRAINING_REQUIREMENT} trainings.`}
+            >
+              {trainingProgress.loading
+                ? 'Loading training count…'
+                : trainingProgress.count == null
+                  ? 'Unavailable'
+                  : `${trainingProgress.count}/${ANNUAL_TRAINING_REQUIREMENT} Completed this year`}
+            </span>
+          )}
           {manual && (
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
               <UserPlus className="h-2.5 w-2.5" /> Added manually
@@ -511,6 +529,10 @@ const AddAttendeeModal = ({
 export const SeminarEnrollment = () => {
   const [subtab, setSubtab] = useState<Subtab>('recommendation');
   const [candidates, setCandidates] = useState<PipelineRecFull[]>([]);
+  const [trainingCounts, setTrainingCounts] = useState<{
+    candidates: PipelineRecFull[];
+    counts: Map<string, number> | null;
+  } | null>(null);
   const [courses, setCourses] = useState<NextMonthCourse[]>([]);
   const [all, setAll] = useState<PipelineRecFull[]>([]);
   const [events, setEvents] = useState<RecommendationEvent[]>([]);
@@ -534,7 +556,7 @@ export const SeminarEnrollment = () => {
       listNextMonthPublishedCourses(),
       computeNeedsAssessment(),
     ]);
-    setCandidates(cands);
+    setCandidates([...cands]);
     setAll(everything);
     setRosters(rosterGroups);
     setCourses(publishedCourses);
@@ -543,6 +565,21 @@ export const SeminarEnrollment = () => {
     setEvents(await listRecommendationEvents([...new Set(everything.map((r) => r.sessionId))]));
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = [...new Set(candidates.map((rec) => rec.employeeId))];
+    if (!ids.length) return;
+    // Keep this read independent: missing history must not hide actionable names.
+    void getCurrentYearTrainingCounts(ids)
+      .then((result) => {
+        if (!cancelled) setTrainingCounts({ candidates, counts: result.ok ? result.counts : null });
+      })
+      .catch(() => {
+        if (!cancelled) setTrainingCounts({ candidates, counts: null });
+      });
+    return () => { cancelled = true; };
+  }, [candidates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -889,6 +926,12 @@ export const SeminarEnrollment = () => {
                         <AttendeeRow
                           key={r.id}
                           rec={r}
+                          trainingProgress={{
+                            loading: trainingCounts?.candidates !== candidates,
+                            count: trainingCounts?.candidates === candidates
+                              ? trainingCounts.counts?.get(r.employeeId) ?? null
+                              : null,
+                          }}
                           trailing={
                             <div className="flex shrink-0 items-center gap-2">
                               <button

@@ -220,7 +220,7 @@ async function main() {
     if (settingId && withMfos.has(settingId)) { skipped++; continue; }
 
     const phase1 = PHASE1_OFFICES.has(String(emp.department ?? '').trim());
-    const status = phase1 ? 'draft' : 'approved';
+    const status = phase1 ? 'draft' : 'submitted_for_approval';
 
     // 4a. target_settings. A trigger freezes MFOs once the setting is approved,
     // so the row has to be in `draft` while its targets are written and is only
@@ -267,12 +267,13 @@ async function main() {
     // The CHECK constraint requires submitted_at once status leaves draft.
     if (!phase1) {
       const { error: apprErr } = await supabase.from('target_settings').update({
-        status,
+        status: 'submitted_for_approval',
         submitted_at: '2026-01-12T01:30:00+00:00',
-        reviewed_at: '2026-01-20T06:10:00+00:00',
-        approved_at: '2026-01-20T06:10:00+00:00',
+        reviewed_at: null,
+        approved_at: null,
+        approved_by: null,
       }).eq('id', settingId);
-      if (apprErr) { console.error(`  ! ${emp.employee_id} approve:`, apprErr.message); continue; }
+      if (apprErr) { console.error(`  ! ${emp.employee_id} submit:`, apprErr.message); continue; }
     }
 
     created++;

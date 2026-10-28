@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">108 plans &middot; 88 done</p>
+    <p class="counts">111 plans &middot; 90 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -83,6 +83,11 @@
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-remote-applicant-scores.md">Migrate applicant category and written exam scores from localStorage to remote Supabase tables</a><p class="summary">Transition applicant category scores and written exam scores from browser localStorage to a dedicated Supabase table (applicant_category_scores) with a centralized service layer, preserving scoring and ranking logic while retaining offline fallback.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-page-by-page-rollout-implementation-plan.md">Page-by-Page System Rollout Implementation Plan</a><p class="summary">Multi-agent sanity, smoke, and Vitest test audit certifying all 51 page surfaces across all 7 CICTrix HRIS portals on the main branch.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
@@ -122,6 +127,16 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-fix-sor-competency-blocks-and-ratings.md">Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a><p class="summary">Fix PostgreSQL schema error omitting final scores, correct department casing and position title mapping to resolve official ratings, and render all four competency stream blocks instead of collapsing into a dead-end unassessed card.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-ipcr-department-head-targets-approval.md">Fix IPCR targets auto-approval and restore Department Head review</a><p class="summary">Disentangle submitted targets from auto-approval, display &quot;Pending Approval&quot; on employee submit, verify Department Head inline target editing before approval, and align seed scripts with manual approval workflow.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-applicants-api-500-error.md">Fix applicants fetch 500 error and backend invocation crash</a><p class="summary">Point getApplicantsFromSupabase and applicant views directly to the Supabase client, and harden backend config against missing Vercel environment variables.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -653,6 +668,14 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-competency-blocks-and-ratings-summary.md">Session Summary: Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-ipcr-department-head-targets-approval-summary.md">Session Summary: Fix IPCR Targets Auto-Approval and Restore Department Head Review</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-applicants-api-500-error-summary.md">Session Summary: Fix Applicants API 500 Error and Serverless Invocation Crash</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>

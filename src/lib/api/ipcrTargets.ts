@@ -189,7 +189,7 @@ export async function loadLatestTargetSetting(
       .order('created_at', { ascending: false });
     if (error) return { ok: false, error: error.message };
     const rows = (settings ?? []) as TargetSettingRow[];
-    const setting = rows.find((s) => s.status === 'approved') ?? rows[0] ?? null;
+    const setting = rows[0] ?? null;
     if (!setting) return { ok: true, data: { setting: null, targets: emptyTargets() } };
     const targets = await hydrateTargets(setting.id);
     return { ok: true, data: { setting, targets } };

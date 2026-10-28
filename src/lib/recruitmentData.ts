@@ -626,14 +626,16 @@ export const getApplicants = () => safeJsonParse<Applicant[]>(localStorage.getIt
 // NEW: Fetch applicants from Supabase (the source of truth for all submitted applicants)
 export const getApplicantsFromSupabase = async (): Promise<Applicant[]> => {
   try {
-    // Use backend API to bypass RLS on Supabase
-    const response = await fetch('/api/applicants/?skip=0&limit=1000');
-    if (!response.ok) {
-      console.error('[recruitmentData] Failed to fetch applicants from API');
+    // Query Supabase directly
+    const { data, error } = await (supabase as any)
+      .from('applicants')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('[recruitmentData] Failed to fetch applicants from Supabase:', error);
       return getApplicants(); // Fallback to localStorage
     }
-    
-    const data = await response.json();
     
     // Transform data to match Applicant type
     if (!data || !Array.isArray(data)) {

@@ -530,7 +530,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             weight: ws.support_weight ?? null,
           },
         });
-        setIpcrApproved(ws.status !== 'Draft Targets');
+        setIpcrApproved(Boolean(tsRes.ok && tsRes.data?.setting?.status === 'approved'));
         snapshotLoaded(
           tsRes.ok ? tsRes.data.targets : emptyTargets(),
           {
@@ -746,7 +746,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     }
     
     setWorkspaceRow(res.row);
-    setIpcrApproved(res.row.status !== 'Draft Targets');
+    setIpcrApproved(targetRes.data.status === 'approved');
     snapshotLoaded(
       targetRows,
       flattened,
@@ -762,7 +762,10 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   };
 
   // ── Phase 1 table editing ──────────────────────────────────────────────────
-  const targetsLocked = targetStatus === 'submitted_for_approval' || targetStatus === 'approved';
+  const isPendingApproval = targetStatus === 'submitted_for_approval' || workspaceRow?.status === 'Targets Submitted';
+  const isTargetApproved = targetStatus === 'approved' || ipcrApproved;
+  const targetsLocked = isPendingApproval || isTargetApproved;
+  const readOnly = targetsLocked || !isTargetSettingActive;
 
   const mutateTargets = (fn: (draft: TargetsByFunction) => void) => {
     setTargetRows((prev) => {
@@ -1769,9 +1772,17 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     <p className="text-xs text-slate-500 mt-0.5">Encode your targets for Core, Strategic, and Support Functions.</p>
                   </div>
                   <div>
-                    {ipcrApproved ? (
+                    {isTargetApproved ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Approved & Locked
+                      </span>
+                    ) : isPendingApproval ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#E0E5FF] text-[#191FA8] border border-[#C8D1FF]">
+                        <Clock className="h-4 w-4 text-[#363EE8]" /> Pending Approval
+                      </span>
+                    ) : targetStatus === 'returned_for_revision' ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                        <AlertCircle className="h-4 w-4 text-rose-600" /> Needs Revision
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-100">
@@ -1780,6 +1791,15 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     )}
                   </div>
                 </div>
+
+                {isPendingApproval && (
+                  <div className="rounded-lg border border-[#C8D1FF] bg-[#EEF0FD] px-4 py-3 flex items-center gap-2.5">
+                    <Clock className="h-4 w-4 text-[#363EE8] shrink-0" />
+                    <p className="text-xs font-semibold text-[#191FA8]">
+                      Your targets have been submitted and are awaiting review and approval by your Department Head. Targets are locked while pending approval.
+                    </p>
+                  </div>
+                )}
 
                 {targetStatus === 'returned_for_revision' && targetReviewComment && (
                   <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
@@ -1795,7 +1815,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     { key: 'support', label: 'Support Functions', mfoPlaceholder: 'e.g. IT Helpdesk', siPlaceholder: 'e.g. Provide IT helpdesk assistance within 15 minutes.' },
                   ] as const).map((fn) => {
                     const rows = targetRows[fn.key];
-                    const readOnly = targetsLocked || ipcrApproved || !isTargetSettingActive;
+
                     return (
                       <div key={fn.key} className="space-y-2">
                         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
@@ -1913,18 +1933,18 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                     top of the workspace are far above the fold once the three
                     function tables are filled in, so a failed submit down here
                     looked like the button simply doing nothing. */}
-                {!targetsLocked && !ipcrApproved && isTargetSettingActive && ipcrError && (
+                {!targetsLocked && isTargetSettingActive && ipcrError && (
                   <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
                     {ipcrError}
                   </div>
                 )}
-                {!targetsLocked && !ipcrApproved && isTargetSettingActive && saveSuccess && (
+                {!targetsLocked && isTargetSettingActive && saveSuccess && (
                   <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
                     {saveSuccess}
                   </div>
                 )}
 
-                {!targetsLocked && !ipcrApproved && isTargetSettingActive && (
+                {!targetsLocked && isTargetSettingActive && (
                   <div className="flex justify-end gap-2 pt-3">
                     <button
                       onClick={() => void handleSaveWorkspaceTargets(false)}

@@ -28,3 +28,7 @@ Pass the resolved target setting ID to Phase 2 and constrain the service lookup 
 
 - Focused Vitest regressions, TypeScript, ESLint, build, diff check.
 - Regenerate the plans dashboard.
+
+## Follow-up diagnosis
+
+The user reported Phase 2 still absent. The workspace entry effect depends on reloadIpcrIfSafe, which changes whenever hydration updates dirty-check inputs. This retriggers full hydration and can keep Phase 2 unmounted. Stabilize effect triggers while reading the current dirty check, separate profile/IPCR banners, and add a parent-level regression. The profile PATCH 400 is a separate request; its response details are needed before changing payload mappings.

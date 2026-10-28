@@ -709,6 +709,11 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     void loadIPCRData(isSilent);
   }, [isIpcrFormDirty, loadIPCRData]);
 
+  const reloadIpcrIfSafeRef = useRef(reloadIpcrIfSafe);
+  useEffect(() => {
+    reloadIpcrIfSafeRef.current = reloadIpcrIfSafe;
+  }, [reloadIpcrIfSafe]);
+
   /**
    * Lightweight phase-gate refresh: re-resolves the two phase windows (office
    * override first, else system default, same as the full load) and updates
@@ -1129,6 +1134,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [wEmergency, setWEmergency] = useState<EmergencyDraft>({ emergencyContactName: '', emergencyRelationship: '', emergencyContactNumber: '' });
   const [wGovt, setWGovt] = useState<GovernmentDraft>({ sssNumber: '', philhealthNumber: '', pagibigNumber: '', tinNumber: '' });
   // Save feedback banners for profile edits.
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   // Track whether the initial DB fetch has completed, to suppress the
@@ -1230,9 +1236,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
 
   useEffect(() => {
     if (activeTab === 'ipcr-workspace') {
-      reloadIpcrIfSafe(false);
+      reloadIpcrIfSafeRef.current(false);
     }
-  }, [activeTab, currentUser?.supabaseId, reloadIpcrIfSafe]);
+  }, [activeTab, currentUser?.supabaseId, loadIPCRData]);
 
   const [bellNotifications, setBellNotifications] = useState<EmployeeNotification[]>([]);
   const [showBellDropdown, setShowBellDropdown] = useState(false);
@@ -1306,7 +1312,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     const nextProfile = { ...profile, ...patch, updatedAt: nowIso };
     setProfile(nextProfile);
     setSaveError(null);
-    setSaveSuccess(null);
+    setProfileSaveSuccess(null);
 
     if (currentUser.supabaseId) {
       // Write to Supabase.
@@ -1317,7 +1323,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         setProfile(profile);
         return;
       }
-      setSaveSuccess('Changes saved successfully.');
+      setProfileSaveSuccess('Changes saved successfully.');
     } else {
       // Fallback: demo account — persist to localStorage only.
       updateEmployeePortalEmployee(profile.employeeId, patch);
@@ -1429,9 +1435,9 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
                 {saveError}
               </p>
             )}
-            {saveSuccess && (
+            {profileSaveSuccess && (
               <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                {saveSuccess}
+                {profileSaveSuccess}
               </p>
             )}
 

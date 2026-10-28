@@ -56,7 +56,11 @@ const avgOf = (nums: Array<number | null>): number | null => {
 /** sessionStorage key for caching unsaved Phase 2 entries so they survive refresh. */
 const draftCacheKey = (empId: string) => `cictrix_phase2_draft_${empId}`;
 
-export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: boolean }> = ({ employeeId, phaseOpen }) => {
+export const EmployeePhase2: React.FC<{
+  employeeId: string | null;
+  cycleId?: number | null;
+  phaseOpen?: boolean;
+}> = ({ employeeId, cycleId, phaseOpen }) => {
   const [loading, setLoading] = useState(true);
   const showLoader = useDelayedLoading(loading);
   const [sheet, setSheet] = useState<EmployeeRatingSheet | null>(null);
@@ -103,7 +107,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
       setLoading(true);
     }
     try {
-      const res = await loadEmployeeRatingSheet(employeeId);
+      const res = await loadEmployeeRatingSheet(employeeId, cycleId);
       if (res.ok === false) { setNotice({ tone: 'err', text: res.error }); return; }
       const s = res.data;
       setSheet(s);
@@ -155,7 +159,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
         setLoading(false);
       }
     }
-  }, [employeeId]);
+  }, [employeeId, cycleId]);
 
   useEffect(() => {
     void loadSheet();
@@ -271,7 +275,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
   if (!sheet) {
     return (
       <div className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500 shadow-sm" style={{ borderColor: '#C8D1FF' }}>
-        You don’t have an approved (frozen) Phase 1 record yet, so the self-rating module isn’t available.
+        You don’t have an approved (frozen) Phase 1 record yet for this period, so the self-rating module isn’t available.
       </div>
     );
   }

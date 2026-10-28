@@ -254,20 +254,6 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   useEffect(() => {
     try { sessionStorage.setItem('cictrix_ipcr_subtab', ipcrSubtab); } catch { /* ignore */ }
   }, [ipcrSubtab]);
-  // Auto-switch to Phase 2 on first load when accomplishment rating is active
-  // and no explicit tab was stored (so the user sees the open phase by default).
-  const hasAutoSwitchedRef = useRef(false);
-  useEffect(() => {
-    if (hasAutoSwitchedRef.current) return;
-    if (isAccomplishmentRatingActive && location.pathname.includes('/ipcr-workspace')) {
-      try {
-        if (!sessionStorage.getItem('cictrix_ipcr_subtab')) {
-          setIpcrSubtab('phase2');
-        }
-      } catch { /* ignore */ }
-      hasAutoSwitchedRef.current = true;
-    }
-  }, [isAccomplishmentRatingActive, location.pathname]);
   const [newEntrantsSubtab, setNewEntrantsSubtab] = useState<'checklist' | 'scheduler'>('checklist');
   const [employeeTargets, setEmployeeTargets] = useState({
     core: '',
@@ -281,6 +267,51 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [targetReviewComment, setTargetReviewComment] = useState<string | null>(null);
   const [activeCycleId, setActiveCycleId] = useState<number | null>(null);
   const [ipcrApproved, setIpcrApproved] = useState(false);
+  const [workspaceRow, setWorkspaceRow] = useState<IpcrWorkspaceRow | null>(null);
+
+  const isTargetApproved = targetStatus === 'approved' || ipcrApproved;
+  const isPendingApproval = targetStatus === 'submitted_for_approval' || workspaceRow?.status === 'Targets Submitted';
+  const targetsLocked = isPendingApproval || isTargetApproved;
+  const readOnly = targetsLocked || !isTargetSettingActive;
+
+  // Auto-switch to Phase 2 on first load ONLY when accomplishment rating is active
+  // AND the employee's Phase 1 targets have already been approved for this cycle.
+  const hasAutoSwitchedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoSwitchedRef.current) return;
+    if (isAccomplishmentRatingActive && isTargetApproved && location.pathname.includes('/ipcr-workspace')) {
+      try {
+        if (!sessionStorage.getItem('cictrix_ipcr_subtab')) {
+          setIpcrSubtab('phase2');
+        }
+      } catch { /* ignore */ }
+      hasAutoSwitchedRef.current = true;
+    }
+  }, [isAccomplishmentRatingActive, isTargetApproved, location.pathname]);
+
+  // Debounce-save Phase 1 draft to sessionStorage so unsubmitted edits survive refresh.
+  const phase1DraftKey = useCallback(
+    (cycleId: number | null) =>
+      currentUser.supabaseId && cycleId ? `cictrix_phase1_draft_${currentUser.supabaseId}_${cycleId}` : null,
+    [currentUser.supabaseId]
+  );
+  const phase1CacheTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!currentUser.supabaseId || !activeCycleId) return;
+    if (targetStatus !== 'draft' || isTargetApproved || isPendingApproval) return;
+    if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
+    phase1CacheTimerRef.current = setTimeout(() => {
+      try {
+        const key = phase1DraftKey(activeCycleId);
+        if (key && hasSubmittableTarget(targetRows)) {
+          sessionStorage.setItem(key, JSON.stringify(targetRows));
+        }
+      } catch { /* storage full / unavailable */ }
+    }, 600);
+    return () => {
+      if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
+    };
+  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey]);
   // Per-category Phase 2 accomplishments + Q/E/T self-ratings + % weight.
   const [accomplishments, setAccomplishments] = useState({ core: '', strategic: '', support: '' });
   type CatRating = {
@@ -312,7 +343,6 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     if (filled.length === 0) return null;
     return Number((filled.reduce((a, b) => a + b, 0) / filled.length).toFixed(2));
   };
-  const [workspaceRow, setWorkspaceRow] = useState<IpcrWorkspaceRow | null>(null);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
   const [workspaceAction, setWorkspaceAction] = useState<'draft' | 'submit' | null>(null);
   const [orientationChecked, setOrientationChecked] = useState({
@@ -478,37 +508,38 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       }
 
       // Phase 1 relational targets.
-      // Load by cycle if available; if no setting exists for that cycle, or if the cycle-specific
-      // load returned a blank draft while a populated/approved target setting exists in the latest records,
-      // fall back to loadLatestTargetSetting so submitted/approved MFOs are never lost.
+      // Load by active cycle. If an active cycle exists, preserve activeCycleId so targets are saved
+      // to the current cycle and never hijacked by past historical cycles.
       const activeCycleRes = await getActiveCycle();
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
       let tsRes: { ok: true; data: { setting: TargetSettingRow | null; targets: TargetsByFunction } } | { ok: false; error: string } | null = null;
-      if (activeCycleRes.ok && activeCycleRes.data) {
-        setActiveCycleId(activeCycleRes.data.id);
-        tsRes = await loadTargetSetting(currentUser.supabaseId, activeCycleRes.data.id);
-      }
+      const targetSettingCycleId = activeCycleRes.ok && activeCycleRes.data ? activeCycleRes.data.id : null;
 
-      if (!tsRes || !tsRes.ok || !tsRes.data.setting || !hasSubmittableTarget(tsRes.data.targets)) {
+      if (targetSettingCycleId) {
+        setActiveCycleId(targetSettingCycleId);
+        tsRes = await loadTargetSetting(currentUser.supabaseId, targetSettingCycleId);
+      } else {
+        // Fallback: only if getActiveCycle() returned no cycle (e.g. RLS on performance_cycles failed)
         const latestRes = await loadLatestTargetSetting(currentUser.supabaseId);
         if (loadId !== latestEmployeeIpcrLoadId.current) return;
         if (latestRes.ok && latestRes.data.setting) {
-          const prevHasTargets = Boolean(tsRes && tsRes.ok && hasSubmittableTarget(tsRes.data.targets));
-          if (!prevHasTargets || hasSubmittableTarget(latestRes.data.targets)) {
-            tsRes = latestRes;
-            if (latestRes.data.setting.cycle_id) {
-              setActiveCycleId(latestRes.data.setting.cycle_id);
-            }
+          tsRes = latestRes;
+          if (latestRes.data.setting.cycle_id) {
+            setActiveCycleId(latestRes.data.setting.cycle_id);
           }
         }
       }
 
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
       const targetIsApproved = Boolean(tsRes?.ok && tsRes.data?.setting?.status === 'approved');
-      if (tsRes && tsRes.ok) {
+      if (tsRes && tsRes.ok && tsRes.data.setting) {
         setTargetRows(tsRes.data.targets);
-        setTargetStatus(tsRes.data.setting?.status ?? 'draft');
-        setTargetReviewComment(tsRes.data.setting?.review_comment ?? null);
+        setTargetStatus(tsRes.data.setting.status);
+        setTargetReviewComment(tsRes.data.setting.review_comment ?? null);
+      } else {
+        setTargetRows(emptyTargets());
+        setTargetStatus('draft');
+        setTargetReviewComment(null);
       }
       setIpcrApproved(targetIsApproved);
 
@@ -542,6 +573,24 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             }
           }
         }
+      }
+
+      // Phase 1 draft cache recovery: if targets in DB are draft or empty,
+      // restore any unsubmitted draft from sessionStorage for this employee & cycle.
+      const currentResolvedCycle = targetSettingCycleId ?? activeCycleId;
+      const isDbDraftOrEmpty = !tsRes || !tsRes.ok || !tsRes.data.setting || tsRes.data.setting.status === 'draft';
+      if (currentResolvedCycle && isDbDraftOrEmpty && !hasSubmittableTarget(resolvedTargets)) {
+        try {
+          const draftKey = `cictrix_phase1_draft_${currentUser.supabaseId}_${currentResolvedCycle}`;
+          const cached = sessionStorage.getItem(draftKey);
+          if (cached) {
+            const parsed = JSON.parse(cached) as TargetsByFunction;
+            if (hasSubmittableTarget(parsed)) {
+              resolvedTargets = parsed;
+              setTargetRows(parsed);
+            }
+          }
+        } catch { /* ignore cache parse error */ }
       }
 
       if (ws) {
@@ -800,16 +849,16 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     if (pendingIpcrRefresh.current) {
       reloadIpcrIfSafe(true);
     }
+    if (submit && cycleId) {
+      try {
+        sessionStorage.removeItem(`cictrix_phase1_draft_${currentUser.supabaseId}_${cycleId}`);
+      } catch { /* ignore */ }
+    }
     setSaveSuccess(submit ? 'Targets submitted to your Office Account for approval.' : 'Targets saved as draft.');
     setTimeout(() => setSaveSuccess(null), 4000);
   };
 
   // ── Phase 1 table editing ──────────────────────────────────────────────────
-  const isPendingApproval = targetStatus === 'submitted_for_approval' || workspaceRow?.status === 'Targets Submitted';
-  const isTargetApproved = targetStatus === 'approved' || ipcrApproved;
-  const targetsLocked = isPendingApproval || isTargetApproved;
-  const readOnly = targetsLocked || !isTargetSettingActive;
-
   const mutateTargets = (fn: (draft: TargetsByFunction) => void) => {
     setTargetRows((prev) => {
       const next: TargetsByFunction = {
@@ -2023,7 +2072,11 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             )}
 
             {ipcrSubtab === 'phase2' && (
-              <EmployeePhase2 employeeId={currentUser.supabaseId ?? null} phaseOpen={isAccomplishmentRatingActive} />
+              <EmployeePhase2
+                employeeId={currentUser.supabaseId ?? null}
+                cycleId={activeCycleId}
+                phaseOpen={isAccomplishmentRatingActive}
+              />
             )}
 
             {/* Legacy per-group Phase 2 — superseded by EmployeePhase2 (per-indicator + gating). */}

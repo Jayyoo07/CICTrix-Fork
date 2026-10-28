@@ -571,13 +571,20 @@ export interface EmployeeRatingSheet extends RatingSheet {
  */
 export async function loadEmployeeRatingSheet(
   employeeId: string,
+  cycleId?: number | null,
 ): Promise<Result<EmployeeRatingSheet | null>> {
   try {
-    const { data: settings, error } = await supabase
+    let query = supabase
       .from('target_settings')
       .select('*')
       .eq('employee_id', employeeId)
-      .eq('status', 'approved')
+      .eq('status', 'approved');
+
+    if (cycleId) {
+      query = query.eq('cycle_id', cycleId);
+    }
+
+    const { data: settings, error } = await query
       .order('approved_at', { ascending: false })
       .limit(1);
     if (error) return { ok: false, error: error.message };

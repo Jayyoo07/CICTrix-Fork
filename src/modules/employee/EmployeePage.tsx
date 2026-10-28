@@ -55,6 +55,7 @@ import {
   flattenForWorkspace,
   getActiveCycle,
   hasSubmittableTarget,
+  hasTargetContent,
   loadTargetSetting,
   loadLatestTargetSetting,
   saveTargetSetting,
@@ -195,7 +196,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   const [employeeRawDetails, setEmployeeRawDetails] = useState<any | null>(null);
   const [ipcrRows, setIpcrRows] = useState<IPCRRowDraft[]>([]);
   const [, setIpcrEvaluation] = useState<any | null>(null);
-  const [, setIpcrLoading] = useState(false);
+  const [ipcrLoading, setIpcrLoading] = useState(true);
   const [ipcrError, setIpcrError] = useState<string | null>(null);
   const [ipcrRatingPeriod, setIpcrRatingPeriod] = useState<string>('');
   const [, setEmployeeEvaluations] = useState<any[]>([]);
@@ -298,13 +299,13 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
   );
   const phase1CacheTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!currentUser.supabaseId || !activeCycleId) return;
+    if (ipcrLoading || !currentUser.supabaseId || !activeCycleId) return;
     if (targetStatus !== 'draft' || isTargetApproved || isPendingApproval) return;
     if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     phase1CacheTimerRef.current = setTimeout(() => {
       try {
         const key = phase1DraftKey(activeCycleId);
-        if (key && hasSubmittableTarget(targetRows)) {
+        if (key && hasTargetContent(targetRows)) {
           sessionStorage.setItem(key, JSON.stringify(targetRows));
         }
       } catch { /* storage full / unavailable */ }
@@ -312,7 +313,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
     return () => {
       if (phase1CacheTimerRef.current) clearTimeout(phase1CacheTimerRef.current);
     };
-  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey]);
+  }, [targetRows, activeCycleId, targetStatus, isTargetApproved, isPendingApproval, currentUser.supabaseId, phase1DraftKey, ipcrLoading]);
   // Per-category Phase 2 accomplishments + Q/E/T self-ratings + % weight.
   const [accomplishments, setAccomplishments] = useState({ core: '', strategic: '', support: '' });
   type CatRating = {
@@ -508,7 +509,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       const activeCycleRes = await getActiveCycle();
       if (loadId !== latestEmployeeIpcrLoadId.current) return;
       let tsRes: { ok: true; data: { setting: TargetSettingRow | null; targets: TargetsByFunction } } | { ok: false; error: string } | null = null;
-      const targetSettingCycleId = activeCycleRes.ok && activeCycleRes.data ? activeCycleRes.data.id : null;
+      let targetSettingCycleId = activeCycleRes.ok && activeCycleRes.data ? activeCycleRes.data.id : null;
 
       if (targetSettingCycleId) {
         setActiveCycleId(targetSettingCycleId);
@@ -521,7 +522,8 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
         if (latestRes.ok && latestRes.data.setting) {
           tsRes = latestRes;
           if (latestRes.data.setting.cycle_id) {
-            setActiveCycleId(latestRes.data.setting.cycle_id);
+            targetSettingCycleId = latestRes.data.setting.cycle_id;
+            setActiveCycleId(targetSettingCycleId);
           }
         }
       }
@@ -549,7 +551,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
       // but ws has persisted target text in ipcr_workspace, unflatten ws into targetRows
       // so MFOs and indicators never vanish on refresh!
       let resolvedTargets = tsRes?.ok ? tsRes.data.targets : emptyTargets();
-      if (!hasSubmittableTarget(resolvedTargets) && ws) {
+      if (!hasTargetContent(resolvedTargets) && ws) {
         const wsHasTargets = Boolean(
           ws.core_target?.trim() || ws.strategic_target?.trim() || ws.support_target?.trim()
         );
@@ -559,7 +561,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
             strategic: unflattenFromWorkspace(ws.strategic_target),
             support: unflattenFromWorkspace(ws.support_target),
           };
-          if (hasSubmittableTarget(parsedFromWs)) {
+          if (hasTargetContent(parsedFromWs)) {
             resolvedTargets = parsedFromWs;
             setTargetRows(parsedFromWs);
             if (targetIsApproved || ws.status === 'Accomplishments Submitted' || ws.status === 'Completed') {
@@ -574,15 +576,15 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
 
       // Phase 1 draft cache recovery: if targets in DB are draft or empty,
       // restore any unsubmitted draft from sessionStorage for this employee & cycle.
-      const currentResolvedCycle = targetSettingCycleId ?? activeCycleId;
+      const currentResolvedCycle = targetSettingCycleId;
       const isDbDraftOrEmpty = !tsRes || !tsRes.ok || !tsRes.data.setting || tsRes.data.setting.status === 'draft';
-      if (currentResolvedCycle && isDbDraftOrEmpty && !hasSubmittableTarget(resolvedTargets)) {
+      if (currentResolvedCycle && isDbDraftOrEmpty && !hasTargetContent(resolvedTargets)) {
         try {
           const draftKey = `cictrix_phase1_draft_${currentUser.supabaseId}_${currentResolvedCycle}`;
           const cached = sessionStorage.getItem(draftKey);
           if (cached) {
             const parsed = JSON.parse(cached) as TargetsByFunction;
-            if (hasSubmittableTarget(parsed)) {
+            if (hasTargetContent(parsed)) {
               resolvedTargets = parsed;
               setTargetRows(parsed);
             }
@@ -2056,7 +2058,7 @@ export const EmployeePage: React.FC<EmployeePageProps> = ({ currentUser, loginUs
               </div>
             )}
 
-            {ipcrSubtab === 'phase2' && (
+            {ipcrSubtab === 'phase2' && !ipcrLoading && (
               <EmployeePhase2
                 employeeId={currentUser.supabaseId ?? null}
                 cycleId={activeCycleId}

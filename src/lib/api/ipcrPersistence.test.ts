@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { emptyTargets, flattenForWorkspace, loadTargetSetting, saveTargetSetting } from './ipcrTargets';
+import { emptyTargets, flattenForWorkspace, hasTargetContent, hasSubmittableTarget, loadLatestTargetSetting, loadTargetSetting, saveTargetSetting } from './ipcrTargets';
 import { getWorkspace, saveAccomplishments, saveTargets } from './ipcrWorkspace';
 
 const db = vi.hoisted(() => ({
@@ -170,5 +170,33 @@ describe('employee IPCR save and reload', () => {
     const reloaded = await loadTargetSetting(identity.employeeId, 1);
     expect(reloaded.ok).toBe(true);
     if (reloaded.ok) expect(flattenForWorkspace(reloaded.data.targets.core)).toBe(flattenForWorkspace(targets().core));
+  });
+});
+
+
+describe('partial Phase 1 draft recovery', () => {
+  it('restores title-only drafts without treating them as ready to submit', async () => {
+    const partial = emptyTargets();
+    partial.core[0].title = 'Prepare payroll';
+    expect(hasTargetContent(partial)).toBe(true);
+    expect(hasSubmittableTarget(partial)).toBe(false);
+    expect((await saveTargetSetting({ employeeId: identity.employeeId, cycleId: 1, targets: partial, submit: false })).ok).toBe(true);
+    const restored = await loadTargetSetting(identity.employeeId, 1);
+    expect(restored.ok).toBe(true);
+    if (restored.ok) {
+      expect(restored.data.targets.core[0].title).toBe('Prepare payroll');
+      expect(hasTargetContent(restored.data.targets)).toBe(true);
+    }
+  });
+
+  it('recovers a partial draft instead of selecting an empty fallback record', async () => {
+    db.tables.target_settings = [
+      { id: 'empty', employee_id: identity.employeeId, cycle_id: 2, status: 'draft' },
+      { id: 'partial', employee_id: identity.employeeId, cycle_id: 1, status: 'draft' },
+    ];
+    db.tables.mfos = [{ id: 'mfo-partial', target_setting_id: 'partial', function_type: 'core', title: 'Prepare payroll', sort_order: 0 }];
+    const restored = await loadLatestTargetSetting(identity.employeeId);
+    expect(restored.ok).toBe(true);
+    if (restored.ok) expect(restored.data.setting?.id).toBe('partial');
   });
 });

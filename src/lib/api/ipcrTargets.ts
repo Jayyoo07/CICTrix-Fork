@@ -78,6 +78,12 @@ export const hasSubmittableTarget = (targets: TargetsByFunction): boolean =>
     targets[fn].some((mfo) => mfo.indicators.some((si) => si.description.trim().length > 0)),
   );
 
+/** Draft recovery accepts partial MFOs before their indicators are entered. */
+export const hasTargetContent = (targets: TargetsByFunction): boolean =>
+  FUNCTION_TYPES.some((fn) =>
+    targets[fn].some((mfo) => mfo.title.trim() || mfo.indicators.some((si) => si.description.trim())),
+  );
+
 /**
  * Denormalise one category's MFOs into the legacy ipcr_workspace text column.
  * Kept deliberately simple and human-readable — it feeds the PDF.
@@ -280,7 +286,7 @@ export async function loadLatestTargetSetting(
     );
     for (const candidate of activeWorkflowRows) {
       const t = await hydrateTargets(candidate.id);
-      if (hasSubmittableTarget(t)) {
+      if (hasTargetContent(t)) {
         chosenSetting = candidate;
         chosenTargets = t;
         break;
@@ -291,7 +297,7 @@ export async function loadLatestTargetSetting(
     if (!chosenSetting) {
       for (const candidate of rows) {
         const t = await hydrateTargets(candidate.id);
-        if (hasSubmittableTarget(t)) {
+        if (hasTargetContent(t)) {
           chosenSetting = candidate;
           chosenTargets = t;
           break;

@@ -31,6 +31,12 @@ import { TableStateRows, TopScorerBadge, topScorerIds, topScorerRowClass } from 
 import { getAdminRole } from '../lib/adminSession';
 import { fetchWrittenExamTotals, saveWrittenExamTotal, type SaveExamTotalResult } from '../lib/api/examTotalPoints';
 import {
+  fetchApplicantCategoryScores,
+  saveApplicantCategoryScores,
+  savePositionWrittenExamScores,
+  type ApplicantCategoryScores,
+} from '../lib/api/applicantScores';
+import {
   DEFAULT_WRITTEN_EXAM_TOTAL,
   WRITTEN_EXAM_SHARE,
   canEditExamTotal,
@@ -76,23 +82,6 @@ export interface ApplicantRecord {
   years_of_experience?: number | null;
 }
 
-interface ScoringCat {
-  initialScore: number;
-  finalScore: number | null;
-  remarks: string;
-}
-
-interface ApplicantCategoryScores {
-  education:   ScoringCat;
-  experience:  ScoringCat;
-  performance: ScoringCat;
-  pcpt:        ScoringCat;
-  potential:   ScoringCat;
-  writtenExam: ScoringCat;
-  oralExam:    ScoringCat;
-  appointmentType?: 'original' | 'promotional';
-  positionType?: 'rank-and-file' | 'executive';
-}
 
 type ExamStatus      = 'pending' | 'in-progress' | 'completed';
 type CatKey          = 'education' | 'experience' | 'performance' | 'pcpt' | 'potential' | 'writtenExam' | 'oralExam';
@@ -1551,6 +1540,29 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadScores = () => {
+      void fetchApplicantCategoryScores().then((result) => {
+        if (cancelled) return;
+        if (result.data && result.data.size > 0) {
+          const remoteScores: Record<string, ApplicantCategoryScores> = {};
+          for (const [id, scoreObj] of result.data.entries()) {
+            remoteScores[id] = scoreObj;
+          }
+          setCatScores((prev) => ({ ...prev, ...remoteScores }));
+        }
+        setExamScores(loadExamScores());
+      });
+    };
+    loadScores();
+    window.addEventListener('cictrix:category-scores-updated', loadScores);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('cictrix:category-scores-updated', loadScores);
+    };
+  }, []);
+
   const handleSaveExamTotal = useCallback(async (position: string, total: number) => {
     const result = await saveWrittenExamTotal(position, total);
     if (result.ok) setExamTotals((prev) => ({ ...prev, [position]: total }));
@@ -1626,7 +1638,14 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
   const handleSaveExam = useCallback((position: string, scores: Record<string, string>) => {
     const updated = { ...examScores, [position]: scores };
     setExamScores(updated);
-    localStorage.setItem(EXAM_KEY, JSON.stringify(updated));
+
+    const scoresNumeric: Record<string, number> = {};
+    Object.entries(scores).forEach(([id, val]) => {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        scoresNumeric[id] = num;
+      }
+    });
 
     const updatedCat = { ...catScores };
     const posApplicants = folders.find(f => f.position === position)?.applicants ?? [];
@@ -1641,14 +1660,14 @@ export const QualifiedApplicantsSection = ({ applicants, completedEvaluationIds,
       }
     });
     setCatScores(updatedCat);
-    localStorage.setItem(CAT_KEY, JSON.stringify(updatedCat));
+
+    void savePositionWrittenExamScores(position, scoresNumeric);
   }, [examScores, catScores, folders]);
 
   const handleSaveCatScores = useCallback((applicantId: string, scores: ApplicantCategoryScores) => {
     const updated = { ...catScores, [applicantId]: scores };
     setCatScores(updated);
-    localStorage.setItem(CAT_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('cictrix:category-scores-updated'));
+    void saveApplicantCategoryScores(applicantId, scores);
   }, [catScores]);
 
   // Browser Back closes one level: an open modal first, then the folder.

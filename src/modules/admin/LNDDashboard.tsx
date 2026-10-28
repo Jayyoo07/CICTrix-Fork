@@ -432,18 +432,18 @@ const LndDashboardContent = () => {
   }, [needs]);
 
   /** All 12 framework competencies, most-needed LGU-wide first. */
-  const competencyRows = useMemo(() =>
-    COMPETENCY_LIST.map((comp) => {
-      const need = needs.find((n) => n.competency === comp);
+  const competencyRows = useMemo(() => {
+    const normComp = (s: string) => s.trim().toLowerCase().replace(/\s*\/\s*/g, '/');
+    return COMPETENCY_LIST.map((comp) => {
+      const need = needs.find((n) => normComp(n.competency) === normComp(comp));
       return {
         competency: comp,
         short: COMPETENCY_SHORT[comp] ?? comp,
         affected: need?.offices.reduce((sum, o) => sum + o.affected, 0) ?? 0,
         byOffice: new Map((need?.offices ?? []).map((o) => [o.office, o.demand])),
       };
-    }).sort((a, b) => b.affected - a.affected || a.competency.localeCompare(b.competency)),
-    [needs]
-  );
+    }).sort((a, b) => b.affected - a.affected || a.competency.localeCompare(b.competency));
+  }, [needs]);
   const competenciesWithGaps = competencyRows.filter((r) => r.affected > 0).length;
   const tnaHeadcount = headcount || needs[0]?.offices.reduce((sum, o) => sum + o.total, 0) || 0;
 

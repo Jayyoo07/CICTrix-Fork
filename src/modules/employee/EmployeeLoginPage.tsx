@@ -1,6 +1,7 @@
-import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
-import { useState } from 'react';
+import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { ActionFeedback } from '../../components/action-feedback';
+import { Button } from '../../components/Button';
 import { describeActionFailure } from '../../lib/friendlyErrors';
 import abyanLogo from '../../assets/abyan-logo.png';
 import iloiloCitySeal from '../../assets/iloilo-city-seal.png';
@@ -22,8 +23,10 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [failure, setFailure] = useState<LoginFailure | null>(null);
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current || isLoading) return;
     setFailure(null);
 
     if (!username.trim()) {
@@ -42,11 +45,13 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
       return;
     }
 
+    submitting.current = true;
     setLoading(true);
     try {
       await onLogin(username, password);
       const session = readEmployeeSession();
       if (!session) {
+        submitting.current = false;
         setLoading(false);
       }
     } catch (err) {
@@ -61,38 +66,89 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
         const described = describeActionFailure('sign you in', err);
         setFailure({ message: described.message, nextStep: described.nextStep });
       }
+      submitting.current = false;
       setLoading(false);
     }
   };
 
   return (
     <div
-      className="min-h-screen w-full bg-slate-50 text-slate-900"
-      style={{ fontFamily: "'Poppins', system-ui, -apple-system, sans-serif" }}
+      className="abyan-ds employee-login min-h-screen w-full"
+      style={{ background: 'var(--bg-page)', color: 'var(--neutral-800)' }}
     >
+      <style>{`
+        /* Keep legacy global input rules from overriding this page's tokens. */
+        .abyan-ds.employee-login .employee-login-input[type] {
+          height: var(--control-h);
+          border: 1px solid var(--neutral-200);
+          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          color: var(--neutral-800);
+          caret-color: var(--color-primary);
+          font: 500 14px/18px var(--font-sans);
+          transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+        }
+        .abyan-ds.employee-login .employee-login-input::placeholder {
+          color: var(--neutral-600);
+          opacity: 1;
+        }
+        .abyan-ds.employee-login .employee-login-input:hover:not(:disabled):not(:focus) {
+          border-color: var(--color-primary-200);
+        }
+        .abyan-ds.employee-login .employee-login-input:focus {
+          outline: none;
+          border: 2px solid var(--color-primary);
+          box-shadow: var(--ring-input);
+        }
+        .abyan-ds.employee-login .employee-login-input:disabled {
+          background: var(--bg-page);
+          color: var(--neutral-400);
+          cursor: not-allowed;
+        }
+        .abyan-ds.employee-login .employee-login-toggle {
+          border-radius: var(--radius-pill);
+          color: var(--neutral-600);
+        }
+        .abyan-ds.employee-login .employee-login-toggle:hover:not(:disabled) {
+          background: var(--bg-page);
+          color: var(--color-primary);
+        }
+        .abyan-ds.employee-login .employee-login-toggle:focus-visible {
+          outline: 2px solid var(--color-primary);
+          outline-offset: 2px;
+          box-shadow: var(--ring-input);
+        }
+        .abyan-ds.employee-login .btn-primary:hover:not(:disabled) {
+          background: var(--color-primary-700);
+        }
+        .abyan-ds.employee-login .btn-primary.is-loading {
+          background: var(--gradient-button);
+          color: var(--color-white);
+        }
+      `}</style>
       <div className="flex min-h-screen w-full">
         {/* LEFT — brand panel */}
         <aside
           className="relative hidden w-1/2 overflow-hidden lg:flex"
-          style={{ background: 'linear-gradient(135deg, #363EE8 0%, #050D65 100%)', color: '#FFFFFF' }}
+          style={{ background: 'var(--gradient-hero)', color: 'var(--color-white)' }}
         >
           {/* Decorative orbs */}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full blur-3xl"
-            style={{ backgroundColor: 'rgba(200,209,255,0.18)' }}
+            style={{ backgroundColor: 'var(--color-primary-200)', opacity: 0.18 }}
           />
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -bottom-40 -right-24 h-[28rem] w-[28rem] rounded-full blur-3xl"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+            style={{ backgroundColor: 'var(--color-white)', opacity: 0.06 }}
           />
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
             style={{
               backgroundImage:
-                'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)',
+                'radial-gradient(circle at 1px 1px, var(--on-blue-active) 1px, transparent 0)',
               backgroundSize: '24px 24px',
               opacity: 0.35,
             }}
@@ -100,7 +156,7 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
 
           <div className="relative z-10 flex w-full flex-col p-12">
             {/* Top wordmark with logo */}
-            <a href="/" className="flex items-center gap-3">
+            <a href="/" className="flex items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-white)]">
               <img
                 src={abyanLogo}
                 alt="Abyan Logo"
@@ -108,8 +164,8 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
                 style={{ mixBlendMode: 'screen' }}
               />
               <div className="flex flex-col leading-tight">
-                <span className="text-base font-bold tracking-wide text-white">ABYAN HRIS</span>
-                <span className="text-xs font-medium" style={{ color: 'rgba(200,209,255,0.85)' }}>
+                <span className="text-title-s" style={{ color: 'var(--color-white)' }}>ABYAN HRIS</span>
+                <span className="text-body-s" style={{ color: 'var(--on-blue-muted)' }}>
                   abyan-hris.vercel.app
                 </span>
               </div>
@@ -119,8 +175,8 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
             <div className="m-auto w-full max-w-md text-center">
               <div className="mx-auto mb-8 flex h-32 w-32 items-center justify-center rounded-full"
                 style={{
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.25)',
+                  backgroundColor: 'var(--on-blue-hover)',
+                  boxShadow: 'inset 0 0 0 2px var(--on-blue-active)',
                   padding: '12px',
                 }}
               >
@@ -131,25 +187,25 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
                 />
               </div>
               <h1
-                className="text-4xl font-bold tracking-tight text-white"
-                style={{ lineHeight: 1.1 }}
+                className="text-title-l"
+                style={{ color: 'var(--color-white)' }}
               >
                 Employee Portal
               </h1>
               <p
-                className="mt-3 text-base font-medium"
-                style={{ color: 'rgba(200,209,255,0.90)' }}
+                className="text-body-l mt-3"
+                style={{ color: 'var(--on-blue-text)' }}
               >
                 Human Resource Information System
               </p>
-              <ul className="mt-10 space-y-3 text-center text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <ul className="text-body-l mt-10 space-y-3 text-center" style={{ color: 'var(--on-blue-muted)' }}>
                 {['Access Your Employee Records', 'View Payslips & Benefits', 'Submit Leave Requests'].map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             </div>
 
-            <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            <p className="text-body-s" style={{ color: 'var(--on-blue-muted)' }}>
               &copy; {new Date().getFullYear()} Abyan HRIS. All rights reserved.
             </p>
           </div>
@@ -160,14 +216,14 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
           <div className="w-full max-w-md">
             {/* Mobile-only brand */}
             <div className="mb-8 flex items-center gap-2 lg:hidden">
-              <img src={abyanLogo} alt="Abyan" className="h-8 w-auto object-contain" />
-              <span className="text-sm font-semibold text-slate-900">Abyan HRIS</span>
+              <img src={abyanLogo} alt="Abyan" className="h-8 w-8 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-primary)] object-contain p-1" />
+              <span className="text-headline-m" style={{ color: 'var(--color-primary-900)' }}>Abyan HRIS</span>
             </div>
 
             <div className="mb-8">
               <h1
-                className="text-3xl font-bold tracking-tight"
-                style={{ color: '#040E6B', lineHeight: 1.15 }}
+                className="text-title-l"
+                style={{ color: 'var(--color-primary-900)' }}
               >
                 Welcome back
               </h1>
@@ -175,45 +231,51 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {failure && (
-                <ActionFeedback
-                  title="We couldn't sign you in."
-                  message={failure.message}
-                  nextStep={failure.nextStep}
-                  onDismiss={() => setFailure(null)}
-                />
+                <div id="emp-login-failure">
+                  <ActionFeedback
+                    title="We couldn't sign you in."
+                    message={failure.message}
+                    nextStep={failure.nextStep}
+                    onDismiss={() => setFailure(null)}
+                  />
+                </div>
               )}
 
               {/* Username */}
               <div>
-                <label htmlFor="emp-username" className="mb-2 block text-sm font-semibold" style={{ color: '#040E6B' }}>
+                <label htmlFor="emp-username" className="text-body-m mb-2 block">
                   Username
                 </label>
                 <div className="relative">
                   <User
-                    className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.8}
+                    className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2"
+                    style={{ color: 'var(--neutral-400)' }}
+                    strokeWidth={1.75}
                   />
                   <input
                     id="emp-username"
                     type="text"
+                    autoComplete="username"
+                    aria-describedby={failure ? 'emp-login-failure' : undefined}
                     placeholder="Enter your username"
                     value={username}
                     onChange={(e) => { setUsername(e.target.value); setFailure(null); }}
                     disabled={loading || isLoading}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
+                    className="employee-login-input w-full pl-10 pr-3"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label htmlFor="emp-password" className="mb-2 block text-sm font-semibold" style={{ color: '#040E6B' }}>
+                <label htmlFor="emp-password" className="text-body-m mb-2 block">
                   Password
                 </label>
                 <div className="relative">
                   <Lock
-                    className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                    strokeWidth={1.8}
+                    className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2"
+                    style={{ color: 'var(--neutral-400)' }}
+                    strokeWidth={1.75}
                   />
                   <input
                     id="emp-password"
@@ -223,34 +285,33 @@ export const EmployeeLoginPage: React.FC<EmployeeLoginPageProps> = ({
                     onChange={(e) => { setPassword(e.target.value); setFailure(null); }}
                     disabled={loading || isLoading}
                     autoComplete="current-password"
-                    className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition-shadow focus:border-[#363EE8] focus:outline-none focus:ring-4 focus:ring-[#EEF2FF]"
+                    aria-describedby={failure ? 'emp-login-failure' : undefined}
+                    className="employee-login-input w-full pl-10 pr-12"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     disabled={loading || isLoading}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed"
+                    className="employee-login-toggle absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center disabled:cursor-not-allowed"
                   >
-                    {showPassword ? <EyeOff size={16} strokeWidth={1.8} /> : <Eye size={16} strokeWidth={1.8} />}
+                    {showPassword ? <EyeOff size={20} strokeWidth={1.75} /> : <Eye size={20} strokeWidth={1.75} />}
                   </button>
                 </div>
               </div>
 
               {/* Submit */}
-              <button
+              <Button
                 type="submit"
-                disabled={loading || isLoading}
-                aria-busy={loading || isLoading || undefined}
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#EEF2FF] disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ backgroundColor: '#363EE8' }}
-                onMouseEnter={(e) => { if (!loading && !isLoading) e.currentTarget.style.backgroundColor = '#2830c5'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#363EE8'; }}
+                size="lg"
+                variant="primary"
+                loading={loading || isLoading}
+                className="w-full"
               >
-                {loading || isLoading
-                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Sign In</>
-                  : 'Sign In'}
-              </button>
+                Sign in
+              </Button>
             </form>
 
           </div>

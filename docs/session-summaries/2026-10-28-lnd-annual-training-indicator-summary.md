@@ -35,4 +35,13 @@ plan: docs/plans/2026-10-28-lnd-annual-training-indicator.md
 - No functional scope changes. The initial full test/build attempts hit the tool's two-minute timeout and were rerun without that limit.
 - Counts represent records in `employee_training`, as approved. Missing Archive history is not inferred from enrollment, elapsed course dates, attendance, or PDS records. This does not add a completion audit or an automatic annual quota restriction.
 - The standard production minification/downlevel build remains unverified on this Windows host; the existing local verification build does not exercise those production-only transforms.
-- Unrelated untracked files were preserved. No live database writes, pushes, deployments, or PRs were performed.
+- At initial implementation completion, unrelated untracked files were preserved and no live database writes, pushes, deployments, or PRs had been performed. The later PR integration work is recorded below.
+
+## PR #73 integration follow-up
+
+- The user subsequently requested pushing the feature, opening the upstream PR, resolving its conflicts, and merging it.
+- Prepared the upstream merge in a temporary local checkout so the original checkout's untracked drafts and concurrent work remained untouched. No live credentials were copied.
+- Merged upstream commit `1045c63` and resolved the only conflict by running the plans dashboard generator. The output reflects committed plans/summaries; links to uncommitted local drafts disappeared from the generated output without deleting those drafts.
+- Confirmed upstream login changes were preserved exactly; no application-code conflict resolution was needed.
+- Merged-result checks: bare `npm test` passed 120 files / 1,081 tests; `npx tsc --noEmit`, `npm run lint`, `git diff --check`, and `npm run build:verify` passed. Tests/build used dummy Supabase environment settings in this isolated checkout; the initial run without settings failed at the existing fail-fast client initialization.
+- GitHub's deferred auto-merge feature is disabled for this repository. The user's request authorizes a direct merge after pushing and verifying the conflict resolution, without bypassing branch protections.

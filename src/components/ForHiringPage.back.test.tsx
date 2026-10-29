@@ -3,15 +3,17 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForHiringPage } from './ForHiringPage';
 
+const { ROWS } = vi.hoisted(() => ({
+  ROWS: [{ id: 'a1', first_name: 'Ana', last_name: 'Cruz', email: 'a@x.ph', position: 'Engineer III', office: 'Engineering Office', status: 'Qualified', total_score: 90 }],
+}));
+
 vi.mock('../lib/supabase', async () => {
   const { supabaseStub } = await import('../test/supabaseStub');
-  return { supabase: supabaseStub() };
+  return { supabase: supabaseStub((table) => (table === 'applicants' ? ROWS : [])) };
 });
 vi.mock('./AdminHeader', () => ({ AdminHeader: () => null }));
 vi.mock('./Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('./ApplicantsTabBar', () => ({ ApplicantsTabBar: () => null }));
-
-const ROWS = [{ id: 'a1', first_name: 'Ana', last_name: 'Cruz', email: 'a@x.ph', position: 'Engineer III', office: 'Engineering Office', status: 'Qualified', total_score: 90 }];
 
 beforeEach(() => {
   localStorage.clear();

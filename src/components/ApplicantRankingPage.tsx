@@ -70,21 +70,11 @@ export const ApplicantRankingPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        // Primary: backend API (bypasses RLS, always returns full data)
+        // Primary: direct Supabase query
         let rows: Applicant[] = [];
-        try {
-          const res = await fetch('/api/applicants/?skip=0&limit=5000');
-          if (res.ok) {
-            const data = await res.json();
-            rows = (Array.isArray(data) ? data : []).map(mapRow);
-          }
-        } catch { /* fall through to Supabase */ }
-
-        // Fallback: direct Supabase query
-        if (rows.length === 0) {
-          const { data } = await (supabase as any).from('applicants').select('*');
-          rows = (data ?? []).map(mapRow);
-        }
+        const { data, error } = await (supabase as any).from('applicants').select('*');
+        if (error) throw error;
+        rows = (data ?? []).map(mapRow);
 
         setApplicants(rows);
       } catch {

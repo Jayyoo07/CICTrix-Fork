@@ -1,0 +1,61 @@
+/* Keep writing space stable while typing; narrow screens scroll the table. */
+.abyan-table.employee-phase2-table {
+  min-width: 960px;
+  table-layout: fixed;
+}
+
+.employee-phase2-indicator-column { width: 30%; }
+.employee-phase2-rating-column { width: 96px; }
+.employee-phase2-average-column { width: 64px; }
+
+.abyan-table.employee-phase2-table th {
+  padding: var(--table-head-pad-y) var(--table-cell-pad-x);
+}
+
+.abyan-table.employee-phase2-table td {
+  padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.employee-phase2-achievement {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  /* Four 20px lines, 16px padding and borders, rounded to the 4px grid. */
+  height: 100px;
+  min-height: 100px;
+  resize: vertical;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--neutral-800);
+  font: 500 14px/20px var(--font-sans);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.employee-phase2-achievement::placeholder {
+  color: var(--neutral-600);
+  opacity: 1;
+}
+
+.employee-phase2-achievement:hover:not(:disabled) { border-color: var(--color-primary-200); }
+
+.employee-phase2-achievement:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--ring-input);
+}
+
+.employee-phase2-achievement:disabled {
+  border-color: var(--neutral-200);
+  background: var(--neutral-100);
+  color: var(--neutral-600);
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-phase2-achievement { transition: none; }
+}

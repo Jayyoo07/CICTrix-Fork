@@ -332,30 +332,20 @@ export const ForHiringPage = () => {
         const local = getApplicants().filter(a => includeApplicant(a.id, a.status, a.personalInfo?.email));
 
         const remoteData: any[] = [];
-        try {
-          const res = await fetch('/api/applicants/?skip=0&limit=5000');
-          if (res.ok) {
-            const json = await res.json();
-            if (Array.isArray(json)) remoteData.push(...json);
-          }
-        } catch { /* fallback */ }
-
         let applicantsError: unknown = null;
-        if (remoteData.length === 0) {
-          try {
-            const { data, error } = await (supabase as any)
-              .from('applicants')
-              // Only columns public.applicants has: naming a missing one makes
-              // PostgREST reject the whole query. The row mapping below already
-              // treats full_name, department and the scores as optional.
-              .select('id,first_name,last_name,middle_name,email,position,office,status');
-            if (error) throw error;
-            if (Array.isArray(data)) remoteData.push(...data);
-          } catch (error) {
-            // Local rows still show, but the list may be incomplete: say so.
-            console.error('[ForHiringPage] applicants failed to load:', error);
-            applicantsError = error;
-          }
+        try {
+          const { data, error } = await (supabase as any)
+            .from('applicants')
+            // Only columns public.applicants has: naming a missing one makes
+            // PostgREST reject the whole query. The row mapping below already
+            // treats full_name, department and the scores as optional.
+            .select('id,first_name,last_name,middle_name,email,position,office,status');
+          if (error) throw error;
+          if (Array.isArray(data)) remoteData.push(...data);
+        } catch (error) {
+          // Local rows still show, but the list may be incomplete: say so.
+          console.error('[ForHiringPage] applicants failed to load:', error);
+          applicantsError = error;
         }
 
         // Build remote map — API data is authoritative

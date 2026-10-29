@@ -26,6 +26,7 @@ import { IPCR_LIMITS } from '../../lib/ipcrLimits';
 import { CharacterCount } from '../../components/CharacterCount';
 import { SkeletonList, useDelayedLoading } from '../../components/table-loading';
 import { DEFAULT_RATING_SCALE, getRatingScale, type RatingScaleEntry } from '../../lib/api/ipcrRatingScale';
+import './EmployeePhase2.css';
 
 const LOCKED_NOTICE =
   'Notice: Your targets have been finalized and locked for this rating period. You will be able to encode your accomplishments and self-ratings for each Success Indicator here, but the submission opens during the rating period (about 4–5 months from now). We will notify you as soon as the IPCR self-rating submission is open.';
@@ -385,13 +386,18 @@ export const EmployeePhase2: React.FC<{
         </div>
       )}
 
-      <div className="abyan-table-wrap" style={{ borderColor: '#C8D1FF' }}>
-        <table className="abyan-table w-full min-w-[820px]">
+      <div className="abyan-tokens abyan-table-wrap">
+        <table className="abyan-table employee-phase2-table">
+          <colgroup>
+            <col className="employee-phase2-indicator-column" />
+            <col />
+            <col span={3} className="employee-phase2-rating-column" />
+            <col className="employee-phase2-average-column" />
+          </colgroup>
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-bold text-slate-600">
-              <th className="w-2/5 border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Success Indicator (frozen)</th>
+              <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Success Indicator (frozen)</th>
               <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Achievement</th>
-              <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Remarks</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>Q</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>E</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>T</th>
@@ -423,32 +429,16 @@ export const EmployeePhase2: React.FC<{
                             </td>
                             <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
                               <textarea
+                                aria-label={`Achievement for ${si.description}`}
                                 value={e.accomplishment}
                                 onChange={(ev) => setField(si.successIndicatorId, 'accomplishment', ev.target.value)}
                                 disabled={!editable}
                                 maxLength={IPCR_LIMITS.accomplishment}
                                 placeholder="Detail your achievement matching this target..."
-                                rows={2}
-                                style={{ borderColor: '#C8D1FF' }}
-                                className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
+                                rows={4}
+                                className="employee-phase2-achievement"
                               />
                               {editable && <CharacterCount value={e.accomplishment} max={IPCR_LIMITS.accomplishment} />}
-                            </td>
-                            <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
-                              {/* Spec §F. The employee's own note on this row —
-                                  why the rating is what it is — not a reviewer's
-                                  comment, which belongs to the amendment flow. */}
-                              <textarea
-                                value={e.remarks}
-                                onChange={(ev) => setField(si.successIndicatorId, 'remarks', ev.target.value)}
-                                disabled={!editable}
-                                maxLength={IPCR_LIMITS.remarks}
-                                placeholder="e.g. Submitted ahead of deadline"
-                                rows={2}
-                                style={{ borderColor: '#C8D1FF' }}
-                                className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
-                              />
-                              {editable && <CharacterCount value={e.remarks} max={IPCR_LIMITS.remarks} />}
                             </td>
                             {(['quality', 'efficiency', 'timeliness'] as const).map((dim) => (
                               <td key={dim} className="border-b px-1 py-2 text-center" style={{ borderColor: '#EEF0FD' }}>

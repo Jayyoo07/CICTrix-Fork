@@ -219,10 +219,11 @@ export async function loadRatingSheet(targetSettingId: string): Promise<Result<R
     const ratingBySi = new Map<string, any>();
     if (siIds.length) {
       // select('*') so a not-yet-migrated `accomplishment` column can't 400 the query.
-      const { data: ratings } = await supabase
+      const { data: ratings, error: ratingsErr } = await supabase
         .from('success_indicator_ratings')
         .select('*')
         .in('success_indicator_id', siIds);
+      if (ratingsErr) return { ok: false, error: ratingsErr.message };
       for (const r of (ratings ?? []) as any[]) ratingBySi.set(r.success_indicator_id, r);
     }
 
@@ -571,18 +572,30 @@ export interface EmployeeRatingSheet extends RatingSheet {
  */
 export async function loadEmployeeRatingSheet(
   employeeId: string,
+  cycleId?: number | null,
+  targetSettingId?: string | null,
 ): Promise<Result<EmployeeRatingSheet | null>> {
   try {
-    const { data: settings, error } = await supabase
+    let query = supabase
       .from('target_settings')
       .select('*')
       .eq('employee_id', employeeId)
-      .eq('status', 'approved')
-      .order('approved_at', { ascending: false })
-      .limit(1);
+      .eq('status', 'approved');
+
+    if (targetSettingId) {
+      query = query.eq('id', targetSettingId);
+    } else if (cycleId) {
+      query = query.eq('cycle_id', cycleId);
+    }
+
+    const { data: settings, error } = targetSettingId
+      ? await query.maybeSingle()
+      : await query.order('approved_at', { ascending: false }).limit(1);
     if (error) return { ok: false, error: error.message };
-    const setting = (settings ?? [])[0];
-    if (!setting) return { ok: true, data: null };
+    const setting = targetSettingId ? settings : (settings ?? [])[0];
+    if (!setting) return targetSettingId
+      ? { ok: false, error: 'The selected Phase 1 record is not available as an approved record. Reload the workspace and try again.' }
+      : { ok: true, data: null };
 
     const res = await loadRatingSheet(setting.id);
     if (res.ok === false) return res;

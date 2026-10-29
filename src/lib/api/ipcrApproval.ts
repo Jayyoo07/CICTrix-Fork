@@ -144,6 +144,7 @@ export async function approveTargets(p: {
         status: 'approved',
         approved_by: p.approverEmployeeId,
         approved_at: now.toISOString(),
+        updated_at: now.toISOString(),
         phase2_status: 'locked',
         phase2_open_target_date: openTarget.toISOString().slice(0, 10),
       })
@@ -226,6 +227,11 @@ export async function adminEditTargets(p: {
         .eq('id', si.id);
       if (error) return { ok: false, error: error.message };
     }
+    await (supabase as any)
+      .from('target_settings')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', p.targetSettingId);
+
     await writeAudit({
       target_setting_id: p.targetSettingId,
       action: 'admin_edit',
@@ -255,11 +261,13 @@ export async function returnForRevision(p: {
       .update({
         status: 'returned_for_revision',
         returned_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         review_comment: p.comment?.trim() || null,
       })
       .eq('id', p.targetSettingId)
       .eq('status', 'submitted_for_approval');
     if (error) return { ok: false, error: error.message };
+
     await writeAudit({
       target_setting_id: p.targetSettingId,
       action: 'return',

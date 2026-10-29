@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">109 plans &middot; 89 done</p>
+    <p class="counts">118 plans &middot; 97 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -71,7 +71,32 @@
         <tbody>
       <tr>
         <td class="date">2026-10-29</td>
+        <td><a href="2026-10-29-ipcr-reload-hydration.md">Restore both IPCR phases consistently on reload</a><p class="summary">Preserve partial Phase 1 drafts and resolve the cycle before loading Phase 2.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
         <td><a href="2026-10-29-ipcr-phase2-achievement-readability.md">Enlarge Phase 2 achievements and remove employee remarks</a><p class="summary">Remove the employee Phase 2 Remarks column and provide a wider, four-line Achievement field with manual vertical resizing and internal scrolling, without automatic growth.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="2026-10-29-ipcr-phase1-persistence.md">Preserve employee Phase 1 targets across saves and reloads</a><p class="summary">Verify Phase 1 persistence, report failed target reads, and keep each phase's saved state independent.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="2026-10-29-ipcr-approved-phase2.md">Load Phase 2 from the approved Phase 1 record</a><p class="summary">Keep submitted targets locked during hydration and expose Phase 2 load failures with retry.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="2026-10-29-fix-phase2-cycle-scoping-and-phase1-refresh-persistence.md">Fix Phase 2 Cycle Scoping &amp; Phase 1 Refresh Persistence</a><p class="summary">Scope Phase 2 rating sheet to the active cycle so historical seeded IPCRs do not pre-fill on login, and prevent active cycle hijacking so Phase 1 targets persist across page refresh.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="2026-10-29-employee-setup-dismissal.md">Remember employee setup wizard dismissal during a session</a><p class="summary">Keep the dismissed profile setup wizard closed across reloads and employee page navigation until logout.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -88,6 +113,11 @@
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-remote-applicant-scores.md">Migrate applicant category and written exam scores from localStorage to remote Supabase tables</a><p class="summary">Transition applicant category scores and written exam scores from browser localStorage to a dedicated Supabase table (applicant_category_scores) with a centralized service layer, preserving scoring and ranking logic while retaining offline fallback.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-page-by-page-rollout-implementation-plan.md">Page-by-Page System Rollout Implementation Plan</a><p class="summary">Multi-agent sanity, smoke, and Vitest test audit certifying all 51 page surfaces across all 7 CICTrix HRIS portals on the main branch.</p></td>
+        <td class="status"><span class="badge badge-primary">Approved</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
@@ -127,6 +157,21 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="2026-10-28-fix-sor-competency-blocks-and-ratings.md">Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a><p class="summary">Fix PostgreSQL schema error omitting final scores, correct department casing and position title mapping to resolve official ratings, and render all four competency stream blocks instead of collapsing into a dead-end unassessed card.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-phase1-target-persistence-and-approved-status.md">Fix Phase 1 Target Persistence &amp; Approved Status Display</a><p class="summary">Fix MFO disappearance after Phase 1 submission and ensure accurate status badges (&quot;Pending Approval&quot; / &quot;Approved &amp; Locked&quot;) in the Employee Portal.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-ipcr-department-head-targets-approval.md">Fix IPCR targets auto-approval and restore Department Head review</a><p class="summary">Disentangle submitted targets from auto-approval, display &quot;Pending Approval&quot; on employee submit, verify Department Head inline target editing before approval, and align seed scripts with manual approval workflow.</p></td>
+        <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="2026-10-28-fix-applicants-api-500-error.md">Fix applicants fetch 500 error and backend invocation crash</a><p class="summary">Point getApplicantsFromSupabase and applicant views directly to the Supabase client, and harden backend config against missing Vercel environment variables.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
       </tr>
       <tr>
@@ -625,7 +670,27 @@
         <tbody>
       <tr>
         <td class="date">2026-10-29</td>
+        <td><a href="../session-summaries/2026-10-29-ipcr-reload-hydration-summary.md">IPCR reload hydration</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
         <td><a href="../session-summaries/2026-10-29-ipcr-phase2-achievement-readability-summary.md">Employee IPCR Phase 2 achievement readability</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="../session-summaries/2026-10-29-ipcr-phase1-persistence-summary.md">Employee IPCR Phase 1 persistence</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="../session-summaries/2026-10-29-ipcr-approved-phase2-summary.md">Approved Phase 1 to Phase 2</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="../session-summaries/2026-10-29-fix-phase2-cycle-scoping-and-phase1-refresh-persistence-summary.md">Session Summary: Fix Phase 2 Cycle Scoping &amp; Phase 1 Refresh Persistence</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-29</td>
+        <td><a href="../session-summaries/2026-10-29-employee-setup-dismissal-summary.md">Employee setup wizard dismissal</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>
@@ -662,6 +727,18 @@
       <tr>
         <td class="date">2026-10-28</td>
         <td><a href="../session-summaries/2026-10-28-fix-sor-competency-blocks-and-ratings-summary.md">Session Summary: Fix Summary of Ratings 4 Competency Blocks and Non-Submission Ratings</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-phase1-target-persistence-and-approved-status-summary.md">Session Summary: Fix Phase 1 Target Persistence &amp; Approved Status Display</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-ipcr-department-head-targets-approval-summary.md">Session Summary: Fix IPCR Targets Auto-Approval and Restore Department Head Review</a></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-28</td>
+        <td><a href="../session-summaries/2026-10-28-fix-applicants-api-500-error-summary.md">Session Summary: Fix Applicants API 500 Error and Serverless Invocation Crash</a></td>
       </tr>
       <tr>
         <td class="date">2026-10-28</td>

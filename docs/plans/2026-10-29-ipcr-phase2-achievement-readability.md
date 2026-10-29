@@ -25,7 +25,7 @@ Alternatives: automatic growth was rejected because it would shift later rows wh
 
 - [x] Create an isolated worktree and branch, preserving unrelated planning work in the original checkout.
 - [x] Run the existing test suite as a baseline (1,120 passed; one unrelated live-data test requires a local `.env` and production fixtures).
-- [x] Add `src/modules/employee/EmployeePhase2.test.tsx`. Verify editable and read-only sheets have six columns and no remarks input, Achievement shows four rows, edits retain ratings/limits/counters, and draft/submission saves preserve existing remarks. Run the new tests and observe the intended failures.
+- [x] Add `src/modules/employee/EmployeePhase2.readability.test.tsx`. Verify editable and read-only sheets have six columns and no remarks input, Achievement shows four rows, edits retain ratings/limits/counters, and draft/submission saves preserve existing remarks. Run the new tests and observe the intended failures.
 - [x] Remove Remarks UI, allocate column widths, enlarge Achievement, and add scoped styling. Run focused tests to green (seven passed).
 - [x] Run TypeScript, lint, the full test suite, production build, design checks, and a rendered responsive check if browser access is available. Review the complete diff (independent review found no issues; screenshot/focus appearance remains a documented manual check).
 - [x] Write the session summary, mark this plan Done, regenerate the plans dashboard, and commit the focused changes. Do not push, merge or deploy.
@@ -40,7 +40,7 @@ Alternatives: automatic growth was rejected because it would shift later rows wh
 
 ## Checks to run
 
-- `npx vitest run src/modules/employee/EmployeePhase2.test.tsx`
+- `npx vitest run src/modules/employee/EmployeePhase2.readability.test.tsx`
 - `npx tsc --noEmit`
 - `npm run lint`
 - `npm test`
@@ -58,3 +58,5 @@ Alternatives: automatic growth was rejected because it would shift later rows wh
 - Offline verification skipping only the named live-data test: all 125 files passed, 1,127 tests passed and one skipped. Full-suite failure remains explicitly recorded above.
 - Browser fixture uses the real component and shared CSS with local-only service doubles. At 1366/768/375px viewports, the page itself does not overflow; the table scrolls within its wrapper at narrow widths. Achievement stays 100px tall while editing 500 characters; the following row stays in place. A manual height change to 160px moves the following row by exactly 60px, as intended. Screenshots could not be captured because the browser tab was not visible, even after focusing it; focus-ring appearance therefore still needs a visible-window manual check.
 - Independent GPT-6.1 Sol review at high effort of `6f5a399..0fd1abe`: no Critical, Important or Minor findings. Optional cache-restoration test suggested; cache implementation is unchanged and service-loaded remarks retention is covered. Review accepted the requested scope and recommended merge, with the documented visual limitation.
+- PR integration: upstream advanced to `505e7a3` before PR #78 was opened. Preserve upstream's new `EmployeePhase2.test.tsx` persistence suite by renaming this change's seven tests to `EmployeePhase2.readability.test.tsx`. Merge upstream/main without rewriting history, preserve its resolved-target and cache fixes, and regenerate the conflicted dashboard from all plans/summaries. Reverify both suites and the offline/full-build checks before updating the PR.
+- Post-integration verification: both Phase 2 suites passed (10 tests); TypeScript, lint and production build passed; the offline suite passed 1,170 tests across 132 files with only the same known live-dependent test skipped.

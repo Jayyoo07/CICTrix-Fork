@@ -28,7 +28,7 @@ Plan: [`../plans/2026-10-29-ipcr-phase2-achievement-readability.md`](../plans/20
 - No new mockup was needed because the conversation settled the small visual change before implementation. Automatic growth was explicitly rejected in favor of stable sizing and manual resize.
 - Screenshot capture was unavailable because the desktop browser tab was not visible even after focusing it. Responsive geometry and computed text/input styles were checked, but screenshot-based appearance and a visible-window keyboard focus-ring check remain manual checks. The design checklist is therefore not claimed fully visually verified.
 - The full test suite is not entirely green because of the existing live-dependent training-attendance test. Live database access and unrelated test repair were kept outside this UI change.
-- The original checkout's unrelated branch and uncommitted planning files were preserved. Nothing was pushed, deployed or sent to the live database.
+- The original checkout's unrelated branch and uncommitted planning files were preserved. No deployment or live database changes were performed. The branch was subsequently pushed and PR #78 opened at the user's request.
 
 ## Review
 
@@ -37,3 +37,9 @@ Independent GPT-6.1 Sol read-only review at high effort of `6f5a399..0fd1abe`: n
 The reviewer suggested an optional cache-restoration regression test. It was not added: cache restoration itself is unchanged, and the seven new tests cover preserving service-loaded remarks on both save actions. A visible-window focus-ring check remains the documented manual check, not a verified result.
 
 Scope decisions confirmed in review: existing rating completeness/phase gates and legacy UI elsewhere remain unchanged; touch-browser resize affordances remain native; the attendance-fixture failure is reported separately rather than repaired. These preserve the approved scope and avoid unrelated changes. No deferred code defects were identified.
+
+## Upstream PR integration
+
+At the user's request, pushed to `Jayyoo07/CICTrix-Fork` and opened [dehandenver/CICTrix#78](https://github.com/dehandenver/CICTrix/pull/78) against `main`. Upstream had advanced to `505e7a3`, independently adding a Phase 2 persistence test file with the same name. Rename this change's tests to `EmployeePhase2.readability.test.tsx` and keep upstream's `EmployeePhase2.test.tsx` unchanged, preserving both suites. The remaining dashboard conflict is resolved by regeneration rather than hand editing. Upstream's application changes merge cleanly; no force push or upstream merge is performed. The fork PR's Vercel authorization failure is expected.
+
+Post-integration checks: both Phase 2 suites passed all 10 tests; TypeScript, lint and production build passed. The expanded offline suite passed all 132 files and 1,170 tests, with only the same one live-dependent attendance test skipped. Earlier 1,127-test counts above refer to the pre-integration branch, not this expanded upstream baseline.

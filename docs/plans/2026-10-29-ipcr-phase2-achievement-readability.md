@@ -1,7 +1,7 @@
 ---
 title: Enlarge Phase 2 achievements and remove employee remarks
 date: 2026-10-29
-status: In Progress
+status: Done
 summary: Remove the employee Phase 2 Remarks column and provide a wider, four-line Achievement field with manual vertical resizing and internal scrolling, without automatic growth.
 ---
 
@@ -27,8 +27,8 @@ Alternatives: automatic growth was rejected because it would shift later rows wh
 - [x] Run the existing test suite as a baseline (1,120 passed; one unrelated live-data test requires a local `.env` and production fixtures).
 - [x] Add `src/modules/employee/EmployeePhase2.test.tsx`. Verify editable and read-only sheets have six columns and no remarks input, Achievement shows four rows, edits retain ratings/limits/counters, and draft/submission saves preserve existing remarks. Run the new tests and observe the intended failures.
 - [x] Remove Remarks UI, allocate column widths, enlarge Achievement, and add scoped styling. Run focused tests to green (seven passed).
-- [ ] Run TypeScript, lint, the full test suite, production build, design checks, and a rendered responsive check if browser access is available. Review the complete diff.
-- [ ] Write the session summary, mark this plan Done, regenerate the plans dashboard, and commit the focused changes. Do not push, merge or deploy.
+- [x] Run TypeScript, lint, the full test suite, production build, design checks, and a rendered responsive check if browser access is available. Review the complete diff (independent review found no issues; screenshot/focus appearance remains a documented manual check).
+- [x] Write the session summary, mark this plan Done, regenerate the plans dashboard, and commit the focused changes. Do not push, merge or deploy.
 
 ## Risks
 
@@ -55,4 +55,6 @@ Alternatives: automatic growth was rejected because it would shift later rows wh
 - Pre-flight: one implementation task; no shared interfaces between tasks. Keep the existing `EmployeePhase2` props and service interfaces unchanged.
 - Baseline environment: local-only placeholder client configuration, not live credentials. The pre-existing `scripts/seed-training-attendance.test.mjs` test `runs generateTrainingAttendance dry run and matches target compliance percentages` requires a local `.env` and live fixtures; leave it unchanged. The full post-change suite reports 1,127 passed and that same one failure.
 - Verified: TypeScript, lint, production build, seven focused tests, and design detector (no findings).
+- Offline verification skipping only the named live-data test: all 125 files passed, 1,127 tests passed and one skipped. Full-suite failure remains explicitly recorded above.
 - Browser fixture uses the real component and shared CSS with local-only service doubles. At 1366/768/375px viewports, the page itself does not overflow; the table scrolls within its wrapper at narrow widths. Achievement stays 100px tall while editing 500 characters; the following row stays in place. A manual height change to 160px moves the following row by exactly 60px, as intended. Screenshots could not be captured because the browser tab was not visible, even after focusing it; focus-ring appearance therefore still needs a visible-window manual check.
+- Independent GPT-6.1 Sol review at high effort of `6f5a399..0fd1abe`: no Critical, Important or Minor findings. Optional cache-restoration test suggested; cache implementation is unchanged and service-loaded remarks retention is covered. Review accepted the requested scope and recommended merge, with the documented visual limitation.

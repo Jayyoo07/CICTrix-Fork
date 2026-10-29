@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CompetencyGapPanel, summarizeGaps } from './CompetencyGapPanel';
 import type { IPCRRatingRecord } from './SummaryOfRatings';
+import { getCompetencyTargetTrace, type CompetencyTargetTrace } from '../../../lib/api/competencyTargetTrace';
 
 vi.mock('../../../lib/supabase', () => ({
   supabase: {
@@ -180,5 +181,211 @@ describe('CompetencyGapPanel 4 explicit states', () => {
 
     // Check that cards show "Not yet assessed"
     expect(screen.getAllByText('Not yet assessed')).toHaveLength(4);
+  });
+});
+
+describe('CompetencyGapPanel TraceDetail drawer', () => {
+  it('expands TraceDetail drawer when a competency card is clicked and renders targets, Q/E/T, confidence, justification, and average calculation', async () => {
+    const mockTrace: CompetencyTargetTrace = {
+      competency: 'Knowledge of Local Governance',
+      position: 'Construction & Maint General Foreman',
+      mappedTargets: [
+        {
+          targetText: 'Core Function — Oversee road repair and drainage maintenance',
+          functionType: 'Core Function',
+          individualScore: 4.2,
+          quality: 4,
+          efficiency: 4,
+          timeliness: 4.6,
+          confidence: 0.95,
+          justification: 'Evidences knowledge of municipal project supervision guidelines.',
+        },
+        {
+          targetText: 'Support Function — Prepare monthly accomplishment reports',
+          functionType: 'Support Function',
+          individualScore: 3.8,
+          quality: 4,
+          efficiency: 4,
+          timeliness: 3.4,
+          confidence: 0.88,
+          justification: 'Evidences administrative governance reporting standards.',
+        },
+      ],
+      aggregationMethod: 'average',
+      possessedComputed: 4.0,
+      possessedStored: 4.0,
+      required: 3,
+      requiredLevel: 'Intermediate',
+      requiredLevelCode: 'I',
+    };
+
+    vi.mocked(getCompetencyTargetTrace).mockResolvedValueOnce(mockTrace);
+
+    const testRecord = record([
+      { name: 'Knowledge of Local Governance', possessed: 4.0, required: 3.0, isGap: false, stream: 'LEADERSHIP' },
+    ]);
+
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: testRecord }));
+    });
+
+    const cardBtn = screen.getByRole('button', { name: /Knowledge of Local Governance/i });
+    expect(cardBtn).toHaveAttribute('aria-expanded', 'false');
+
+    await act(async () => {
+      fireEvent.click(cardBtn);
+    });
+
+    expect(cardBtn).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByTestId('trace-detail-drawer')).toBeInTheDocument();
+
+    // Required section from Competency Map
+    expect(screen.getByText(/Required — from Competency Map/i)).toBeInTheDocument();
+    expect(screen.getByText(/Intermediate \(3\.00\)/i)).toBeInTheDocument();
+
+    // Mapped targets header & items
+    expect(screen.getByText('Mapped IPCR targets')).toBeInTheDocument();
+    expect(screen.getByText('Core Function —')).toBeInTheDocument();
+    expect(screen.getByText('Oversee road repair and drainage maintenance')).toBeInTheDocument();
+    expect(screen.getByText('Support Function —')).toBeInTheDocument();
+    expect(screen.getByText('Prepare monthly accomplishment reports')).toBeInTheDocument();
+
+    // Individual scores & ratings
+    expect(screen.getByText('4.20')).toBeInTheDocument();
+    expect(screen.getByText('3.80')).toBeInTheDocument();
+    expect(screen.getAllByText('Q 4')).toHaveLength(2);
+    expect(screen.getByText('T 4.6')).toBeInTheDocument();
+
+    // Confidence badges
+    expect(screen.getByText('95% confidence')).toBeInTheDocument();
+    expect(screen.getByText('88% confidence')).toBeInTheDocument();
+
+    // Justifications
+    expect(screen.getByText('Evidences knowledge of municipal project supervision guidelines.')).toBeInTheDocument();
+    expect(screen.getByText('Evidences administrative governance reporting standards.')).toBeInTheDocument();
+
+    // Aggregation explanation
+    expect(screen.getByText(/average of 2 IPCR targets mapped to this competency/i)).toBeInTheDocument();
+    expect(screen.getByText(/mean 4\.00/i)).toBeInTheDocument();
+  });
+
+  it('renders single target trace aggregation clearly', async () => {
+    const singleTrace: CompetencyTargetTrace = {
+      competency: 'Technical Writing for Government Documents',
+      position: 'Construction & Maint General Foreman',
+      mappedTargets: [
+        {
+          targetText: 'Core Function — Draft engineering inspection reports',
+          functionType: 'Core Function',
+          individualScore: 2.5,
+          quality: 2,
+          efficiency: 3,
+          timeliness: 2.5,
+          confidence: 0.92,
+          justification: 'Involves drafting official engineering reports.',
+        },
+      ],
+      aggregationMethod: 'single',
+      possessedComputed: 2.5,
+      possessedStored: 2.5,
+      required: 4,
+      requiredLevel: 'Advanced',
+      requiredLevelCode: 'A',
+    };
+
+    vi.mocked(getCompetencyTargetTrace).mockResolvedValueOnce(singleTrace);
+
+    const testRecord = record([
+      { name: 'Technical Writing for Government Documents', possessed: 2.5, required: 4.0, isGap: true, stream: 'TECHNICAL' },
+    ]);
+
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: testRecord }));
+    });
+
+    const cardBtn = screen.getByRole('button', { name: /Technical Writing for Government Documents/i });
+    await act(async () => {
+      fireEvent.click(cardBtn);
+    });
+
+    expect(await screen.findByTestId('trace-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByText('Mapped IPCR target')).toBeInTheDocument();
+    expect(screen.getByText(/comes directly from the single mapped IPCR target above \(scored 2\.50\)/i)).toBeInTheDocument();
+    expect(screen.getByText('92% confidence')).toBeInTheDocument();
+  });
+
+  it('renders clear empty state when no IPCR target is mapped', async () => {
+    const emptyTrace: CompetencyTargetTrace = {
+      competency: 'Disaster Risk Reduction and Management',
+      position: 'Construction & Maint General Foreman',
+      mappedTargets: [],
+      aggregationMethod: 'none',
+      possessedComputed: null,
+      possessedStored: null,
+      required: 3,
+      requiredLevel: null,
+      requiredLevelCode: null,
+    };
+
+    vi.mocked(getCompetencyTargetTrace).mockResolvedValueOnce(emptyTrace);
+
+    const testRecord = record([
+      { name: 'Disaster Risk Reduction and Management', possessed: 3.0, required: 3.0, isGap: false, stream: 'TECHNICAL' },
+    ]);
+
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: testRecord }));
+    });
+
+    const cardBtn = screen.getByRole('button', { name: /Disaster Risk Reduction and Management/i });
+    await act(async () => {
+      fireEvent.click(cardBtn);
+    });
+
+    expect(await screen.findByTestId('trace-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByText(/No IPCR target is currently mapped to this competency/i)).toBeInTheDocument();
+  });
+
+  it('renders pending assessment note when possessedAvailable is false', async () => {
+    const pendingTrace: CompetencyTargetTrace = {
+      competency: 'Community Engagement Skills',
+      position: 'Construction & Maint General Foreman',
+      mappedTargets: [
+        {
+          targetText: 'Support Function — Coordinate community consultations',
+          functionType: 'Support Function',
+          individualScore: null,
+          quality: null,
+          efficiency: null,
+          timeliness: null,
+          confidence: 0.9,
+          justification: 'Target maps to community outreach.',
+        },
+      ],
+      aggregationMethod: 'none',
+      possessedComputed: null,
+      possessedStored: null,
+      required: 3,
+      requiredLevel: null,
+      requiredLevelCode: null,
+    };
+
+    vi.mocked(getCompetencyTargetTrace).mockResolvedValueOnce(pendingTrace);
+
+    const testRecord = record([
+      { name: 'Community Engagement Skills', possessed: 0, required: 3.0, isGap: false, possessedAvailable: false, stream: 'EMPLOYEE DEVELOPMENT' },
+    ]);
+
+    await act(async () => {
+      render(React.createElement(CompetencyGapPanel, { record: testRecord }));
+    });
+
+    const cardBtn = screen.getByRole('button', { name: /Community Engagement Skills/i });
+    await act(async () => {
+      fireEvent.click(cardBtn);
+    });
+
+    expect(await screen.findByTestId('trace-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByText(/Possessed score is awaiting competency assessment for this semester/i)).toBeInTheDocument();
   });
 });

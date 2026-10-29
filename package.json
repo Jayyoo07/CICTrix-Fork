@@ -18,7 +18,9 @@
     "seed:ipcr-maria": "node scripts/seed-ipcr-maria.mjs",
     "seed:ipcr-scores": "node scripts/seed-ipcr-scores.mjs",
     "audit:ipcr": "node scripts/audit-ipcr.mjs",
-    "fix:ipcr-timeline": "node scripts/fix-ipcr-timeline.mjs"
+    "fix:ipcr-timeline": "node scripts/fix-ipcr-timeline.mjs",
+    "queue:drain": "python backend/run_competency_queue.py --once",
+    "queue:watch": "python backend/run_competency_queue.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",

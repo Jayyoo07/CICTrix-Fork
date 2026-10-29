@@ -219,10 +219,11 @@ export async function loadRatingSheet(targetSettingId: string): Promise<Result<R
     const ratingBySi = new Map<string, any>();
     if (siIds.length) {
       // select('*') so a not-yet-migrated `accomplishment` column can't 400 the query.
-      const { data: ratings } = await supabase
+      const { data: ratings, error: ratingsErr } = await supabase
         .from('success_indicator_ratings')
         .select('*')
         .in('success_indicator_id', siIds);
+      if (ratingsErr) return { ok: false, error: ratingsErr.message };
       for (const r of (ratings ?? []) as any[]) ratingBySi.set(r.success_indicator_id, r);
     }
 
@@ -571,18 +572,30 @@ export interface EmployeeRatingSheet extends RatingSheet {
  */
 export async function loadEmployeeRatingSheet(
   employeeId: string,
+  cycleId?: number | null,
+  targetSettingId?: string | null,
 ): Promise<Result<EmployeeRatingSheet | null>> {
   try {
-    const { data: settings, error } = await supabase
+    let query = supabase
       .from('target_settings')
       .select('*')
       .eq('employee_id', employeeId)
-      .eq('status', 'approved')
-      .order('approved_at', { ascending: false })
-      .limit(1);
+      .eq('status', 'approved');
+
+    if (targetSettingId) {
+      query = query.eq('id', targetSettingId);
+    } else if (cycleId) {
+      query = query.eq('cycle_id', cycleId);
+    }
+
+    const { data: settings, error } = targetSettingId
+      ? await query.maybeSingle()
+      : await query.order('approved_at', { ascending: false }).limit(1);
     if (error) return { ok: false, error: error.message };
-    const setting = (settings ?? [])[0];
-    if (!setting) return { ok: true, data: null };
+    const setting = targetSettingId ? settings : (settings ?? [])[0];
+    if (!setting) return targetSettingId
+      ? { ok: false, error: 'The selected Phase 1 record is not available as an approved record. Reload the workspace and try again.' }
+      : { ok: true, data: null };
 
     const res = await loadRatingSheet(setting.id);
     if (res.ok === false) return res;
@@ -801,14 +814,16 @@ export async function listPendingRatingApprovals(
         .eq('status', 'approved')
         .eq('phase2_status', 'completed');
 
+    let hasApprovalCol = true;
     let { data: settings, error } = await pending().is('phase2_approved_at', null);
     if (error && isMissingApprovalColumn(error)) {
+      hasApprovalCol = false;
       ({ data: settings, error } = await pending());
     }
     if (error) return { ok: false, error: error.message };
     if (!settings?.length) return { ok: true, data: [] };
 
-    // 2. Fetch submission pipeline stage to filter only those in 'Submitted to Office' or missing
+    // 2. Fetch submission pipeline stage (used as fallback filter if approval column does not exist)
     const { data: pipeline } = await supabase
       .from('ipcr_submissions')
       .select('employee_id, period, stage')
@@ -822,15 +837,19 @@ export async function listPendingRatingApprovals(
     ]);
     const empMap = new Map<string, any>((emps.data ?? []).map((e: any) => [e.id, e]));
 
-    // Filter and map
+    // Filter and map: phase2_approved_at IS NULL is authoritative. If target_settings has
+    // status = 'approved', phase2_status = 'completed', and phase2_approved_at IS NULL,
+    // include it even if ipcr_submissions has stage = 'Forwarded to PM'.
     const settingIdsToLoad: string[] = [];
     for (const s of settings as any[]) {
-      const periodLabel = titles.get(s.cycle_id) ?? '—';
-      const submissionStage = pipelineMap.get(`${s.employee_id}::${periodLabel}`);
-
-      // Self-healing: if stage is 'Submitted to Office' OR if the stage row is missing/not 'Forwarded to PM' (but setting has phase2_status = completed)
-      if (submissionStage === 'Submitted to Office' || (!submissionStage || submissionStage !== 'Forwarded to PM')) {
+      if (hasApprovalCol) {
         settingIdsToLoad.push(s.id);
+      } else {
+        const periodLabel = titles.get(s.cycle_id) ?? '—';
+        const submissionStage = pipelineMap.get(`${s.employee_id}::${periodLabel}`);
+        if (submissionStage === 'Submitted to Office' || (!submissionStage || submissionStage !== 'Forwarded to PM')) {
+          settingIdsToLoad.push(s.id);
+        }
       }
     }
 

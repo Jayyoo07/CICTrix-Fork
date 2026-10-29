@@ -106,7 +106,11 @@ async def list_applicants(
     Frontend uses this endpoint to retrieve applicants while bypassing RLS policies.
     """
     try:
-        client = db.get_client()
+        try:
+            client = db.get_client()
+        except Exception as client_err:
+            print(f"[WARNING] Supabase client unconfigured or unavailable: {client_err}")
+            return []
 
         # Defensive: handle skip/limit as int, fallback to defaults if invalid
         try:
@@ -123,13 +127,11 @@ async def list_applicants(
 
         # Apply pagination
         response = query.range(skip_val, skip_val + limit_val - 1).execute()
-        return response.data
+        return response.data or []
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch applicants: {str(e)}",
-        )
+        print(f"[WARNING] list_applicants failed: {e}")
+        return []
 
 
 @router.get("/{applicant_id}", response_model=ApplicantResponse)

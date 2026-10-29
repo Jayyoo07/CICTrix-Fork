@@ -102,7 +102,17 @@ export async function getWorkspace(
       console.error('[ipcrWorkspace] getWorkspace error:', error);
       return null;
     }
-    return (data as IpcrWorkspaceRow) ?? null;
+    if (data) return data as IpcrWorkspaceRow;
+
+    // Resilient fallback: if exact period string didn't match, grab the employee's most
+    // recently updated workspace row so targets and accomplishments are not lost.
+    const { data: latestRows } = await supabase
+      .from('ipcr_workspace')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    return (latestRows?.[0] as IpcrWorkspaceRow) ?? null;
   } catch (err) {
     console.error('[ipcrWorkspace] getWorkspace threw:', err);
     return null;

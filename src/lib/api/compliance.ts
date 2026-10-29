@@ -97,7 +97,7 @@ export async function getComplianceByOffice(
   try {
     const [deptRes, empRes] = await Promise.all([
       supabase.from('departments').select('id, name').is(DIVISION_PARENT_COLUMN, null).order('name'),
-      supabase.from('employees_with_department').select('id, full_name, department_id, department'),
+      supabase.from('employees_with_department').select('id, full_name, department'),
     ]);
     if (deptRes.error) return { ok: false, error: deptRes.error.message ?? 'Failed to load offices.' };
 
@@ -119,9 +119,10 @@ export async function getComplianceByOffice(
       }
     }
 
+    const norm = (s: string | null | undefined) => String(s ?? '').trim().toLowerCase();
     const byOffice = new Map<string, any[]>();
     for (const emp of employees) {
-      const key = String(emp?.department_id ?? '');
+      const key = norm(emp?.department);
       if (!key) continue;
       const list = byOffice.get(key) ?? [];
       list.push(emp);
@@ -129,7 +130,7 @@ export async function getComplianceByOffice(
     }
 
     const data: OfficeCompliance[] = departments.map((d) => {
-      const emps = byOffice.get(String(d.id)) ?? [];
+      const emps = byOffice.get(norm(d.name)) ?? [];
       const rows: EmployeeComplianceRow[] = emps.map((e) => {
         const status = statusByEmp.get(String(e.id))?.status ?? 'No submission';
         return {
@@ -159,3 +160,6 @@ export async function getComplianceByOffice(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+/** Alias for getComplianceByOffice. */
+export const getComplianceOverview = getComplianceByOffice;

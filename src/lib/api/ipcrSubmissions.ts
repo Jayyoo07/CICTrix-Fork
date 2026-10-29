@@ -95,12 +95,13 @@ export async function getSubmissionTracker(opts: {
   excludeNewEntrants?: boolean;
 }): Promise<{ ok: true; rows: SubmissionRow[] } | { ok: false; error: string }> {
   try {
-    const [empRes, subRes, neRes] = await Promise.all([
-      supabase.from('employees_with_department').select('id, full_name, department_id, department, status'),
+    const [empRes, subRes, neRes, deptRes] = await Promise.all([
+      supabase.from('employees_with_department').select('id, full_name, department, status'),
       supabase.from('ipcr_submissions').select('*').eq('period', opts.period).eq('phase', opts.phase),
       opts.excludeNewEntrants
         ? supabase.from('new_entrant_onboarding').select('employee_id')
         : Promise.resolve({ data: [], error: null }),
+      supabase.from('departments').select('id, name'),
     ]);
 
     if (empRes.error) return { ok: false, error: empRes.error.message ?? 'Failed to load employees.' };
@@ -109,6 +110,13 @@ export async function getSubmissionTracker(opts: {
     const submissions: any[] = subRes.error ? [] : subRes.data ?? [];
     const newEntrantIds = new Set(((neRes as any)?.data ?? []).map((r: any) => String(r.employee_id)));
 
+    const deptMap = new Map<string, string>();
+    for (const d of (deptRes?.data ?? []) as any[]) {
+      if (d.name && d.id) {
+        deptMap.set(String(d.name).trim().toLowerCase(), String(d.id));
+      }
+    }
+
     const subByEmp = new Map<string, any>();
     for (const s of submissions) subByEmp.set(String(s.employee_id), s);
 
@@ -116,10 +124,12 @@ export async function getSubmissionTracker(opts: {
       .filter((e) => !(opts.excludeNewEntrants && newEntrantIds.has(String(e.id))))
       .map((e) => {
         const sub = subByEmp.get(String(e.id));
+        const deptName = e.department ? String(e.department).trim() : null;
+        const officeId = deptName ? (deptMap.get(deptName.toLowerCase()) ?? null) : null;
         return {
           employeeId: String(e.id),
           employeeName: String(e.full_name ?? '—'),
-          officeId: e.department_id ? String(e.department_id) : null,
+          officeId,
           officeName: e.department ?? null,
           stage: (sub?.stage as IpcrStage) ?? 'Not Started',
           submissionId: sub?.id ?? null,
@@ -217,7 +227,7 @@ export async function resolveTargetSettingMeta(targetSettingId: string): Promise
 
     const empId = setting.employee_id;
     const [empRes, cycleRes] = await Promise.all([
-      supabase.from('employees_with_department').select('full_name, department_id, department').eq('id', empId).maybeSingle(),
+      supabase.from('employees_with_department').select('full_name, department').eq('id', empId).maybeSingle(),
       supabase.from('performance_cycles').select('title').eq('id', setting.cycle_id).maybeSingle(),
     ]);
 
@@ -225,10 +235,21 @@ export async function resolveTargetSettingMeta(targetSettingId: string): Promise
     const cycle = cycleRes.data;
     if (!emp) return null;
 
+    let officeId: string | null = null;
+    const deptName = String(emp.department ?? '').trim();
+    if (deptName) {
+      const { data: dep } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('name', deptName)
+        .maybeSingle();
+      if (dep?.id) officeId = String(dep.id);
+    }
+
     return {
       employeeId: empId,
       employeeName: emp.full_name || '—',
-      officeId: emp.department_id ? String(emp.department_id) : null,
+      officeId,
       officeName: emp.department || null,
       period: cycle?.title || '—',
     };

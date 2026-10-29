@@ -26,6 +26,7 @@ import { IPCR_LIMITS } from '../../lib/ipcrLimits';
 import { CharacterCount } from '../../components/CharacterCount';
 import { SkeletonList, useDelayedLoading } from '../../components/table-loading';
 import { DEFAULT_RATING_SCALE, getRatingScale, type RatingScaleEntry } from '../../lib/api/ipcrRatingScale';
+import './EmployeePhase2.css';
 
 const LOCKED_NOTICE =
   'Notice: Your targets have been finalized and locked for this rating period. You will be able to encode your accomplishments and self-ratings for each Success Indicator here, but the submission opens during the rating period (about 4–5 months from now). We will notify you as soon as the IPCR self-rating submission is open.';
@@ -56,8 +57,14 @@ const avgOf = (nums: Array<number | null>): number | null => {
 /** sessionStorage key for caching unsaved Phase 2 entries so they survive refresh. */
 const draftCacheKey = (empId: string) => `cictrix_phase2_draft_${empId}`;
 
-export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: boolean }> = ({ employeeId, phaseOpen }) => {
+export const EmployeePhase2: React.FC<{
+  employeeId: string | null;
+  cycleId?: number | null;
+  targetSettingId?: string | null;
+  phaseOpen?: boolean;
+}> = ({ employeeId, cycleId, targetSettingId, phaseOpen }) => {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const showLoader = useDelayedLoading(loading);
   const [sheet, setSheet] = useState<EmployeeRatingSheet | null>(null);
   const [status, setStatus] = useState<Phase2Status>('locked');
@@ -103,8 +110,9 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
       setLoading(true);
     }
     try {
-      const res = await loadEmployeeRatingSheet(employeeId);
-      if (res.ok === false) { setNotice({ tone: 'err', text: res.error }); return; }
+      setLoadError(null);
+      const res = await loadEmployeeRatingSheet(employeeId, cycleId, targetSettingId);
+      if (res.ok === false) { setLoadError(res.error); return; }
       const s = res.data;
       setSheet(s);
       if (s) {
@@ -117,7 +125,7 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
         let merged = init;
         try {
           const cached = sessionStorage.getItem(draftCacheKey(employeeId));
-          if (cached) {
+          if (cached && s.phase2Status !== 'completed' && s.phase2Status !== 'closed') {
             const draft: Record<string, Entry> = JSON.parse(cached);
             // Only merge entries whose keys exist in the DB result (guards
             // against stale/orphaned keys from a previous rating period).
@@ -149,13 +157,13 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
       void markEmployeeNotificationsRead(employeeId);
     } catch (err) {
       const described = describeActionFailure('load your rating sheet', err);
-      setNotice({ tone: 'err', text: `${described.message} ${described.nextStep}` });
+      setLoadError(`${described.message} ${described.nextStep}`);
     } finally {
       if (!isSilent) {
         setLoading(false);
       }
     }
-  }, [employeeId]);
+  }, [employeeId, cycleId, targetSettingId]);
 
   useEffect(() => {
     void loadSheet();
@@ -192,11 +200,11 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
     [sheet],
   );
   const isLocked = status === 'locked' || status === 'not_started';
-  const readOnly = status === 'completed' || status === 'closed' || phaseOpen === false;
+  const readOnly = Boolean(loadError) || status === 'completed' || status === 'closed' || phaseOpen === false;
   // Locked, open and in_progress can all be typed into (prepared). Only open /
   // in_progress can SUBMIT — submission is gated to the rating period.
   const editable = !readOnly;
-  const canSubmit = (status === 'open' || status === 'in_progress') && phaseOpen !== false;
+  const canSubmit = !loadError && (status === 'open' || status === 'in_progress') && phaseOpen !== false;
   const expectedOpen = sheet?.phase2OpenTargetDate
     ? new Date(sheet.phase2OpenTargetDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : null;
@@ -268,10 +276,19 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="abyan-ds space-y-3 rounded-xl border p-6" role="alert" style={{ background: 'var(--bg-surface)', borderColor: 'var(--error-300)', color: 'var(--error-700)' }}>
+        <p>Could not load your Phase 2 details: {loadError}</p>
+        <button className="btn btn-sm btn-secondary" onClick={() => void loadSheet()}>Retry loading Phase 2</button>
+      </div>
+    );
+  }
+
   if (!sheet) {
     return (
       <div className="rounded-xl border bg-white p-6 text-center text-sm text-slate-500 shadow-sm" style={{ borderColor: '#C8D1FF' }}>
-        You don’t have an approved (frozen) Phase 1 record yet, so the self-rating module isn’t available.
+        You don’t have an approved (frozen) Phase 1 record yet for this period, so the self-rating module isn’t available.
       </div>
     );
   }
@@ -369,13 +386,18 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
         </div>
       )}
 
-      <div className="abyan-table-wrap" style={{ borderColor: '#C8D1FF' }}>
-        <table className="abyan-table w-full min-w-[820px]">
+      <div className="abyan-tokens abyan-table-wrap">
+        <table className="abyan-table employee-phase2-table">
+          <colgroup>
+            <col className="employee-phase2-indicator-column" />
+            <col />
+            <col span={3} className="employee-phase2-rating-column" />
+            <col className="employee-phase2-average-column" />
+          </colgroup>
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-bold text-slate-600">
-              <th className="w-2/5 border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Success Indicator (frozen)</th>
+              <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Success Indicator (frozen)</th>
               <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Achievement</th>
-              <th className="border-b px-3 py-2" style={{ borderColor: '#C8D1FF' }}>Remarks</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>Q</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>E</th>
               <th className="border-b px-2 py-2 text-center" style={{ borderColor: '#C8D1FF' }}>T</th>
@@ -407,32 +429,16 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
                             </td>
                             <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
                               <textarea
+                                aria-label={`Achievement for ${si.description}`}
                                 value={e.accomplishment}
                                 onChange={(ev) => setField(si.successIndicatorId, 'accomplishment', ev.target.value)}
                                 disabled={!editable}
                                 maxLength={IPCR_LIMITS.accomplishment}
                                 placeholder="Detail your achievement matching this target..."
-                                rows={2}
-                                style={{ borderColor: '#C8D1FF' }}
-                                className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
+                                rows={4}
+                                className="employee-phase2-achievement"
                               />
                               {editable && <CharacterCount value={e.accomplishment} max={IPCR_LIMITS.accomplishment} />}
-                            </td>
-                            <td className="border-b px-3 py-2" style={{ borderColor: '#EEF0FD' }}>
-                              {/* Spec §F. The employee's own note on this row —
-                                  why the rating is what it is — not a reviewer's
-                                  comment, which belongs to the amendment flow. */}
-                              <textarea
-                                value={e.remarks}
-                                onChange={(ev) => setField(si.successIndicatorId, 'remarks', ev.target.value)}
-                                disabled={!editable}
-                                maxLength={IPCR_LIMITS.remarks}
-                                placeholder="e.g. Submitted ahead of deadline"
-                                rows={2}
-                                style={{ borderColor: '#C8D1FF' }}
-                                className="w-full rounded-lg border px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#363EE8] disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200 disabled:cursor-default"
-                              />
-                              {editable && <CharacterCount value={e.remarks} max={IPCR_LIMITS.remarks} />}
                             </td>
                             {(['quality', 'efficiency', 'timeliness'] as const).map((dim) => (
                               <td key={dim} className="border-b px-1 py-2 text-center" style={{ borderColor: '#EEF0FD' }}>
@@ -499,7 +505,9 @@ export const EmployeePhase2: React.FC<{ employeeId: string | null; phaseOpen?: b
           <CheckCircle className="h-4 w-4" />
           {status === 'closed'
             ? `Rating period closed — overall ${overall != null ? overall.toFixed(2) : '—'} from your saved ratings.`
-            : `Submitted — overall rating ${overall != null ? overall.toFixed(2) : '—'}.`}
+            : status === 'completed'
+            ? `Submitted — overall rating ${overall != null ? overall.toFixed(2) : '—'}.`
+            : 'The rating window is closed. Your saved details are read-only.'}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2">

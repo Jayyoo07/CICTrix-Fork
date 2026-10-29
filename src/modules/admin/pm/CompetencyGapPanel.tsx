@@ -458,15 +458,18 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
                               <span className="pr-2 text-xs font-bold leading-tight text-slate-800">
                                 {comp.name}
                               </span>
-                              {comp.isGap ? (
-                                <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
-                              ) : notAssessed ? (
-                                <ChevronDown className={`h-4 w-4 shrink-0 text-amber-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-                              ) : comp.required == null ? (
-                                <MinusCircle className="h-4 w-4 shrink-0 text-slate-400" />
-                              ) : (
-                                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                              )}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {comp.isGap ? (
+                                  <AlertCircle className="h-4 w-4 text-rose-500" />
+                                ) : notAssessed ? (
+                                  <Clock className="h-4 w-4 text-amber-500" />
+                                ) : comp.required == null ? (
+                                  <MinusCircle className="h-4 w-4 text-slate-400" />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                )}
+                                <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                              </div>
                             </div>
                             <div className="mt-2 flex items-center gap-4">
                               <div>
@@ -511,6 +514,7 @@ export const CompetencyGapPanel = ({ record, onRetryAssessment }: CompetencyGapP
                                 competencyName={comp.name}
                                 cycleId={record.cycleId ?? null}
                                 card={comp}
+                                position={record.position}
                               />
                             </div>
                           )}
@@ -539,11 +543,13 @@ const TraceDetail = ({
   competencyName,
   cycleId,
   card,
+  position,
 }: {
   employeeNumber: string;
   competencyName: string;
   cycleId: number | null;
   card: Comp;
+  position?: string;
 }) => {
   const [trace, setTrace] = useState<CompetencyTargetTrace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -568,20 +574,25 @@ const TraceDetail = ({
   }, [employeeNumber, competencyName, cycleId]);
 
   if (loading) {
-    return <div className="mt-1 animate-pulse rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-500">Loading IPCR source…</div>;
+    return (
+      <div className="mt-1 animate-pulse rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-500">
+        Loading IPCR source…
+      </div>
+    );
   }
 
   const targets = trace?.mappedTargets ?? [];
   const noTargets = targets.length === 0;
-  const possessed = card.possessedAvailable === false ? null : card.possessed;
+  const possessed = card.possessedAvailable === false ? null : (trace?.possessedStored ?? card.possessed);
+  const displayPosition = trace?.position || position;
 
   return (
-    <div className="mt-1 space-y-3 rounded-lg border border-indigo-200 bg-white p-4">
+    <div className="mt-1 space-y-3 rounded-lg border border-indigo-200 bg-white p-4 shadow-sm" data-testid="trace-detail-drawer">
       {/* C. Required source */}
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Required — from Competency Map</p>
         <p className="mt-0.5 text-sm text-slate-700">
-          {trace?.position ? `${trace.position} — ` : ''}{competencyName} — Required:{' '}
+          {displayPosition ? `${displayPosition} — ` : ''}{competencyName} — Required:{' '}
           {card.required == null
             ? 'Required level not configured for this position'
             : trace?.requiredLevel
@@ -592,11 +603,13 @@ const TraceDetail = ({
 
       {/* A. Mapped IPCR targets */}
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Mapped IPCR target{targets.length === 1 ? '' : 's'}</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Mapped IPCR target{targets.length === 1 ? '' : 's'}
+        </p>
         {noTargets ? (
           <p className="mt-1 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-700">
-            No IPCR target is currently mapped to this competency — the possessed score is
-            {card.possessedAvailable === false ? ' not yet available (assessment pending).' : ' unavailable / defaulted.'}
+            No IPCR target is currently mapped to this competency — the possessed score is{' '}
+            {card.possessedAvailable === false ? 'not yet available (assessment pending).' : 'unavailable / defaulted.'}
           </p>
         ) : (
           <ul className="mt-1 space-y-2">
@@ -608,11 +621,11 @@ const TraceDetail = ({
                     ? possessed
                     : null;
               return (
-                <li key={i} className="rounded border border-slate-200 bg-slate-50 p-2">
+                <li key={i} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-xs text-slate-700">
-                      {t.functionType && <span className="font-semibold text-slate-500">{t.functionType} — </span>}
-                      {t.targetText.replace(/^.*?—\s*/, '')}
+                    <span className="text-xs text-slate-700 leading-relaxed">
+                      {t.functionType && <span className="font-semibold text-slate-600">{t.functionType} — </span>}
+                      {t.functionType ? t.targetText.replace(/^.*?—\s*/, '') : t.targetText}
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block text-[9px] font-semibold uppercase tracking-wider text-slate-400">IPCR rating</span>
@@ -621,12 +634,17 @@ const TraceDetail = ({
                       </span>
                     </span>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                    {t.quality != null && <span>Q {t.quality}</span>}
-                    {t.efficiency != null && <span>E {t.efficiency}</span>}
-                    {t.timeliness != null && <span>T {t.timeliness}</span>}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    {t.quality != null && <span className="rounded bg-slate-200/60 px-1.5 py-0.5 font-medium">Q {t.quality}</span>}
+                    {t.efficiency != null && <span className="rounded bg-slate-200/60 px-1.5 py-0.5 font-medium">E {t.efficiency}</span>}
+                    {t.timeliness != null && <span className="rounded bg-slate-200/60 px-1.5 py-0.5 font-medium">T {t.timeliness}</span>}
+                    {t.confidence != null && (
+                      <span className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                        {Math.round(t.confidence <= 1 ? t.confidence * 100 : t.confidence)}% confidence
+                      </span>
+                    )}
                   </div>
-                  {t.justification && <p className="mt-1 text-[11px] italic text-slate-500">{t.justification}</p>}
+                  {t.justification && <p className="mt-1.5 text-[11px] italic leading-normal text-slate-500">{t.justification}</p>}
                 </li>
               );
             })}
@@ -639,11 +657,19 @@ const TraceDetail = ({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">How possessed was calculated</p>
           <p className="mt-0.5 text-sm text-slate-700">
-            {trace?.aggregationMethod === 'single'
-              ? `Possessed ${possessed != null ? possessed.toFixed(2) : '—'} comes directly from the single mapped IPCR target above` +
-                (trace?.possessedComputed != null ? ` (scored ${trace.possessedComputed.toFixed(2)}).` : '.')
-              : `Possessed ${possessed != null ? possessed.toFixed(2) : '—'} is the average of ${targets.length} IPCR targets mapped to this competency` +
-                (trace?.possessedComputed != null ? ` (mean ${trace.possessedComputed.toFixed(2)}, rounded to the 1-5 proficiency scale).` : '.')}
+            {card.possessedAvailable === false
+              ? 'Possessed score is awaiting competency assessment for this semester.'
+              : trace?.aggregationMethod === 'single'
+                ? `Possessed ${possessed != null ? possessed.toFixed(2) : '—'} comes directly from the single mapped IPCR target above` +
+                  (trace?.possessedComputed != null ? ` (scored ${trace.possessedComputed.toFixed(2)}).` : '.')
+                : trace?.aggregationMethod === 'average'
+                  ? `Possessed ${possessed != null ? possessed.toFixed(2) : '—'} is the average of ${targets.length} IPCR targets mapped to this competency` +
+                    (trace?.possessedComputed != null
+                      ? trace?.possessedStored != null && Math.abs(trace.possessedStored - trace.possessedComputed) >= 0.01
+                        ? ` (mean ${trace.possessedComputed.toFixed(2)}, recorded as ${trace.possessedStored.toFixed(2)} on the 1–5 scale).`
+                        : ` (mean ${trace.possessedComputed.toFixed(2)}, rounded to the 1-5 proficiency scale).`
+                      : '.')
+                  : `Possessed score is not yet computed because the mapped IPCR target${targets.length === 1 ? ' has' : 's have'} not received ratings yet.`}
           </p>
         </div>
       )}

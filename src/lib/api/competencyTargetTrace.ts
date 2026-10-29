@@ -27,9 +27,78 @@ import {
   PROFICIENCY_CODE,
   type ProficiencyLevel,
 } from './pmCompetency';
+import { normalizeSemesterKey } from './semesterTransition';
 
 const supabase = supabaseClient as any;
-const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
+
+export const normComp = (s: unknown): string =>
+  String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Checks if a rating_period string matches a performance cycle by ID, title, or semester tokens.
+ */
+export function isPeriodMatch(
+  ratingPeriod: unknown,
+  cycleId: number,
+  cycleTitle: string | null,
+): boolean {
+  if (ratingPeriod == null) return false;
+  const p = String(ratingPeriod).trim();
+  if (!p) return false;
+
+  // 1. Direct cycle ID match (e.g., '6' === '6')
+  if (p === String(cycleId)) return true;
+
+  if (!cycleTitle) return false;
+
+  // 2. Direct normalized string match
+  const normP = normComp(p);
+  const normTitle = normComp(cycleTitle);
+  if (normP && normP === normTitle) return true;
+
+  // 3. Normalized semester key match (e.g. '2026-H1' === '2026-H1')
+  const targetKey = normalizeSemesterKey(cycleTitle);
+  const pKey = normalizeSemesterKey(p);
+  if (targetKey && pKey && targetKey === pKey) return true;
+
+  // 4. Year extraction and comparison
+  const pYear = p.match(/\b(20\d\d)\b/)?.[1];
+  const titleYear = cycleTitle.match(/\b(20\d\d)\b/)?.[1];
+  if (pYear && titleYear && pYear !== titleYear) {
+    return false;
+  }
+
+  // 5. Semester detection (including 1st/2nd half, H1/H2)
+  const isH1 = (s: string) => /jan|feb|mar|apr|may|jun|1st|h1/i.test(s);
+  const isH2 = (s: string) => /jul|aug|sep|oct|nov|dec|2nd|h2/i.test(s);
+
+  const pH1 = isH1(p);
+  const pH2 = isH2(p);
+  const titleH1 = isH1(cycleTitle);
+  const titleH2 = isH2(cycleTitle);
+
+  // If one is explicitly H1 and the other is explicitly H2, no match
+  if ((pH1 && !pH2 && titleH2 && !titleH1) || (pH2 && !pH1 && titleH1 && !titleH2)) {
+    return false;
+  }
+
+  // If both are explicitly H1 or both are explicitly H2
+  if ((pH1 && titleH1) || (pH2 && titleH2)) {
+    return true;
+  }
+
+  // If cycle title doesn't specify semester (e.g. annual cycle '2026 Performance Cycle') and years match
+  if (pYear && titleYear && pYear === titleYear && !titleH1 && !titleH2) {
+    return true;
+  }
+
+  // 6. Normalized inclusion fallback
+  if (normP && normTitle && (normTitle.includes(normP) || normP.includes(normTitle))) {
+    return true;
+  }
+
+  return false;
+}
 
 export interface MappedTarget {
   targetText: string;
@@ -109,15 +178,43 @@ export async function getCompetencyTargetTrace(q: TraceQuery): Promise<Competenc
   const position = emp.current_position ?? null;
 
   // A. Mapped IPCR targets for this employee + competency (+ optional cycle).
-  let matchQuery = supabase
+  let cycleTitle: string | null = null;
+  if (q.cycleId != null) {
+    const { data: cycleRow } = await supabase
+      .from('performance_cycles')
+      .select('title')
+      .eq('id', q.cycleId)
+      .maybeSingle();
+    cycleTitle = cycleRow?.title ?? null;
+  }
+
+  const { data: matches } = await supabase
     .from('ipcr_competency_matches')
     .select('target_text, competency, confidence, justification, success_indicator_id, rating_period')
-    .eq('employee_id', employeeUuid)
-    .eq('competency', q.competencyName);
-  if (q.cycleId != null) matchQuery = matchQuery.eq('rating_period', String(q.cycleId));
-  const { data: matches } = await matchQuery;
+    .eq('employee_id', employeeUuid);
 
-  const rows = (matches ?? []) as any[];
+  const compMatches = ((matches ?? []) as any[]).filter(
+    (r) => normComp(r.competency) === normComp(q.competencyName),
+  );
+
+  let rows: any[] = [];
+  if (q.cycleId != null) {
+    const periodSpecific = compMatches.filter((r) =>
+      isPeriodMatch(r.rating_period, q.cycleId!, cycleTitle),
+    );
+
+    if (periodSpecific.length > 0) {
+      rows = periodSpecific;
+    } else {
+      // Fallback: unscoped rows (where rating_period is null or empty)
+      const unscoped = compMatches.filter(
+        (r) => r.rating_period == null || String(r.rating_period).trim() === '',
+      );
+      rows = unscoped;
+    }
+  } else {
+    rows = compMatches;
+  }
 
   // Individual score per target = mean(Q,E,T) from success_indicator_ratings.
   const siIds = [...new Set(rows.map((r) => r.success_indicator_id).filter(Boolean))];
@@ -162,11 +259,19 @@ export async function getCompetencyTargetTrace(q: TraceQuery): Promise<Competenc
   {
     let ecQuery = supabase
       .from('employee_competencies')
-      .select('proficiency_level, competencies ( name )')
+      .select('proficiency_level, cycle_id, competencies ( name )')
       .eq('employee_id', employeeUuid);
     if (q.cycleId != null) ecQuery = ecQuery.eq('cycle_id', q.cycleId);
     const { data: ec } = await ecQuery;
-    const hit = ((ec ?? []) as any[]).find((r) => norm(r.competencies?.name) === norm(q.competencyName));
+    let hit = ((ec ?? []) as any[]).find((r) => normComp(r.competencies?.name) === normComp(q.competencyName));
+    if (!hit && q.cycleId != null) {
+      const { data: ecFallback } = await supabase
+        .from('employee_competencies')
+        .select('proficiency_level, competencies ( name )')
+        .eq('employee_id', employeeUuid)
+        .is('cycle_id', null);
+      hit = ((ecFallback ?? []) as any[]).find((r) => normComp(r.competencies?.name) === normComp(q.competencyName));
+    }
     if (hit && hit.proficiency_level != null) possessedStored = Number(hit.proficiency_level);
   }
 
@@ -176,7 +281,7 @@ export async function getCompetencyTargetTrace(q: TraceQuery): Promise<Competenc
   if (position) {
     const stdRes = await listCompetencyStandards();
     const compId = (stdRes.ok ? stdRes.data ?? [] : []).find(
-      (s) => norm(s.competency_name) === norm(q.competencyName),
+      (s) => normComp(s.competency_name) === normComp(q.competencyName),
     )?.id;
     if (compId != null) {
       let { data: reqRow } = await supabase

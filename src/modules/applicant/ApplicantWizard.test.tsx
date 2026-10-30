@@ -30,6 +30,17 @@ vi.mock('../../lib/recruitmentData', () => ({
 }));
 vi.mock('../../lib/plantillaSlots', () => ({ linkApplicationToSlots: () => Promise.resolve({ ok: true }) }));
 vi.mock('../../lib/employeePortalData', () => ({
+  // ApplicantWizard builds its promotion error map from this constant at module
+  // load, so the mock must export it or the whole suite fails to import.
+  PROMOTIONAL_AUTH_ERROR: {
+    INVALID_CREDENTIALS: 'invalid_credentials',
+    AMBIGUOUS_ACCOUNT: 'ambiguous_account',
+    MISSING_EMPLOYEE_NUMBER: 'missing_employee_number',
+    LOOKUP_UNAVAILABLE: 'lookup_unavailable',
+  },
+  // These tests never log in for a promotion; the default failure keeps that
+  // path inert if the stub is ever reached.
+  authenticatePromotionalEmployee: async () => ({ ok: false, error: 'invalid_credentials' }),
   findEmployeePortalAccount: () => undefined,
   getEmployeePortalAccounts: () => [],
   findEmployeePortalAccountFromSupabaseByEmployeeIdOrEmail: () => Promise.resolve(undefined),

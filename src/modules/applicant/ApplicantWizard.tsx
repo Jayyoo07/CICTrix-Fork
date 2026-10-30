@@ -26,7 +26,8 @@ import { Button, Dialog } from '../../components';
 import { formatDivisionAndOffice, POSITION_TO_DEPARTMENT_MAP } from '../../constants/positions';
 import {
     type EmployeePortalAccount,
-    findEmployeePortalAccount,
+    PROMOTIONAL_AUTH_ERROR,
+    authenticatePromotionalEmployee,
     getEmployeePortalAccounts,
     findEmployeePortalAccountFromSupabaseByEmployeeIdOrEmail,
 } from '../../lib/employeePortalData';
@@ -142,6 +143,17 @@ const TAB_STATUS: Record<TabStatus, { label: string; Icon: typeof CircleCheck }>
 const blankApp = (formData: ApplicantFormData): AppState => ({ formData, files: [], errors: {}, fileError: '' });
 
 const normalizeAuthValue = (value: string) => String(value ?? '').trim().toLowerCase();
+
+const PROMOTION_AUTH_ERROR_MESSAGES: Record<string, string> = {
+  [PROMOTIONAL_AUTH_ERROR.INVALID_CREDENTIALS]:
+    'Invalid employee credentials. Use your Employee Portal account credentials.',
+  [PROMOTIONAL_AUTH_ERROR.AMBIGUOUS_ACCOUNT]:
+    'More than one employee account matches that identifier. Please contact HR to resolve the duplicate account.',
+  [PROMOTIONAL_AUTH_ERROR.MISSING_EMPLOYEE_NUMBER]:
+    'This employee account has no employee number on file. Please contact HR so the account can be linked.',
+  [PROMOTIONAL_AUTH_ERROR.LOOKUP_UNAVAILABLE]:
+    'Unable to verify your employee credentials right now. Please try again.',
+};
 
 const saveApplicantAppointmentType = (applicantId: string, applicationType: 'job' | 'promotion') => {
   try {
@@ -1198,23 +1210,22 @@ export const ApplicantWizard: React.FC = () => {
       return;
     }
 
-    const matchedByUsername = findEmployeePortalAccount(enteredIdentifier, enteredPassword);
-    const matchedByEmployeeId = getEmployeePortalAccounts().find((account) => {
-      const accountEmployeeId = normalizeAuthValue(String(account?.employee?.employeeId ?? ''));
-      return accountEmployeeId === normalizeAuthValue(enteredIdentifier) && account.password === enteredPassword;
-    });
+    let authResult: Awaited<ReturnType<typeof authenticatePromotionalEmployee>>;
+    try {
+      authResult = await authenticatePromotionalEmployee(enteredIdentifier, enteredPassword);
+    } catch {
+      authResult = { ok: false, error: PROMOTIONAL_AUTH_ERROR.LOOKUP_UNAVAILABLE };
+    }
 
-    if (!matchedByUsername && !matchedByEmployeeId) {
-      setEmployeeAuthError('Invalid employee credentials. Use your Employee Portal account credentials.');
+    if (!authResult.ok || !authResult.account) {
+      setEmployeeAuthError(
+        PROMOTION_AUTH_ERROR_MESSAGES[authResult.error ?? ''] ??
+          PROMOTION_AUTH_ERROR_MESSAGES[PROMOTIONAL_AUTH_ERROR.INVALID_CREDENTIALS],
+      );
       return;
     }
 
-    const matchedAccount = matchedByUsername || matchedByEmployeeId;
-    if (!matchedAccount) {
-      setEmployeeAuthError('Unable to resolve the employee account for this promotional application.');
-      return;
-    }
-
+    const matchedAccount = authResult.account;
     const matchedEmployeeNumber = String(matchedAccount?.employee?.employeeId ?? '').trim();
 
     // The applicant is an existing employee, so pull the whole profile and

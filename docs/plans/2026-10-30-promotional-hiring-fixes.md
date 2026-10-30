@@ -61,6 +61,14 @@ The transaction is a proposed implementation detail for review: independent empl
 
 ## Steps
 
+### Implementation checkpoint — paused after Task 3
+
+Paused at the user's request on 2026-10-30. Tasks 1–3 are implemented, reviewed and committed on `fix/promotional-hiring-pipeline`: `1dda88f`, `c29adba`, `20c24f1`. Resume at **Task 3A**, not Task 4. Task 3A and Tasks 4–8 remain unstarted; the scheduled-interview exclusion is identified but not fixed in this checkpoint.
+
+Combined verification after Task 3: **136 src test files / 1,239 tests passed**; `npx tsc --noEmit`, repository-wide `npm run lint`, `npm run build`, and `git diff --check` passed. Tests/build used synthetic localhost Supabase settings, not production credentials. Existing React act/refused-localhost test warnings and Vite/Browserslist/bundle-size warnings remain. No migrations were added; live-data seed tests and database/browser end-to-end acceptance were not run. Docker/Podman/local Postgres remain unavailable, blocking Task 4's required transaction verification and Task 8's isolated acceptance. Overall plan stays In Progress, not Done.
+
+Keep this worktree and branch for the next session. No push, PR, merge, deployment, email or live database write has been performed. A separately authorized fork push/upstream PR should describe this as the **Tasks 1–3 partial repair**, not a completed promotional appointment pipeline. See [implementation summary](../session-summaries/2026-10-30-promotional-hiring-fixes-summary.md) for checks and remaining limits.
+
 Execution is task-by-task using test-driven development under the user-invoked `delegate` workflow. For each task, the builder writes the named failing tests, runs them to demonstrate the defect, makes the smallest implementation, and reruns to green. The OpenAI orchestrator then reviews the diff and independently reruns the relevant checks. Task commit steps below belong to the orchestrator after review and applicable approval, never to the builder. No pushes or live writes without explicit authorization.
 
 ### Delegation setup — approved for implementation
@@ -70,7 +78,7 @@ Execution is task-by-task using test-driven development under the user-invoked `
 | Orchestrator, planner, reviewer | `openai/gpt-6.1-sol#high` | OpenAI ChatGPT OAuth; connection metadata reports `oauth`. |
 | Product-code, migration, test and integration builder | `deepseek/deepseek-flash#max` | Existing paid DeepSeek API-key connection; catalog identity `DeepSeek V4.1 Flash 1017`. User selected max for this run. |
 
-Preflight on 2026-10-30 confirmed both routes are active; OpenAI advertises `high` and DeepSeek advertises the user-selected `max`. The current session is already `openai/gpt-6.1-sol#high`. Connection metadata shows OpenAI OAuth and DeepSeek key authentication without a needs-auth status. This verifies configured availability, not remaining quota or a successful builder request. No credential values were read or changed. A newer OpenAI candidate, `openai/gpt-6.1-terra`, is available; it has not been selected and its later release date alone does not establish suitability. No newer comparable DeepSeek Flash candidate was listed. DeepSeek max is approved for this run only; global skill/model defaults are unchanged. Plan approval is still pending and no builder has been dispatched.
+Preflight on 2026-10-30 confirmed both routes are active; OpenAI advertises `high` and DeepSeek advertises the user-selected `max`. The current session is already `openai/gpt-6.1-sol#high`. Connection metadata shows OpenAI OAuth and DeepSeek key authentication without a needs-auth status. This verifies configured availability, not remaining quota. No credential values were read or changed. A newer OpenAI candidate, `openai/gpt-6.1-terra`, is available; it has not been selected and its later release date alone does not establish suitability. No newer comparable DeepSeek Flash candidate was listed. DeepSeek max is approved for this run only; global skill/model defaults are unchanged. Approval was subsequently granted and builders have returned Task 1 results; see the execution ledger below.
 
 - The user approved this plan, including Task 3A, and the exact model pair with “build” after selecting DeepSeek max. Any later scope/model change needs renewed approval before affected dispatches.
 - Before execution, establish an isolated non-main worktree/branch with this plan and its audit available. Preserve the existing uncommitted audit/plan documents and the user's untracked `run-queue.bat`; do not discard or silently move them. Follow the project's worktree procedure.
@@ -81,17 +89,18 @@ Preflight on 2026-10-30 confirmed both routes are active; OpenAI advertises `hig
 - After each result, inspect the actual diff and rerun checks before accepting it. Track the original task's corrective counter across resumed/replacement children. After two unsuccessful corrective dispatches, stop that task and ask the user; do not issue a third or have OpenAI take over implementation.
 - Report model authentication, quota, rate-limit, unavailable local database, or conflicting user changes as blockers. Never silently substitute Pro, a free model, another account, or another effort level.
 - Task 8 is combined-result verification. OpenAI may run checks/browser acceptance and review; any new test code or integration implementation remains delegated to the approved DeepSeek route.
+- **Current stopping instruction:** finish Task 3 and its review, run unit tests on the combined Tasks 1–3 changes, then pause. Task 3A and Tasks 4–8 remain unstarted. Update this plan and the implementation summary before reporting the checkpoint; pushing to a fork and opening an upstream PR require separate authorization.
 
 ### Delegation ledger
 
-Approval recorded; tasks are unstarted pending isolated setup/baseline. A correction count excludes the initial implementation and increments only when a dispatched corrective fix is rejected or fails required checks. The detailed recovery ledger is `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md` in this worktree.
+Approval and passing isolated baseline recorded; Task 1 is accepted. A correction count excludes the initial implementation and increments only when a dispatched corrective fix is rejected or fails required checks. The detailed recovery ledger is `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md` in this worktree.
 
 | Task | Owner | State | Unsuccessful corrections |
 | --- | --- | --- | --- |
-| 1 — fresh-browser promotion entry | DeepSeek builder; OpenAI review | Baseline passed; ready | 0 / 2 |
-| 2 — durable scores | DeepSeek builder; OpenAI review | Queued | 0 / 2 |
-| 3 — selection/ranking | DeepSeek builder; OpenAI review | Queued | 0 / 2 |
-| 3A — scheduled interviewer display | DeepSeek builder; OpenAI review | Queued | 0 / 2 |
+| 1 — fresh-browser promotion entry | DeepSeek builder; OpenAI review | Accepted; 1dda88f; 22 tests, TypeScript and scoped ESLint pass | 0 / 2 |
+| 2 — durable scores | DeepSeek builder; OpenAI review | Accepted; c29adba; 52 tests, TypeScript and scoped ESLint pass | 0 / 2 |
+| 3 — selection/ranking | DeepSeek builder; OpenAI review | Accepted; 20c24f1; combined 1,239 src tests, TypeScript, lint and build pass | 0 / 2 |
+| 3A — scheduled interviewer display | DeepSeek builder; OpenAI review | Next on resume; unstarted, paused by user | 0 / 2 |
 | 4 — atomic appointment migration | DeepSeek builder; OpenAI review | Queued; isolated DB prerequisite unresolved | 0 / 2 |
 | 5 — shared appointment entry points | DeepSeek builder; OpenAI review | Queued; depends on 4 | 0 / 2 |
 | 6 — account-preserving results | DeepSeek builder; OpenAI review | Queued; depends on 5 | 0 / 2 |
@@ -105,10 +114,10 @@ Approval recorded; tasks are unstarted pending isolated setup/baseline. A correc
 
 **Interface:** `authenticatePromotionalEmployee(identifier: string, password: string): Promise<{ ok: boolean; account?: EmployeePortalAccount; error?: string }>` in the existing service file. Accept username or employee number, normalize the identifier only, and require an exact password match against the current remote account. Do not download the whole account roster. Do not return/cache credentials in diagnostic output. This intentionally retains the legacy credential mechanism; it does not make that mechanism secure.
 
-- [ ] Test an empty localStorage browser with valid remote username and employee-number logins; both resolve the same employee and prefill the form.
-- [ ] Test wrong password, deleted/missing/ambiguous account, failed remote read, and a stale local cached password. None may enter the promotion form on cached authority; show invalid credentials separately from an unavailable lookup.
-- [ ] Run `npx vitest run src/lib/employeePortalData.promotion.test.ts src/modules/applicant/ApplicantWizard.promotion.test.tsx`; observe failures, implement the helper and awaited wizard call, and rerun to pass. Stub every remote call.
-- [ ] Commit: `fix(promotion): resolve existing accounts across browsers`.
+- [x] Test an empty localStorage browser with valid remote username and employee-number logins; both resolve the same employee and prefill the form.
+- [x] Test wrong password, deleted/missing/ambiguous account, failed remote read, and a stale local cached password. None may enter the promotion form on cached authority; show invalid credentials separately from an unavailable lookup.
+- [x] Run `npx vitest run src/lib/employeePortalData.promotion.test.ts src/modules/applicant/ApplicantWizard.promotion.test.tsx`; observe failures, implement the helper and awaited wizard call, and rerun to pass. Stub every remote call.
+- [x] Commit: `fix(promotion): resolve existing accounts across browsers` (`1dda88f`).
 
 ### Task 2: Make score finalization depend on a durable save
 
@@ -117,10 +126,10 @@ Approval recorded; tasks are unstarted pending isolated setup/baseline. A correc
 
 **Interfaces:** retain `saveApplicantCategoryScores`' existing result signature; make scoring modal `onSave` return `Promise<{ ok: boolean; error?: unknown }>` and await it. Add `ApplicantScoreSummary = { applicantId: string; appointmentType: 'original' | 'promotional'; assessmentTotal: number | null; writtenExamRawScore: number | null; isFinalized: boolean }` and `fetchApplicantScoreSummaries(applicantIds: string[]): Promise<{ ok: boolean; data: Map<string, ApplicantScoreSummary>; error?: unknown }>` to the existing score service. Read persisted category rows and calculate the appropriate assessment total with existing formulas; incomplete required categories produce null. Do not read nonexistent score columns from `applicants`.
 
-- [ ] Test a rejected upsert: modal stays editable/open with the entered values and an error, no finalized state, no success event, and no authoritative cache update.
-- [ ] Test success, hard reload in an empty-cache client, valid zero scores, incomplete promotion categories/PCPT, and a failed summary read. A read failure is not an empty successful ranking.
-- [ ] Persist first, then publish the cache/event and UI finalization. For a real applicant ID, local-only data never counts as durable finalization. Keep non-UUID test/demo behavior explicitly separate.
-- [ ] Run `npx vitest run src/lib/api/applicantScores.test.ts src/components/QualifiedApplicantsSection.persistence.test.tsx` through red/green; commit `fix(rsp): finalize applicant scores after persistence`.
+- [x] Test a rejected upsert: modal stays editable/open with the entered values and an error, no finalized state, no success event, and no authoritative cache update.
+- [x] Test success, hard reload in an empty-cache client, valid zero scores, incomplete promotion categories/PCPT, and a failed summary read. A read failure is not an empty successful ranking.
+- [x] Persist first, then publish the cache/event and UI finalization. For a real applicant ID, local-only data never counts as durable finalization. Keep non-UUID test/demo behavior explicitly separate.
+- [x] Run `npx vitest run src/lib/api/applicantScores.test.ts src/components/QualifiedApplicantsSection.persistence.test.tsx` through red/green; commit `fix(rsp): finalize applicant scores after persistence` (`c29adba`).
 
 ### Task 3: Restore promotion visibility and use the saved assessment scores
 
@@ -130,15 +139,15 @@ Approval recorded; tasks are unstarted pending isolated setup/baseline. A correc
 
 **Consumes:** Task 2's `fetchApplicantScoreSummaries`; retain `fetchHiringContext` for slot/reservation state.
 
-- [ ] Reproduce the audit case: a new qualified promotion shares an email with both an older hire and an existing account; it must appear. A completed record for this exact applicant UUID must not reappear.
-- [ ] Remove email-wide exclusion and account-existence-as-completion checks. Preserve terminal/disqualified/deleted exclusions, filled-slot exclusion, existing reservation visibility, and revoked-selection behavior.
-- [ ] Fetch application type and join durable summaries by applicant UUID. Rank promotions with the saved five-category assessment total, not an invented oral score; retain the separate written-exam eligibility requirement. Do not substitute education alone, a partial local save, or someone else's same-email evaluation.
-- [ ] Test a fully scored promotion with PCPT but no oral evaluation, missing written exam, an incomplete promotion, original-applicant regression, and reload without localStorage. The report shows saved totals rather than blank `applicants.total_score` fields.
-- [ ] Run `npx vitest run src/components/ForHiringPage src/components/ApplicantRankingPage --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"` through red/green; commit `fix(promotion): restore selection visibility and ranking`.
+- [x] Reproduce the audit case: a new qualified promotion shares an email with both an older hire and an existing account; it must appear. A completed record for this exact applicant UUID must not reappear.
+- [x] Remove email-wide exclusion and account-existence-as-completion checks. Preserve terminal/disqualified/deleted exclusions, filled-slot exclusion, existing reservation visibility, and revoked-selection behavior.
+- [x] Fetch application type and join durable summaries by applicant UUID. Rank promotions with the saved five-category assessment total, not an invented oral score; retain the separate written-exam eligibility requirement. Do not substitute education alone, a partial local save, or someone else's same-email evaluation.
+- [x] Test a fully scored promotion with PCPT but no oral evaluation, missing written exam, an incomplete promotion, original-applicant regression, and reload without localStorage. The report shows saved totals rather than blank `applicants.total_score` fields.
+- [x] Run `npx vitest run src/components/ForHiringPage src/components/ApplicantRankingPage --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"` through red/green; commit `fix(promotion): restore selection visibility and ranking` (`20c24f1`).
 
 ### Task 3A: Restore scheduled promotional interviews in the interviewer portal
 
-**Reported requirement:** On 2026-10-30 the user reported that scheduled promotional hiring interviews do not display for interviewers. The symptom is in scope; its exact cause has not yet been reproduced. Do not describe this as a confirmed single-filter defect.
+**Reported requirement:** On 2026-10-30 the user reported that scheduled promotional hiring interviews do not display for interviewers. Read-only build investigation confirmed the live promotion has an interview date/time, an active assigned rater, and an Open linked posting/slot. Its email satisfies the blanket `@example.com` demo exclusion in both interviewer screens. Reproduce that confirmed exclusion with a persisted-UUID fixture first; additional causes remain unverified until tested. Do not change the live email or remove assignment rules as a workaround.
 
 **Inspect/modify as evidence requires:** `src/lib/applicantSchedule.ts`, `src/lib/interviewerAccess.ts`, `src/modules/interviewer/InterviewerDashboard.tsx`, `src/modules/interviewer/InterviewerApplicantsList.tsx`, `src/modules/interviewer/EvaluationForm.tsx`.
 **Modify tests:** `src/lib/applicantSchedule.scheduled.test.ts`, `src/modules/interviewer/InterviewerApplicantsList.dedupe.test.ts`.

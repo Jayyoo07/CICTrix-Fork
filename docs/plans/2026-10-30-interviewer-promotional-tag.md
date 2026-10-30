@@ -31,7 +31,8 @@ Per §10, application type is a category, not a status, so it uses the brand-tin
 
 ## Caveats found while checking
 
-- **`applicants.current_position` and `applicants.employee_id` are not created by any file in `supabase/migrations/`.** The insert relies on them existing in the live schema (the promotional flow merged in Jayyoo07/CICTrix-Fork PR #83 and was verified then). Step 1 confirms this read-only before building. If `current_position` is missing, the "From:" line falls back to `employees.current_position` by joining on `employees.employee_id = applicants.employee_id` through a function in `src/lib/`. The tag itself does not depend on this column: it uses `application_type` and `employee_id`.
+- **Step 1 result (2026-10-30, read-only GET with the publishable key).** `applicants` has `application_type`, `employee_id` and `current_position` in the live database, even though no file in `supabase/migrations/` creates the last two. Of 57 applicants, 1 is `application_type = 'promotion'`, and it has both `employee_id` and `current_position` filled in. No fallback to `employees` is needed.
+- **Bug found: hired external applicants read as Promotional.** 7 applicants with `application_type = 'job'` also have `employee_id` set. All 7 are `Hired` with an interview date. The hire path writes it: `src/lib/api/employeesApi.ts:278` runs `.update({ status: 'Hired', employee_id: empId })`. `getApplicantType` treats any `employee_id` as promotional, so these 7 already show as "Promotional" in the interviewer Applicants List's Type column and filter today. The new tag would repeat the error. Fix: `getApplicantType` trusts `application_type` when it is set, and uses `employee_id` only as a fallback for rows with no type. `isPromotionalSource` in `ApplicantDetailsPage.tsx:648` has the same rule (it would force the promotional scoring view on those 7). Fixing it there is decision D1 below.
 - **Overlap with other plans (rechecked after pulling `main` at `0e26f03`).** Task 3A of `2026-10-30-promotional-hiring-fixes.md` is now merged (Jayyoo07/CICTrix-Fork PR #84). It changed only `isDemoApplicant` in `InterviewerDashboard.tsx` and `InterviewerApplicantsList.tsx`, which is not code this plan touches. `2026-10-30-applicant-status-and-score-writes.md` (Draft) Step 4 edits the *status* badge in `InterviewerApplicantsList.tsx` (around line 241). This plan edits the *type* badge (line 994). Same file, different lines, no logic conflict. Whichever lands second rebases.
 - **Tests added by PR #84 still hold.** `InterviewerApplicantsList.promotion.test.tsx` asserts the text "Promotional" in the row, not a class, so the badge swap keeps it green. `InterviewerDashboard.promotion.test.tsx` asserts posting counts and the View button, and the added tag and "From:" line don't change either. All 51 interviewer tests pass on the merged branch before any change.
 
@@ -42,13 +43,20 @@ Per §10, application type is a category, not a status, so it uses the brand-tin
 | `src/modules/interviewer/interviewerDashboardModel.ts` | `CandidateRow.currentPosition`; set in `buildCandidateRows` |
 | `src/modules/interviewer/InterviewerDashboardParts.tsx` | Tag and "From:" line in `CandidateListModal` rows |
 | `src/modules/interviewer/InterviewerApplicantsList.tsx` | Swap the two badge classes on line 994 |
+| `src/lib/interviewerEvalNavigation.ts` | `getApplicantType` checks `application_type` first (Step 1a) |
+| `src/modules/interviewer/ApplicantDetailsPage.tsx` | Same rule in `isPromotionalSource`, only if D1 is yes |
 | A new model test and a `CandidateListModal` render test | New coverage |
 
-Not affected: `InterviewerDashboard.tsx` (it already passes rows through), the KPI quick-view cards (`KpiCard`, unchanged unless asked), `EvaluationForm.tsx`, `ApplicantDetailsPage.tsx`, `src/lib/interviewerEvalNavigation.ts`, the database and migrations. The `src/lib/` fallback in the first caveat is the only possible extra file, and it is needed only if step 1 finds `applicants.current_position` missing.
+Not affected: `InterviewerDashboard.tsx` (it already passes rows through), the KPI quick-view cards (`KpiCard`, unchanged unless asked), `EvaluationForm.tsx`, `src/lib/api/employeesApi.ts` (writing `employee_id` on hire is correct; the reader was wrong), the database and migrations.
+
+## Decisions
+
+- **D1.** Apply the same `application_type`-first rule to `isPromotionalSource` in `ApplicantDetailsPage.tsx`? Recommended yes: it keeps the details page agreeing with the list and the tag. It is one line, plus a test.
 
 ## Steps
 
-1. Confirm in a preview/branch database (read-only) that `applicants` has `current_position`, `employee_id`, `application_type`, and that an existing promotional row has them filled in. Record the result here. No writes to the live database.
+1. ~~Confirm the columns exist.~~ Done; see Step 1 result above.
+1a. Make `getApplicantType` (`src/lib/interviewerEvalNavigation.ts`) trust `application_type` first. Add a test: `job` + `employee_id` → Original; `promotion` → Promotional; empty type + `employee_id` → Promotional. If D1 is yes, change `isPromotionalSource` to match.
 2. Add `currentPosition` to `CandidateRow` and `buildCandidateRows`. Add a unit test in the model's test file: a promotional applicant gets `appType: 'Promotional'` and its `currentPosition`, and an original applicant gets `'Original'` and `''`.
 3. Render the tag and the "From:" line in `CandidateListModal`. Add a render test: a promotional row shows "Promotional" and "From: …", and an original row shows neither.
 4. Swap the badge classes in `InterviewerApplicantsList.tsx:994`.
@@ -57,7 +65,7 @@ Not affected: `InterviewerDashboard.tsx` (it already passes rows through), the K
 ## Risks
 
 - **Row height grows** by one line for promotional rows. Acceptable at the 8-row page size. Checked in step 5.
-- **False positives:** `getApplicantType` treats any row with `employee_id` as promotional. Only the promotion path writes `employee_id` (`ApplicantWizard.tsx:950`), so this holds today. If a future flow stores `employee_id` on a regular job application, both the tag and the scoring mode would be wrong together, so the fix belongs in `getApplicantType`.
+- **Changing `getApplicantType` also changes the score setup** that Evaluate stores (`storeApplicantTypeForEval`). For the 7 hired rows that is a correction, not a regression: they were original applicants. Rows with an empty `application_type` keep today's behaviour.
 - **Stale `current_position`:** it is the position at the time of application. After the promotion completes, the tag still shows the old "From:". That is correct for an interview record.
 
 ## Checks to run

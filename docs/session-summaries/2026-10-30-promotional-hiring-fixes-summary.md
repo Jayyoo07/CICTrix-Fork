@@ -1,7 +1,7 @@
 ---
 title: Promotional hiring implementation progress
 date: 2026-10-30
-summary: Tasks 1–3 are committed and verified with 1,239 passing src tests plus 5 mocked smoke tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated browser/database acceptance are not complete.
+summary: Tasks 1–3 are committed and verified with 1,248 passing src tests after the upstream merge plus 5 mocked smoke tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated browser/database acceptance are not complete.
 ---
 
 ## Scope and current state
@@ -33,7 +33,7 @@ Read-only boolean schedule inspection found a cause for Task 3A: the scheduled p
 
 Run on the corrected Tasks 1–3 code, with `VITE_SUPABASE_URL=http://127.0.0.1:54321` and `VITE_SUPABASE_ANON_KEY=local-test-placeholder` for Supabase-importing checks:
 
-- `npx vitest run src --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"`: **136 files / 1,239 tests passed**, 109.20s. This includes all changed unit tests. Existing React act/refused-localhost warnings remain.
+- Before the upstream merge: **136 files / 1,239 tests passed** in 109.20s. After merging `upstream/main` to clear the PR conflict (merge `7b115ef`): **139 files / 1,248 tests passed** in 99.73s, including the new smoke suite. Existing React act/refused-localhost warnings remain.
 - `npx tsc --noEmit`: passed.
 - `npm run lint`: passed repository-wide with zero warnings/errors.
 - `npm run build`: passed; Vite transformed 3,145 modules. CJS API deprecation, outdated Browserslist data and large-chunk warnings remain; no failure.

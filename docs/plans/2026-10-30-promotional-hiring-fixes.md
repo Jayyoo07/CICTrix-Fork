@@ -65,7 +65,7 @@ The transaction is a proposed implementation detail for review: independent empl
 
 Paused at the user's request on 2026-10-30. Tasks 1–3 are implemented, reviewed and committed on `fix/promotional-hiring-pipeline`: `1dda88f`, `c29adba`, `20c24f1`. Resume at **Task 3A**, not Task 4. Task 3A and Tasks 4–8 remain unstarted; the scheduled-interview exclusion is identified but not fixed in this checkpoint.
 
-Combined verification after Task 3: **136 src test files / 1,239 tests passed**; `npx tsc --noEmit`, repository-wide `npm run lint`, `npm run build`, and `git diff --check` passed. Tests/build used synthetic localhost Supabase settings, not production credentials. Existing React act/refused-localhost test warnings and Vite/Browserslist/bundle-size warnings remain. No migrations were added; live-data seed tests and database/browser end-to-end acceptance were not run. Docker/Podman/local Postgres remain unavailable, blocking Task 4's required transaction verification and Task 8's isolated acceptance. Overall plan stays In Progress, not Done.
+Combined verification after Task 3: **136 src test files / 1,239 tests passed**; `npx tsc --noEmit`, repository-wide `npm run lint`, `npm run build`, and `git diff --check` passed. After merging `upstream/main` to clear the PR conflict (merge `7b115ef`), the full suite passed **139 files / 1,248 tests**, with lint and build green. Tests/build used synthetic localhost Supabase settings, not production credentials. Existing React act/refused-localhost test warnings and Vite/Browserslist/bundle-size warnings remain. No migrations were added; live-data seed tests and database/browser end-to-end acceptance were not run. Docker/Podman/local Postgres remain unavailable, blocking Task 4's required transaction verification and Task 8's isolated acceptance. Overall plan stays In Progress, not Done.
 
 Keep this worktree and branch for the next session. The branch was pushed to the `Jayyoo07` fork and [PR #83](https://github.com/dehandenver/CICTrix/pull/83) is open against `dehandenver/CICTrix:main`. It describes this as the **Tasks 1–3 partial repair**, not a completed promotional appointment pipeline. No merge, deployment, email or live database write has been performed. The Vercel check reports the expected "Authorization required to deploy" on fork PRs. See [implementation summary](../session-summaries/2026-10-30-promotional-hiring-fixes-summary.md) for checks and remaining limits.
 
@@ -114,7 +114,7 @@ Approval and passing isolated baseline recorded; Task 1 is accepted. A correctio
 | --- | --- | --- | --- |
 | 1 — fresh-browser promotion entry | DeepSeek builder; OpenAI review | Accepted; 1dda88f; 22 tests, TypeScript and scoped ESLint pass | 0 / 2 |
 | 2 — durable scores | DeepSeek builder; OpenAI review | Accepted; c29adba; 52 tests, TypeScript and scoped ESLint pass | 0 / 2 |
-| 3 — selection/ranking | DeepSeek builder; OpenAI review | Accepted; 20c24f1; combined 1,239 src tests, TypeScript, lint and build pass | 0 / 2 |
+| 3 — selection/ranking | DeepSeek builder; OpenAI review | Accepted; 20c24f1; post-merge 139 files / 1,248 src tests, TypeScript, lint and build pass | 0 / 2 |
 | 3A — scheduled interviewer display | DeepSeek builder; OpenAI review | Next on resume; unstarted, paused by user | 0 / 2 |
 | 4 — atomic appointment migration | DeepSeek builder; OpenAI review | Queued; isolated DB prerequisite unresolved | 0 / 2 |
 | 5 — shared appointment entry points | DeepSeek builder; OpenAI review | Queued; depends on 4 | 0 / 2 |

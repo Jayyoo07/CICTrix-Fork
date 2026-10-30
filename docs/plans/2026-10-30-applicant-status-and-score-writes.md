@@ -14,7 +14,7 @@ This plan sits next to `docs/plans/2026-10-30-promotional-hiring-fixes.md` (In P
 
 ## Findings (verified 2026-10-30)
 
-Live checks used the publishable key and GET requests only.
+Live checks used the publishable key and GET requests only. The full claim-by-claim evidence, including the counts that matched, is in [the live database check](../session-summaries/2026-10-30-live-db-claims-verification-summary.md).
 
 | Ref | Finding | Evidence |
 |---|---|---|

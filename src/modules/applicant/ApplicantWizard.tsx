@@ -211,10 +211,10 @@ export const ApplicantWizard: React.FC = () => {
   const [pendingCopy, setPendingCopy] = useState<{ from: string; to: string } | null>(null);
   const [copyNotice, setCopyNotice] = useState('');
   const [declared, setDeclared] = useState(false);
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [confirmBatch, setConfirmBatch] = useState<{ keys: string[]; mode: 'submit' | 'retry' } | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, SubmitOutcome>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [completed, setCompleted] = useState<null | Array<{ key: string; label: string; outcome: SubmitOutcome }>>(null);
+  const [completed, setCompleted] = useState<null | Array<{ key: string; positionTitle: string; plantillaLabel?: string; outcome: SubmitOutcome }>>(null);
 
   // Since migration 20261021200000 one person keeps one Reference No. across every plantilla.
   // When this submission's numbers all agree, that is the person's number, and
@@ -616,6 +616,16 @@ export const ApplicantWizard: React.FC = () => {
   const labelFor = (key: string): string => {
     const choice = choiceByKey.get(key);
     return choice ? choiceLabel(choice) : 'Your application';
+  };
+
+  /** Heading for an application: the position applied for, never the applicant's current one. */
+  const positionTitleFor = (key: string): string => apps[key]?.formData.position?.trim() || posting?.title || 'Your application';
+
+  /** Smaller line under the position title: plantilla and salary grade, or null without a plantilla. */
+  const plantillaCaptionFor = (key: string): string | null => {
+    const choice = choiceByKey.get(key);
+    if (!choice) return null;
+    return choice.salaryGrade != null ? `${choiceLabel(choice)} · SG ${choice.salaryGrade}` : choiceLabel(choice);
   };
 
   // Move focus to the form heading when Step 2 (or a jumped-to tab) opens.
@@ -1095,9 +1105,10 @@ export const ApplicantWizard: React.FC = () => {
   });
   const failedKeys = keys.filter((key) => outcomes[key]?.status === 'failed');
   const isRetry = failedKeys.length > 0;
+  const confirmBatchCount = confirmBatch?.keys.length ?? 0;
 
   const handleSubmitAll = async () => {
-    const targets = pendingKeys;
+    const targets = confirmBatch?.keys ?? [];
     if (targets.length === 0) return;
     setIsSubmitting(true);
     setOutcomes((prev) => ({ ...prev, ...Object.fromEntries(targets.map((key) => [key, { status: 'submitting' } as SubmitOutcome])) }));
@@ -1122,7 +1133,7 @@ export const ApplicantWizard: React.FC = () => {
     }
 
     setIsSubmitting(false);
-    setConfirmSubmit(false);
+    setConfirmBatch(null);
 
     const merged = { ...outcomes, ...results };
     const anyFailed = keys.some((key) => merged[key]?.status === 'failed');
@@ -1136,7 +1147,12 @@ export const ApplicantWizard: React.FC = () => {
       return;
     }
 
-    setCompleted(keys.map((key) => ({ key, label: choiceByKey.get(key) ? choiceLabel(choiceByKey.get(key)!) : 'Your application', outcome: merged[key] })));
+    setCompleted(keys.map((key) => ({
+      key,
+      positionTitle: positionTitleFor(key),
+      plantillaLabel: plantillaCaptionFor(key) ?? undefined,
+      outcome: merged[key],
+    })));
     clearDrafts();
     window.scrollTo({ top: 0 });
   };
@@ -1490,7 +1506,8 @@ export const ApplicantWizard: React.FC = () => {
                 {completed.map((entry) => (
                   <li key={entry.key} className="af-card af-ref" style={{ padding: 16 }}>
                     <div style={{ minWidth: 0 }}>
-                      <p className="af-headline">{entry.label}</p>
+                      <p className="af-headline">{entry.positionTitle}</p>
+                      {entry.plantillaLabel && <p className="af-body-s" style={{ marginTop: 2 }}>{entry.plantillaLabel}</p>}
                       {!sharedReferenceNo && (
                         <>
                           <p className="af-body-s" style={{ marginTop: 4 }}>
@@ -1801,10 +1818,8 @@ export const ApplicantWizard: React.FC = () => {
                     <details key={key} className="af-card af-review-card" open>
                       <summary>
                         <div style={{ minWidth: 0 }}>
-                          <p className="af-title-s">
-                            {isPostingFlow ? `Application for ${labelFor(key)}` : 'Your application'}
-                          </p>
-                          <p className="af-caption">{captionFor(key)}</p>
+                          <p className="af-title-s">{positionTitleFor(key)}</p>
+                          {choice && <p className="af-caption">{plantillaCaptionFor(key)}</p>}
                         </div>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           {outcome?.status === 'submitting' && (
@@ -1929,7 +1944,7 @@ export const ApplicantWizard: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-md btn-primary"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={() => setConfirmBatch(isRetry ? { keys: failedKeys, mode: 'retry' } : { keys: pendingKeys, mode: 'submit' })}
                   disabled={!declared || isSubmitting || pendingKeys.length === 0}
                   aria-describedby={!declared ? 'af-declaration-title' : undefined}
                 >
@@ -1947,20 +1962,18 @@ export const ApplicantWizard: React.FC = () => {
       </main>
 
       <ConfirmModal
-        open={confirmSubmit}
+        open={Boolean(confirmBatch)}
         title={
-          isRetry
-            ? `Retry ${failedKeys.length} application${failedKeys.length === 1 ? '' : 's'}?`
-            : pendingKeys.length === 1
-              ? 'Submit application?'
-              : `Submit ${pendingKeys.length} applications?`
+          confirmBatch?.mode === 'retry'
+            ? (confirmBatchCount === 1 ? 'Retry application?' : `Retry ${confirmBatchCount} applications?`)
+            : (confirmBatchCount === 1 ? 'Submit application?' : `Submit ${confirmBatchCount} applications?`)
         }
-        confirmLabel={isRetry ? 'Retry' : 'Submit'}
+        confirmLabel={confirmBatch?.mode === 'retry' ? 'Retry' : 'Submit'}
         busy={isSubmitting}
         onConfirm={() => void handleSubmitAll()}
-        onCancel={() => setConfirmSubmit(false)}
+        onCancel={() => setConfirmBatch(null)}
       >
-        {pendingKeys.length === 1
+        {confirmBatchCount === 1
           ? 'Your application will be sent to HR. You can’t edit it after submitting.'
           : `Each plantilla item is filed as its own application, all under one Reference No. You can’t edit them after submitting.`}
       </ConfirmModal>

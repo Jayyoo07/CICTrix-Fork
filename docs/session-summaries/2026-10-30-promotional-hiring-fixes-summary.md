@@ -1,14 +1,14 @@
 ---
 title: Promotional hiring implementation progress
 date: 2026-10-30
-summary: Tasks 1–3 and 3A are committed and verified with mocked tests, TypeScript and lint. Scheduled promotional interviews now show for interviewers. Tasks 4–8 (appointment pipeline and isolated browser/database acceptance) are not started; Task 4 is blocked on an isolated database.
+summary: Tasks 1–3, the reported Task 3A defect, and Task 7 legacy-sync guards are committed and verified. Task 7 has 19 focused regressions and clean Sol review; 1,283 src tests, TypeScript and lint pass. Tasks 4–6 and 8 remain pending; Task 4 requires an isolated database.
 ---
 
 ## Scope and current state
 
 Implementation follows [the approved plan](../plans/2026-10-30-promotional-hiring-fixes.md), including scheduled promotional interviewer visibility. Remediation, live writes, emails, pushes and deployments remain excluded.
 
-Paused after completing and reviewing Task 3 and running unit tests across Tasks 1–3, as requested. Task 3A was completed later the same day (see below). **Resume at Task 4**, which is blocked until an isolated database is available. Tasks 4–8 are unstarted; fork push and upstream PR remain subject to separate authorization. This is a partial repair, not completion of the promotional appointment pipeline.
+Paused after completing and reviewing Task 3 and running unit tests across Tasks 1–3, as requested. Task 3A and Task 7 were completed later the same day (see below). **Resume at Task 4**, which requires an isolated database. Tasks 4–6 and 8 remain pending; Task 7 must not be redispatched. Fork push and upstream PR remain subject to separate authorization. This is a partial repair, not completion of the promotional appointment pipeline.
 
 Worktree: `C:\Users\ajcbu\.local\share\opencode\worktree\6c6304\promotional-hiring-fixes-build`, branch `fix/promotional-hiring-pipeline`. Existing audit/plan documents were copied into this worktree without deleting the originals. The original checkout and `run-queue.bat` remain untouched.
 
@@ -51,9 +51,29 @@ No production `.env` was copied. Live-data seed/script tests, backend/database t
 
 ## Remaining work and limits
 
+On 2026-10-30 the user requested a delegated run of Task 7 only on the new isolated branch `fix/applicant-status-promotion-followups`, based on upstream `a3568ec`, then approved the focused plan and exact model pair with “go ahead”. Sol/high over OpenAI OAuth handled orchestration, independent review and verification; DeepSeek Flash/max (catalog identity DeepSeek V4.1 Flash 1017) over the existing paid key connection implemented code/tests and one successful corrective round. Model efforts, current session model and connection types were verified through metadata without credential values. Task 7 was accepted and committed as `273259e` (`fix(promotion): exclude promotions from legacy hire backfills`). Tasks 4–6 and 8, the applicant-status plan, and live actions remained outside this run.
+
+### Task 7 completed — accepted after correction
+
+Fresh Sol/high review found two Important gaps in the first green revision: status classification deduplicated source UUIDs before detecting duplicate hire links, and employee insertion did not reject distinct applicants claiming the same employee number. The same DeepSeek builder added/corrected regressions, recorded 3 expected assertion failures / 16 passes, then fixed both guards to reach 19/19 green. Scoped Sol/high re-review marked both findings addressed with no new findings. One successful corrective round, zero unsuccessful corrective attempts. No product/test fixes were authored by the OpenAI parent.
+
+`src/lib/hiredApplicantSync.ts` now classifies linked applications by persisted UUID/type before dependent writes. Confirmed external `job` applications retain the existing status, missing-employee and default-field backfills. Promotions are skipped, so their legacy `newly_hired` snapshots cannot drive status changes, duplicate employee inserts or assignment/hire-date overwrites. Missing, duplicate and unknown-type links are skipped with count-only diagnostics; source multiplicity is preserved for status classification, and all applicants claiming a shared employee number are excluded from insertion without choosing a winner. Unrelated valid external hires still proceed. A failed classification read stops dependent writes without setting the success session flag, allowing a later retry. Public exports and startup callers are unchanged. No account credentials, migrations, UI, hire-status vocabulary or production records were changed.
+
+The new `src/lib/hiredApplicantSync.promotion.test.ts` contains 19 mocked regressions for promotion protection, mixed batches, missing/unknown/duplicate links, employee-number conflicts, shared-email UUID isolation, external payloads, existing employee checks, read-failure retries and session flags. Initial test-first evidence was 10 expected assertion failures / 7 passes against the original implementation, then 17/17 passes; the corrective red/green evidence above expands coverage to 19 tests. The parent inspected both sets of logs and the actual full/corrective diffs.
+
+Parent independently reran with `VITE_SUPABASE_URL=http://127.0.0.1:54321` and a synthetic anonymous key:
+
+- `npx vitest run src/lib/hiredApplicantSync.promotion.test.ts`: corrected revision 19/19 passed.
+- `npx tsc --noEmit`: passed, exit 0.
+- `npm run lint`: passed, zero warnings/errors.
+- `npx vitest run src --maxWorkers 2 --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"`: corrected revision 146 files / 1,283 tests passed, exit 0, in 145.61s. Existing React `act`, CJS/Browserslist and refused-localhost warnings remain. The first corrected full-suite attempt, run alongside other checks, hit the 120-second shell timeout and `ERR_IPC_CHANNEL_CLOSED`; it is not claimed passing. The rerun used the documented worker limit and a 300-second shell allowance, with no tests or unhandled errors suppressed and no product/config changes.
+- `git diff --check`: passed; line-ending normalization notices only. The full-suite DataTable snapshot line-ending rewrite was identified as test-generated in this clean worktree and restored without changing snapshot content.
+
+Limits: null/unknown legacy application types deliberately no longer enter startup backfills; inventory/data repair would require separate approval. Supabase calls in the new tests are mocked, not a live database/RLS/browser acceptance check. Live-data script tests were excluded, not claimed passing. No push, deployment, live write, email or Task 4–6/8 implementation occurred.
+
 Cached Supabase CLI 2.122.0 is available, but `supabase status` reports Docker and Podman missing, and no local PostgreSQL installation was found. Task 4's transaction/rollback/concurrency verification and Task 8's database-backed acceptance need an isolated local/preview runtime. No remote writes or environment installation have been authorized to bypass that gate.
 
-The atomic appointment transaction, shared hire entry points, account-preserving completion results, legacy-sync guard and end-to-end acceptance (Tasks 4–8) remain for a later session. Existing security findings remain outside scope. The DataTable snapshot's baseline line-ending-only status was left untouched and is not part of the task commits.
+The atomic appointment transaction, shared hire entry points, account-preserving completion results and end-to-end acceptance (Tasks 4–6 and 8) remain for a later session; Task 7 legacy-sync guards are now committed separately. Existing security findings remain outside scope. The original build worktree's DataTable snapshot change was left untouched and is not part of this task's commit.
 
 ## Checkpoint smoke/sanity evidence
 

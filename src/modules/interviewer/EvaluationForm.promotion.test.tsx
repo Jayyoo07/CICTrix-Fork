@@ -80,4 +80,22 @@ describe('EvaluationForm scheduled promotion', () => {
     expect(await screen.findByRole('button', { name: 'Oral Interview Form' }, { timeout: 3000 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'PCPT Evaluation' })).toBeNull();
   });
+
+  it('keeps a hired external applicant Original although hiring linked an employee', async () => {
+    db.rows.applicants = [{ ...(db.rows.applicants[0] as object), application_type: 'job', employee_id: 'EMP-2026-001' }];
+    renderForm();
+
+    expect(await screen.findByRole('button', { name: 'Oral Interview Form' }, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'PCPT Evaluation' })).toBeNull();
+  });
+
+  it('replaces a stale cached Promotional with the record type', async () => {
+    db.rows.applicants = [{ ...(db.rows.applicants[0] as object), application_type: 'job', employee_id: 'EMP-2026-001' }];
+    localStorage.setItem('cictrix_rsp_score_setup', JSON.stringify({ [PROMOTION_ID]: 'promotional' }));
+    renderForm();
+
+    expect(await screen.findByRole('button', { name: 'Oral Interview Form' }, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'PCPT Evaluation' })).toBeNull();
+    expect(JSON.parse(localStorage.getItem('cictrix_rsp_score_setup') ?? '{}')[PROMOTION_ID]).toBe('original');
+  });
 });

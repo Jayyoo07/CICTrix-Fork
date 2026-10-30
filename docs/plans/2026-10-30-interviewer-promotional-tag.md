@@ -1,7 +1,7 @@
 ---
 title: Mark promotional applicants in interviewer candidate tables
 date: 2026-10-30
-status: Draft
+status: In Progress
 summary: Show a "Promotional" tag and the employee's current position on interviewer candidate rows, and make every interviewer screen decide promotional vs original from the application's own type, so hired external applicants stop reading as promotions.
 ---
 

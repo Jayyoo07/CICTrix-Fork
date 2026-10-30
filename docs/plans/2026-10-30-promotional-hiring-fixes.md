@@ -63,7 +63,7 @@ The transaction is a proposed implementation detail for review: independent empl
 
 ### Implementation checkpoint — paused after Task 3
 
-Paused at the user's request on 2026-10-30. Tasks 1–3 are implemented, reviewed and committed on `fix/promotional-hiring-pipeline`: `1dda88f`, `c29adba`, `20c24f1`. Task 3A was completed afterwards (see the Task 3A checkpoint below). Resume at **Task 4**, which is blocked until an isolated database is available. Task 7 doesn't depend on Task 4 and can go first.
+Paused at the user's request on 2026-10-30. Tasks 1–3 are implemented, reviewed and committed on `fix/promotional-hiring-pipeline`: `1dda88f`, `c29adba`, `20c24f1`. Task 3A was completed afterwards (see the Task 3A checkpoint below). Task 7 was subsequently completed separately on `fix/applicant-status-promotion-followups` as `273259e`, with 19 focused regressions and independent Sol/high review. Resume at **Task 4**, which still requires an isolated database; Tasks 5–6 and 8 remain pending. Do not rerun Task 7.
 
 Combined verification after Task 3: **136 src test files / 1,239 tests passed**; `npx tsc --noEmit`, repository-wide `npm run lint`, `npm run build`, and `git diff --check` passed. After merging `upstream/main` to clear the PR conflict (merge `7b115ef`), the full suite passed **139 files / 1,248 tests**, with lint and build green. Tests/build used synthetic localhost Supabase settings, not production credentials. Existing React act/refused-localhost test warnings and Vite/Browserslist/bundle-size warnings remain. No migrations were added; live-data seed tests and database/browser end-to-end acceptance were not run. Docker/Podman/local Postgres remain unavailable, blocking Task 4's required transaction verification and Task 8's isolated acceptance. Overall plan stays In Progress, not Done.
 
@@ -113,7 +113,7 @@ Preflight on 2026-10-30 confirmed both routes are active; OpenAI advertises `hig
 - After each result, inspect the actual diff and rerun checks before accepting it. Track the original task's corrective counter across resumed/replacement children. After two unsuccessful corrective dispatches, stop that task and ask the user; do not issue a third or have OpenAI take over implementation.
 - Report model authentication, quota, rate-limit, unavailable local database, or conflicting user changes as blockers. Never silently substitute Pro, a free model, another account, or another effort level.
 - Task 8 is combined-result verification. OpenAI may run checks/browser acceptance and review; any new test code or integration implementation remains delegated to the approved DeepSeek route.
-- **Current stopping instruction:** finish Task 3 and its review, run unit tests on the combined Tasks 1–3 changes, then pause. Task 3A and Tasks 4–8 remain unstarted. Update this plan and the implementation summary before reporting the checkpoint; pushing to a fork and opening an upstream PR require separate authorization.
+- **Historical Task 3 stopping instruction:** finish Task 3 and its review, run unit tests across Tasks 1–3, then pause. Later user approvals resumed Task 3A and Task 7 separately; their checkpoints supersede the old unstarted state. The current run stops after Task 7; Tasks 4–6 and 8 remain pending. Pushing or opening a PR requires separate authorization.
 
 ### Delegation ledger
 
@@ -128,7 +128,7 @@ Approval and passing isolated baseline recorded; Task 1 is accepted. A correctio
 | 4 — atomic appointment migration | DeepSeek builder; OpenAI review | Queued; isolated DB prerequisite unresolved | 0 / 2 |
 | 5 — shared appointment entry points | DeepSeek builder; OpenAI review | Queued; depends on 4 | 0 / 2 |
 | 6 — account-preserving results | DeepSeek builder; OpenAI review | Queued; depends on 5 | 0 / 2 |
-| 7 — legacy sync guards | DeepSeek builder; OpenAI review | Queued | 0 / 2 |
+| 7 — legacy sync guards | DeepSeek builder; OpenAI review | Accepted; `273259e`; 19 focused tests, 146 files / 1,283 src tests, TypeScript and lint pass; Sol/high review clean after one successful corrective round | 0 / 2 |
 | 8 — combined verification / integration | OpenAI verification; DeepSeek for code/tests | Queued | Track corrections against the originating task |
 
 ### Task 1: Make promotion entry independent of local credential caches
@@ -253,9 +253,42 @@ Where the two plans touch:
 
 **Modify/test:** `src/lib/hiredApplicantSync.ts`, new `src/lib/hiredApplicantSync.promotion.test.ts`.
 
-- [ ] Test that a legacy promotion-related `newly_hired` row cannot create a second employee, set a current promotion to a hire status (`Hired` or `Selected`) before completion, or rewrite a completed promotion's status, reset the original hire date, or rewind the employee's current role after a later promotion.
-- [ ] Fetch the associated persisted application type before applying those legacy backfills; skip promotions and report ambiguous links rather than assigning new identities. Preserve existing external-hire backfill behavior. Do not run a cleanup/backfill against production or change unrelated startup services.
-- [ ] Run `npx vitest run src/lib/hiredApplicantSync.promotion.test.ts` through red/green; commit `fix(promotion): exclude promotions from legacy hire backfills`.
+- [x] Test that a legacy promotion-related `newly_hired` row cannot create a second employee, set a current promotion to a hire status (`Hired` or `Selected`) before completion, or rewrite a completed promotion's status, reset the original hire date, or rewind the employee's current role after a later promotion.
+- [x] Fetch the associated persisted application type before applying those legacy backfills; skip promotions and report ambiguous links rather than assigning new identities. Preserve existing external-hire backfill behavior. Do not run a cleanup/backfill against production or change unrelated startup services.
+- [x] Run `npx vitest run src/lib/hiredApplicantSync.promotion.test.ts` through red/green; commit `fix(promotion): exclude promotions from legacy hire backfills` (`273259e`).
+
+#### Task 7 focused execution plan — completed
+
+The user invoked `delegate` for Task 7 only on 2026-10-30 and approved the focused plan and exact model pair with “go ahead”. This run uses the existing isolated worktree `applicant-status-promotion-followups`, branch `fix/applicant-status-promotion-followups`, based on `upstream/main` at `a3568ec`. It does not resume Tasks 4–6 or 8, implement the applicant-status plan, or authorize a push, deployment, live backfill, database write or email. Task 7 has no dependency on the appointment RPC or an isolated database; every Supabase call in its tests must be mocked.
+
+**Approach and ownership.** Keep the three public exports and their `Promise<void>` signatures. Read application identity/type from `applicants` by exact applicant UUID before mutation, not from email, browser storage or the `newly_hired` row alone. Skip promotions without modifying applicant status, employee identity, assignment or original hire date. Only a uniquely resolved persisted external application (`application_type: 'job'`) may enter the existing external backfill. Missing, duplicate, unknown-type or otherwise conflicting links are skipped with a diagnostic, not assigned a new identity. A failed classification read must cause no dependent writes and must not mark the affected sync as successfully finished, so a later invocation can retry. Do not log credentials or full personal records.
+
+The builder owns only `src/lib/hiredApplicantSync.ts` and new `src/lib/hiredApplicantSync.promotion.test.ts`. Cover `syncHiredApplicantStatus`, `syncNewlyHiredToEmployees` and `repairDefaultedEmployeeRecords`; the last already skips promotions, so retain that behavior and test it. No changes to `src/main.tsx`, other startup services, authentication, scoring, hire status vocabulary, migrations, dependencies or UI. A broader startup rewrite or removal of external backfills would exceed this task.
+
+**Exact models and preflight.** Orchestrator/planner/reviewer: `openai/gpt-6.1-sol#high`, existing OpenAI OAuth. Product-code/test builder: `deepseek/deepseek-flash#max`, existing paid DeepSeek key connection, current catalog identity `DeepSeek V4.1 Flash 1017`. Catalog checks advertise both required efforts; session metadata confirms Sol/high, and connection metadata reports OpenAI `oauth` and DeepSeek `key`. This establishes configuration, not remaining quota or a successful builder call. A newer OpenAI candidate, `openai/gpt-6.1-terra`, was found but is not selected; no newer comparable Flash candidate was listed. Retain the default pair unless the user explicitly approves a replacement. Obtain explicit approval of this focused plan and exact pair before dispatch or product edits.
+
+**Acceptance cases and steps.** Use synthetic Filipino-named fixtures and assertions against captured Supabase reads/writes, not merely console output or permissive mocks that ignore filters.
+
+- [x] After approval, dispatch one `general` builder with explicit override `deepseek/deepseek-flash#max`, exclusive ownership of the two code/test paths, and no helper agents, commits, pushes, deployments or live services. Initial child: `ses_e736caf5cffeVIkqKVeCS0lfaQ`.
+- [x] Write regressions proving a legacy promotion-related `newly_hired` row cannot set an unfinished promotion to `Hired`/`Selected`, rewrite a completed promotion status, insert a second employee when its number is stale/missing from the employee query, reset an original hire date, or rewind the current assignment after a later promotion. Exercise the existing repair helper's skip as well.
+- [x] Add missing/duplicate/unknown-type application and failed-read cases: no mutation for unresolved links; failed reads leave retry possible. Test a mixed batch so valid external hires continue while promotions and unresolved rows remain untouched. Keep different applicant UUIDs distinct even when they share email.
+- [x] Add external regressions for the existing status backfill, missing-employee insert and default-field repair, including already-existing employees and session gating. Assert classification happens before any dependent mutation. Do not change external field mappings or credential behavior.
+- [x] Run `npx vitest run src/lib/hiredApplicantSync.promotion.test.ts` and record the expected assertion failures against the original implementation before making the smallest service changes; module-loading or mock-harness errors do not count as red evidence. Builder recorded 10 expected assertion failures / 7 passes on the original service; parent inspected the log.
+- [x] Implement only the service guards, rerun the focused test to green, and return the diff, exact red/green commands/results and any deviations or blockers. Keep unsuccessful corrective attempts at `0 / 2` until a dispatched corrective fix is rejected or fails required checks; stop after two unsuccessful corrective attempts. Initial focused run: 17/17 green. Review exposed duplicate-source status updates and conflicting employee-number inserts; one DeepSeek corrective round recorded 3 expected failures / 16 passes, then 19/19 green.
+- [x] OpenAI reviews the actual diff and independently runs the checks below. Any product/test correction goes back to the approved DeepSeek route, not inline OpenAI implementation. Parent confirmed the full corrected diff and 19 focused tests, TypeScript, lint and 146 src files / 1,283 tests. Fresh Sol/high review marked both Important findings addressed with no new findings. Zero unsuccessful corrective attempts.
+- [x] After acceptance, update this task's checkboxes/ledger and the existing implementation summary, regenerate the dashboard, and commit the focused change as `fix(promotion): exclude promotions from legacy hire backfills` (`273259e`). Keep the overall plan In Progress and leave the other tasks pending. Do not push without separate authorization.
+
+**Checks for this run.** Use synthetic localhost Supabase environment settings, never copy production `.env` or run app startup/live seed scripts:
+
+- `npx vitest run src/lib/hiredApplicantSync.promotion.test.ts`
+- `npx tsc --noEmit`
+- `npm run lint`
+- `npx vitest run src --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"` (report any failures; do not fix unrelated baseline tests)
+- `git diff --check`
+
+OpenAI owns plan/summary tracking, the generated dashboard and independent review/verification; DeepSeek owns product code/tests. The prior read-only review on this branch passed 24 relevant test files / 188 tests, TypeScript and lint; this is not evidence for the new Task 7 regressions. The run's recovery ledger is `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md` in this worktree.
+
+**Final observed checks:** focused file 19/19, `npx tsc --noEmit` and `npm run lint` pass. The corrected full-suite run launched alongside other checks hit the shell's 120-second timeout and an `ERR_IPC_CHANNEL_CLOSED` worker error; it is not counted as passing. After confirming the installed CLI's worker option, the parent reran `npx vitest run src --maxWorkers 2 --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"` alone with a 300-second shell limit: **146 files / 1,283 tests passed**, exit 0, in 145.61s. No tests or unhandled errors were suppressed, and no product/config changes were made to obtain that result. `git diff --check` passes. Browser/database/RLS acceptance and live-data script tests remain outside this run.
 
 ### Task 8: Verify the functional pipeline in an isolated environment
 

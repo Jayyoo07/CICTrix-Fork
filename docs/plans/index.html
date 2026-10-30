@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">124 plans &middot; 100 done</p>
+    <p class="counts">125 plans &middot; 100 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -82,6 +82,11 @@
       <tr>
         <td class="date">2026-10-30</td>
         <td><a href="2026-10-30-interviewer-promotional-tag.md">Mark promotional applicants in interviewer candidate tables</a><p class="summary">Show a &quot;Promotional&quot; tag and the employee's current position on interviewer candidate rows, so promotional applicants are distinguishable from new applicants before the interviewer opens the evaluation.</p></td>
+        <td class="status"><span class="badge badge-neutral">Draft</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-30</td>
+        <td><a href="2026-10-30-applicant-status-and-score-writes.md">Fix applicant score and status writes, and the live-data seed test</a><p class="summary">Remove the unreachable RSP score path that writes a missing `applicants.total_score` column, make interviewer evaluations move applicants to For Evaluation instead of the legacy Reviewed, and stop the training-attendance seed test from asserting a live employee snapshot.</p></td>
         <td class="status"><span class="badge badge-neutral">Draft</span></td>
       </tr>
       <tr>
@@ -700,7 +705,7 @@
         <tbody>
       <tr>
         <td class="date">2026-10-30</td>
-        <td><a href="../session-summaries/2026-10-30-promotional-hiring-fixes-summary.md">Promotional hiring implementation progress</a><p class="summary">Tasks 1–3 are committed and verified with 1,248 passing src tests after the upstream merge plus 5 mocked smoke tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated browser/database acceptance are not complete.</p></td>
+        <td><a href="../session-summaries/2026-10-30-promotional-hiring-fixes-summary.md">Promotional hiring implementation progress</a><p class="summary">Tasks 1–3 and 3A are committed and verified with mocked tests, TypeScript and lint. Scheduled promotional interviews now show for interviewers. Tasks 4–8 (appointment pipeline and isolated browser/database acceptance) are not started; Task 4 is blocked on an isolated database.</p></td>
       </tr>
       <tr>
         <td class="date">2026-10-30</td>
@@ -709,6 +714,10 @@
       <tr>
         <td class="date">2026-10-30</td>
         <td><a href="../session-summaries/2026-10-30-promotional-hiring-audit-summary.md">Promotional hiring pipeline audit</a><p class="summary">The promotion pipeline is partially implemented but not ready for end-to-end sign-off. Read-only evidence identifies selection, employee identity, account preservation, persistence, and authorization blockers.</p></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-30</td>
+        <td><a href="../session-summaries/2026-10-30-live-db-claims-verification-summary.md">Live database check of handoff claims</a><p class="summary">A read-only check of claims from another agent's handoff against the live Supabase database. applicants.total_score is missing and no applicants have status Reviewed. The training and IPCR counts match. The employee figures in the handoff and in the seed test don't measure the same thing as a plain employee count, so the test is the problem, not the data.</p></td>
       </tr>
       <tr>
         <td class="date">2026-10-29</td>

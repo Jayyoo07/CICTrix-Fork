@@ -991,7 +991,7 @@ export function InterviewerApplicantsList({
                             </td>
                             <td data-label="Type">
                               {/* §10: application type is a category, not a status */}
-                              <span className={`badge ${appType === 'Promotional' ? 'badge-neutral' : 'badge-tint'}`}>{appType}</span>
+                              <span className={`badge ${appType === 'Promotional' ? 'badge-tint' : 'badge-neutral'}`}>{appType}</span>
                             </td>
                             <td data-label="Contact info">
                               <span className="ivd-contact">{applicant.email || '—'}</span>

@@ -44,14 +44,24 @@ Per §10, application type is a category, not a status, so it uses the brand-tin
 | `src/modules/interviewer/InterviewerDashboardParts.tsx` | Tag and "From:" line in `CandidateListModal` rows |
 | `src/modules/interviewer/InterviewerApplicantsList.tsx` | Swap the two badge classes on line 994 |
 | `src/lib/interviewerEvalNavigation.ts` | `getApplicantType` checks `application_type` first (Step 1a) |
-| `src/modules/interviewer/ApplicantDetailsPage.tsx` | Same rule in `isPromotionalSource`, only if D1 is yes |
+| `src/modules/interviewer/ApplicantDetailsPage.tsx`, `src/modules/interviewer/EvaluationForm.tsx` | Same rule in each `isPromotionalSource`, only if D1 is yes |
 | A new model test and a `CandidateListModal` render test | New coverage |
 
-Not affected: `InterviewerDashboard.tsx` (it already passes rows through), the KPI quick-view cards (`KpiCard`, unchanged unless asked), `EvaluationForm.tsx`, `src/lib/api/employeesApi.ts` (writing `employee_id` on hire is correct; the reader was wrong), the database and migrations.
+Not affected: `InterviewerDashboard.tsx` (it already passes rows through), the KPI quick-view cards (`KpiCard`, unchanged unless asked), `src/lib/api/employeesApi.ts` (writing `employee_id` on hire is correct; the reader was wrong), the database and migrations.
+
+## Impact on existing employees and applicants
+
+Checked on 2026-10-30 against the code and the live database (read-only GET, publishable key).
+
+- **What the change can reach.** `getApplicantType` and the two `isPromotionalSource` copies (`ApplicantDetailsPage.tsx:648`, `EvaluationForm.tsx:124`) are used only by interviewer screens. They decide a label, a filter and which scoring form opens. Nothing writes to `employees`, and the employee portal, hire sync and PM/L&D modules never call them. The RSP side already decides by `application_type` (`hiredApplicantSync.ts:269`, `applicantScores.ts:234`), so the fix moves the interviewer side onto the rule the rest of the system already uses.
+- **No row falls into the fallback.** All 57 applicants have a type: 56 `job` and 1 `promotion`. None are empty or null. Keeping `employee_id` as a fallback changes nothing today and only protects older rows.
+- **The one promotional applicant is unaffected.** Its `application_type` is `promotion` (status `Interview/Exam Scheduled`), so it stays Promotional under both the old and new rule.
+- **The 7 hired job applicants: the stored data already says Original.** All 7 have evaluations. Their 3 saved score rows in `applicant_category_scores` are `appointment_type = 'original'` and finalized, and no score row anywhere is `promotional`. They were scored as originals before hiring set `employee_id`. Today the interviewer screens show them as Promotional and force the promotional form, which disagrees with their saved scores. After the fix the screens match the saved data. No stored score, status or evaluation changes.
+- **Browser-cached score setup.** `storeApplicantTypeForEval` writes only when Evaluate is clicked. The 7 are evaluated, so they show View, not Evaluate, and nothing new is cached for them.
 
 ## Decisions
 
-- **D1.** Apply the same `application_type`-first rule to `isPromotionalSource` in `ApplicantDetailsPage.tsx`? Recommended yes: it keeps the details page agreeing with the list and the tag. It is one line, plus a test.
+- **D1.** Apply the same `application_type`-first rule to both `isPromotionalSource` copies (`ApplicantDetailsPage.tsx:648` and `EvaluationForm.tsx:124`)? Recommended yes: otherwise the details page and the evaluation form force the promotional form on the 7 hired applicants, against their saved `original` scores. It is one line each, plus a test.
 
 ## Steps
 

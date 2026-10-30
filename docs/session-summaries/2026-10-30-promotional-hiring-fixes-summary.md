@@ -1,14 +1,14 @@
 ---
 title: Promotional hiring implementation progress
 date: 2026-10-30
-summary: Tasks 1–3 are committed and verified with 1,248 passing src tests after the upstream merge plus 5 mocked smoke tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated browser/database acceptance are not complete.
+summary: Tasks 1–3 and 3A are committed and verified with mocked tests, TypeScript and lint. Scheduled promotional interviews now show for interviewers. Tasks 4–8 (appointment pipeline and isolated browser/database acceptance) are not started; Task 4 is blocked on an isolated database.
 ---
 
 ## Scope and current state
 
 Implementation follows [the approved plan](../plans/2026-10-30-promotional-hiring-fixes.md), including scheduled promotional interviewer visibility. Remediation, live writes, emails, pushes and deployments remain excluded.
 
-Paused after completing and reviewing Task 3 and running unit tests across Tasks 1–3, as requested. **Resume at Task 3A.** Task 3A and Tasks 4–8 are unstarted; fork push and upstream PR remain subject to separate authorization. This is a partial repair, not completion of the promotional appointment pipeline.
+Paused after completing and reviewing Task 3 and running unit tests across Tasks 1–3, as requested. Task 3A was completed later the same day (see below). **Resume at Task 4**, which is blocked until an isolated database is available. Tasks 4–8 are unstarted; fork push and upstream PR remain subject to separate authorization. This is a partial repair, not completion of the promotional appointment pipeline.
 
 Worktree: `C:\Users\ajcbu\.local\share\opencode\worktree\6c6304\promotional-hiring-fixes-build`, branch `fix/promotional-hiring-pipeline`. Existing audit/plan documents were copied into this worktree without deleting the originals. The original checkout and `run-queue.bat` remain untouched.
 
@@ -21,6 +21,14 @@ Task 2 makes category saving awaited and publishes browser cache/events after re
 Task 3 restores same-email promotion visibility and saved summary totals, removes read-side applicant upserts, and shows summary-read errors. Review caught browser-only evaluations overriding original-applicant ranking; the accepted correction limits real UUID originals to persisted evaluations with durable-summary fallback. Coverage includes account-only matching, remote terminal/deleted rows over stale local candidates, filled slots, reservations and revoked selections. The builder's corrected targeted run passed 29 tests; parent independently verified the corrected revision in the final full src suite. Promotion ranking uses the saved five-category assessment total, retains the separate written exam requirement and does not invent oral scores. The score header now reads “Assessment / Interview Score”; layout and tokens are unchanged.
 
 Read-only boolean schedule inspection found a cause for Task 3A: the scheduled promotion has a valid date/time, active assigned rater and Open posting/slot, but both interviewer screens' `@example.com` demo-email heuristic excludes it. The plan now requires a synthetic persisted-UUID regression for that exclusion before changing the display logic. No live email, schedule or assignment was changed.
+
+## Task 3A: scheduled promotional interviews (resumed 2026-10-30)
+
+Shipped as `180c831` on `fix/interviewer-scheduled-promotions`, stacked on `fix/applicant-status-score-writes`. Not pushed. It was built inline in a Claude Code cloud session rather than through the approved OpenAI/DeepSeek route, which isn't available there. The plan records this as a deviation.
+
+Planned vs. shipped: the plan allowed changes to schedule, assignment, posting and evaluation code "as evidence requires". The evidence pointed only at the `@example.com` demo filter in `InterviewerDashboard.tsx` and `InterviewerApplicantsList.tsx`, and that is the only product change. `EvaluationForm.tsx` already read the persisted application type, so it got a regression test but no edit. Closed-posting reachability, realtime and rescheduling, assignment changes, same-title postings across offices, read-failure reporting and the submit round trip were not covered. The plan lists them as follow-ups. The submit round trip moves to Step 3 of [Fix applicant score and status writes](../plans/2026-10-30-applicant-status-and-score-writes.md), which now owns `EvaluationForm.tsx`. Live data evidence for both plans is in [the live database check](2026-10-30-live-db-claims-verification-summary.md). The fixes plan's "Before starting Tasks 4–8" section lists where the two plans touch.
+
+Checks: the new tests fail without the fix and pass with it. Results: `npx vitest run src/lib/applicantSchedule.scheduled.test.ts src/modules/interviewer` gives 8 files / 54 tests passed; `npx tsc --noEmit` and `npm run lint` pass. The full `npm test` run gives 1,266 of 1,268 tests passed. The 2 failures are pre-existing: the live-data seed test and `trainingProgress.test.ts`, which also fails on the base commit when the clock is in UTC. Live data was read with the publishable key using GET only; nothing was written.
 
 ## Checks observed before implementation
 
@@ -45,7 +53,7 @@ No production `.env` was copied. Live-data seed/script tests, backend/database t
 
 Cached Supabase CLI 2.122.0 is available, but `supabase status` reports Docker and Podman missing, and no local PostgreSQL installation was found. Task 4's transaction/rollback/concurrency verification and Task 8's database-backed acceptance need an isolated local/preview runtime. No remote writes or environment installation have been authorized to bypass that gate.
 
-The scheduled-interview fix (Task 3A), atomic appointment transaction, shared hire entry points, account-preserving completion results, legacy-sync guard and end-to-end acceptance (Tasks 4–8) remain for a later session. Existing security findings remain outside scope. The DataTable snapshot's baseline line-ending-only status was left untouched and is not part of the task commits.
+The atomic appointment transaction, shared hire entry points, account-preserving completion results, legacy-sync guard and end-to-end acceptance (Tasks 4–8) remain for a later session. Existing security findings remain outside scope. The DataTable snapshot's baseline line-ending-only status was left untouched and is not part of the task commits.
 
 ## Checkpoint smoke/sanity evidence
 

@@ -117,7 +117,7 @@ Preflight on 2026-10-30 confirmed both routes are active; OpenAI advertises `hig
 
 ### Delegation ledger
 
-Approval and passing isolated baseline recorded; Task 1 is accepted. A correction count excludes the initial implementation and increments only when a dispatched corrective fix is rejected or fails required checks. The detailed recovery ledger is `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md` in this worktree.
+Approval and passing isolated baseline recorded; Task 1 is accepted. A correction count excludes the initial implementation and increments only when a dispatched corrective fix is rejected or fails required checks. The detailed recovery ledger is `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md` in this worktree. That file is gitignored and exists only in the original Windows worktree. In other checkouts, this table and the Task 3A checkpoint are the record.
 
 | Task | Owner | State | Unsuccessful corrections |
 | --- | --- | --- | --- |

@@ -10,6 +10,8 @@ summary: The promotion pipeline is partially implemented but not ready for end-t
 
 Plan: [Verify the promotional hiring pipeline](../plans/2026-10-30-promotional-hiring-audit.md).
 
+> **Status since this audit (updated 2026-10-30).** This file records what the audit found; it is not the current state. Fixes are tracked in [Repair the promotional hiring pipeline](../plans/2026-10-30-promotional-hiring-fixes.md) (In Progress). Tasks 1–3 fixed fresh-browser promotion entry, durable score saves, and For Hiring visibility and ranking, including the `applicants.total_score` read. Task 3A fixed scheduled promotions hidden from interviewers (an `@example.com` "demo" filter). Tasks 4–8, covering completing the appointment and isolated acceptance, are not started. The remaining `applicants.total_score` **write** and the live-data seed test are covered by [Fix applicant score and status writes](../plans/2026-10-30-applicant-status-and-score-writes.md) (Draft). That plan also found the write is in unreachable code.
+
 ## Stage assessment
 
 | Stage | Assessment | Evidence and limit |
@@ -73,7 +75,7 @@ Supabase security advisors also flag relevant RLS-disabled tables. [RLS advisory
 - `npx tsc --noEmit`: passed, exit 0.
 - Initial unrestricted `npm test`: timed out after 120 seconds because discovery also traversed nested `.worktrees` and `.claude/worktrees`. No configuration was changed.
 - `npm test -- --exclude "**/.worktrees/**" --exclude "**/.claude/worktrees/**"`: 132 files passed, one failed; **1,189 tests passed, one failed**. Existing relevant scoring, hiring-context, For Hiring, credential-page, and tracker tests passed. React act warnings were present.
-- The sole scoped-suite failure is `scripts/seed-training-attendance.test.mjs:63`: expected 167 employees, received 172. That test invokes a live-data dry run with `writeSql: false` and `applyDb: false`; its fixed employee-count expectation is unrelated to promotional hiring.
+- The sole scoped-suite failure is `scripts/seed-training-attendance.test.mjs:63`: expected 167 employees, received 172. That test invokes a live-data dry run with `writeSql: false` and `applyDb: false`; its fixed employee-count expectation is unrelated to promotional hiring. *(Later: the test counts active employees in the 5 seeded offices, not all employees; the fix is Step 5 of the applicant score and status plan.)*
 - Two isolated actual-source diagnostics reproduced the selection filter and duplicate-employee fallback defects. These used only in-memory fixtures, not real writes.
 - Supabase reads: deployed columns/view definition, constraints, triggers, reservation functions, RLS/policies/grants, aggregate promotion progress, PM row counts, security/performance advisors, and recent log queries.
 - Recent logs included GET 400 requests using synthetic applicant ID `a1`; these are test-shaped requests and were not treated as evidence of a live promotion failure. Logs did not establish a successful promotional hire.

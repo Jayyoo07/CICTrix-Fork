@@ -188,6 +188,23 @@ Approval and passing isolated baseline recorded; Task 1 is accepted. A correctio
 - [x] Run `npx vitest run src/lib/applicantSchedule.scheduled.test.ts src/modules/interviewer/InterviewerDashboard.promotion.test.tsx src/modules/interviewer/InterviewerApplicantsList.promotion.test.tsx src/modules/interviewer/EvaluationForm.promotion.test.tsx src/modules/interviewer/InterviewerApplicantsList.dedupe.test.ts` through red/green. Mock all clients/Storage calls; do not submit a live evaluation.
 - [x] Commit: `fix(interviewer): display scheduled promotional interviews` (`180c831`).
 
+### Before starting Tasks 4–8
+
+Read these first. They came from work done after this plan was written:
+
+- [Fix applicant score and status writes](2026-10-30-applicant-status-and-score-writes.md) (Draft): a parallel plan that covers the interviewer module and the applicant status vocabulary. Its findings F1–F7 are evidence about the same pipeline.
+- [Live database check of handoff claims](../session-summaries/2026-10-30-live-db-claims-verification-summary.md): live counts and statuses as of 2026-10-30, with the GET-only queries to re-run them.
+- The Task 3A checkpoint above: the scheduled promotion `09e72c95…` is now visible to its interviewer. It is still `Interview/Exam Scheduled`, has no evaluation, and must not be used as test data (see Risks).
+
+Where the two plans touch:
+
+| This plan | Applicant status plan | What to do |
+|---|---|---|
+| Task 4 migration, if you regenerate `src/types/database.types.ts` | Step 2 removes `applicants.total_score` from that file | Regenerate from the live schema, which has no `total_score`, or merge after Step 2. Don't add the column back. |
+| Task 6 `hiringFlow.ts` and Task 7 `hiredApplicantSync.ts` read statuses through `normalizeStatus` | D3 changes the legacy `Reviewed` mapping to `For Evaluation` | No action needed; no live rows are `Reviewed`. Use the canonical names from `applicantStatus.ts`, never the legacy ones. |
+| Task 8 acceptance, interviewer step | Step 3 makes submitting an evaluation move the applicant to `For Evaluation` | If Step 3 has landed, expect `For Evaluation` after the interviewer submits, not `Reviewed`. |
+| None of Tasks 4–8 | Owns `EvaluationForm.tsx`, `ApplicantDetailsPage.tsx` scoring, `JobPostingsPage.tsx` status labels | Leave these files to that plan. |
+
 ### Task 4: Complete a promotion in one retry-safe database transaction
 
 **Create:** CLI-generated `supabase/migrations/<generated-version>_complete_promotional_appointment.sql`, `supabase/tests/promotional_appointment.test.sql`.
@@ -255,8 +272,8 @@ Approval and passing isolated baseline recorded; Task 1 is accepted. A correctio
 - **History and triggers interact.** Slot fill archives competitors; Hired withdraws other applications. Tests must verify trigger-induced changes roll back with a failed promotion and that historical successful applications are not rewound.
 - **The occupancy redesign remains deferred.** This plan assigns the target and records the promotion; it does not automatically reopen or advertise the former position, rewrite historical filled-slot records, or infer position IDs from duplicate titles.
 - **Scoring differences are policy, not cleanup.** Reuse existing promotional conversions and show consistent assessment totals, but do not change weights, thresholds, or the written-exam requirement. Any newly discovered rule conflict that cannot be resolved from current behavior requires user confirmation before implementation.
-- **Baseline test noise:** the audit's scoped run had 1,189 passes and one unrelated live-data training-seed count failure (167 expected, 172 received). Recheck the baseline; do not silently fix or suppress that test in this task. It is now Step 5 of `2026-10-30-applicant-status-and-score-writes.md`, which counts active employees in the 5 seeded offices, not all employees.
-- **Parallel plan.** `2026-10-30-applicant-status-and-score-writes.md` (Draft) also touches the interviewer module. It owns all `EvaluationForm.tsx` edits from now on. Tasks 4–8 here don't touch that file.
+- **Baseline test noise:** the audit's scoped run had 1,189 passes and one unrelated live-data training-seed count failure (167 expected, 172 received). Recheck the baseline; do not silently fix or suppress that test in this task. It is now Step 5 of [the applicant status plan](2026-10-30-applicant-status-and-score-writes.md), and the [live database check](../session-summaries/2026-10-30-live-db-claims-verification-summary.md) explains that the test counts active employees in the 5 seeded offices, not all employees.
+- **Parallel plan.** [Fix applicant score and status writes](2026-10-30-applicant-status-and-score-writes.md) (Draft) also touches the interviewer module and status names. See "Before starting Tasks 4–8" for where the two plans touch.
 
 ## Checks to run
 

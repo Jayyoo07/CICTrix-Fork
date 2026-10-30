@@ -62,7 +62,7 @@
   <main>
     <h1>Plans</h1>
     <p class="lede">Feature plans and their session summaries. Newest first.</p>
-    <p class="counts">123 plans &middot; 100 done</p>
+    <p class="counts">124 plans &middot; 100 done</p>
 
     <section>
       <h2>Plans</h2>
@@ -78,6 +78,11 @@
         <td class="date">2026-10-30</td>
         <td><a href="2026-10-30-promotional-hiring-audit.md">Verify the promotional hiring pipeline</a><p class="summary">Read-only audit of promotion applications, evaluation, selection, appointment, and employee updates. Approved in chat; no application code or live records will be changed.</p></td>
         <td class="status"><span class="badge badge-success">Done</span></td>
+      </tr>
+      <tr>
+        <td class="date">2026-10-30</td>
+        <td><a href="2026-10-30-applicant-status-and-score-writes.md">Fix applicant score and status writes, and the live-data seed test</a><p class="summary">Remove the unreachable RSP score path that writes a missing `applicants.total_score` column, make interviewer evaluations move applicants to For Evaluation instead of the legacy Reviewed, and stop the training-attendance seed test from asserting a live employee snapshot.</p></td>
+        <td class="status"><span class="badge badge-neutral">Draft</span></td>
       </tr>
       <tr>
         <td class="date">2026-10-29</td>

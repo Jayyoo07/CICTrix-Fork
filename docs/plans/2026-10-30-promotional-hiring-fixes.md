@@ -69,6 +69,21 @@ Combined verification after Task 3: **136 src test files / 1,239 tests passed**;
 
 Keep this worktree and branch for the next session. No push, PR, merge, deployment, email or live database write has been performed. A separately authorized fork push/upstream PR should describe this as the **Tasks 1–3 partial repair**, not a completed promotional appointment pipeline. See [implementation summary](../session-summaries/2026-10-30-promotional-hiring-fixes-summary.md) for checks and remaining limits.
 
+### Checkpoint smoke/sanity verification — user-requested extension
+
+The user asked for the pre-merge smoke/sanity pass on 2026-10-30 and required the approved DeepSeek builder to run it. A real browser pass is not available in this environment: there is no installed browser-automation package or browser harness, and no isolated Supabase/Postgres runtime. Installing packages or using production is excluded.
+
+Delegated substitute, clearly labeled as such:
+
+- Fresh-browser promotion-entry smoke against a remote-account fixture, with empty browser storage.
+- Cross-task handoff smoke using the real Task 2 score save/summary services over a stateful fake Supabase table: save a complete promotional assessment, simulate a hard reload, then verify the saved total and written exam drive For Hiring and Applicant Ranking.
+- Fail-closed sanity: a rejected score upsert creates no durable summary and leaves the promotion out of selection while an existing reservation remains visible.
+- Built-artifact smoke: serve `dist` with `npm run preview` on localhost, fetch the index and main asset, then stop the server. No external service calls.
+
+Owned new tests: `src/test/promotionEntry.smoke.test.tsx`, `src/test/promotionPipeline.smoke.test.tsx`. No product edits; defects found are reported to the parent for a separate corrective decision. This is not a substitute for Task 8's isolated-browser/database acceptance, and it must not be reported as browser-verified.
+
+Status 2026-10-30: **accepted**. A fresh `deepseek/deepseek-flash#max` builder (catalog identity DeepSeek V4.1 Flash 1017, `max` advertised) authored and ran the checks; parent reviewed the harness and independently reran both smoke files: **2 files / 5 tests passed**, `npx tsc --noEmit` and scoped ESLint clean. Parent independently reproduced the built-artifact preview smoke: index 200 with root and module script, main JS 200 (3,333,754 bytes), no listener left. Committed as `e483c55` (`test(promotion): add checkpoint smoke and sanity checks`). This remains mocked jsdom evidence, not browser/database/RLS acceptance; Tasks 3A–8 are still unverified. No push or PR.
+
 Execution is task-by-task using test-driven development under the user-invoked `delegate` workflow. For each task, the builder writes the named failing tests, runs them to demonstrate the defect, makes the smallest implementation, and reruns to green. The OpenAI orchestrator then reviews the diff and independently reruns the relevant checks. Task commit steps below belong to the orchestrator after review and applicable approval, never to the builder. No pushes or live writes without explicit authorization.
 
 ### Delegation setup — approved for implementation

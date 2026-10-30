@@ -1,7 +1,7 @@
 ---
 title: Promotional hiring implementation progress
 date: 2026-10-30
-summary: Tasks 1–3 are committed and verified with 1,239 passing src tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated database/browser acceptance are not complete.
+summary: Tasks 1–3 are committed and verified with 1,239 passing src tests plus 5 mocked smoke tests, TypeScript, repository-wide lint and build. Paused by user before Task 3A; the remaining appointment pipeline and isolated browser/database acceptance are not complete.
 ---
 
 ## Scope and current state
@@ -47,6 +47,15 @@ Cached Supabase CLI 2.122.0 is available, but `supabase status` reports Docker a
 
 The scheduled-interview fix (Task 3A), atomic appointment transaction, shared hire entry points, account-preserving completion results, legacy-sync guard and end-to-end acceptance (Tasks 4–8) remain for a later session. Existing security findings remain outside scope. The DataTable snapshot's baseline line-ending-only status was left untouched and is not part of the task commits.
 
-Before merging the partial Tasks 1–3 repair, a focused browser smoke/sanity pass is recommended: fresh-browser promotion entry; successful score save/reload and rejected-save feedback; same-email promotion visibility, reservation preservation and saved ranking totals. Run only against an isolated database or fully mocked browser harness, never production startup. That pass is outstanding, not implied by the unit/build results.
+## Checkpoint smoke/sanity evidence
+
+A fresh `deepseek/deepseek-flash#max` builder authored and ran the user-requested smoke/sanity checks, committed as `e483c55`. The parent reviewed the harness and independently reran them.
+
+- `src/test/promotionEntry.smoke.test.tsx`: 3/3 passed. Empty-storage promotion login by username and employee number prefills the real wizard; a wrong password is rejected.
+- `src/test/promotionPipeline.smoke.test.tsx`: 2/2 passed. The real scoring modal and real Task 2 save/summary services persist a complete promotional assessment; after a simulated hard reload, the real For Hiring and Applicant Ranking pages show the saved 80.00 total and 90/100 written exam, not stale `total_score`. A rejected save publishes no cache/event/row, keeps the modal editable with an error, and leaves only an existing reservation visible.
+- Combined rerun: 2 files / 5 tests passed. TypeScript and scoped ESLint passed.
+- Built-artifact preview: `npm run preview` served the index (200, root and module script present) and main JS asset (200, 3,333,754 bytes); the listener was stopped. Parent reproduced the check independently.
+
+This is mocked jsdom evidence, not browser or database acceptance. The fake Supabase bypasses PostgREST projection and RLS; layout, focus, responsive behavior, print, real storage partitioning, migrations and concurrency remain unverified. Task 3A and Tasks 4–8 still require their own implementation and Task 8's isolated browser/database gate. Never run the legacy startup against production to satisfy this check.
 
 The detailed task states, child session IDs, correction counters and review evidence remain in this plan's ignored `.superpowers/sdd/2026-10-30-promotional-hiring-fixes/progress.md`. The branch/worktree is preserved. No push, PR, merge, deployment, live database write or email was performed.
